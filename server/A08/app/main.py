@@ -46,15 +46,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def startup_event():
     """应用启动时初始化数据库连接池"""
     await Database.get_pool()
-    print(f"✅ {config.APP_NAME} v{config.APP_VERSION} 启动成功")
-    print(f"📚 接口文档: http://localhost:8000/docs")
+    print(f"[OK] {config.APP_NAME} v{config.APP_VERSION} started")
+    print(f"[INFO] API docs: http://localhost:8000/docs")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时关闭数据库连接池"""
     await Database.close_pool()
-    print("👋 应用已关闭")
+    print("[BYE] App closed")
 
 
 @app.get("/")

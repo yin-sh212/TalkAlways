@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能运维助手 - 建筑能源管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .chat-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .chat-header p {
+            margin: 5px 0 0;
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            justify-content: flex-start;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            position: relative;
+        }
+
+        .user .message-content {
+            background: #2c3e50;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .bot .message-content {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .message-time {
+            font-size: 0.7rem;
+            margin-top: 5px;
+            opacity: 0.6;
+        }
+
+        .user .message-time {
+            text-align: right;
+            color: #666;
+        }
+
+        .bot .message-time {
+            text-align: left;
+            color: #666;
+        }
+
+        .chat-input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #messageInput:focus {
+            border-color: #2c3e50;
+        }
+
+        #sendButton {
+            padding: 12px 24px;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        #sendButton:hover {
+            background: #34495e;
+        }
+
+        #sendButton:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .suggestion-chips {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            padding: 6px 12px;
+            background: #ecf0f1;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            color: #2c3e50;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .chip:hover {
+            background: #bdc3c7;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #2c3e50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .sources {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .sources summary {
+            cursor: pointer;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>🤖 智能运维助手</h2>
+            <p>可以问我：能耗查询、故障诊断、运维知识</p>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <div class="message-content">
+                    你好！我是建筑能源智能运维助手。我可以帮你：
+                    <br><br>
+                    📊 查询能耗数据（如"B001建筑昨天用电量"）
+                    <br>
+                    🔧 解答运维问题（如"冷水机组故障怎么处理"）
+                    <br>
+                    🔍 分析异常原因（如"为什么3月15日能耗异常"）
+                    <br><br>
+                    有什么可以帮你的吗？
+                    <div class="message-time">刚刚</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <div class="suggestion-chips">
+                <span class="chip" onclick="sendSuggestion('B001建筑昨天用电量多少？')">📊 B001昨天用电量</span>
+                <span class="chip" onclick="sendSuggestion('冷水机组高压报警怎么处理？')">🔧 冷水机组故障</span>
+                <span class="chip" onclick="sendSuggestion('分析一下最近的能耗异常')">🔍 分析异常</span>
+                <span class="chip" onclick="sendSuggestion('空调系统运维规范有哪些？')">📋 运维规范</span>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="输入你的问题..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button id="sendButton" onclick="sendMessage()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let buildingId = 'B001';  // 默认建筑
+
+        function addMessage(content, isUser = false, sources = null) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
+
+            let html = `<div class="message-content">${content}`;
+
+            if (sources && sources.length > 0) {
+                html += '<details class="sources"><summary>查看参考来源</summary>';
+                sources.forEach((source, i) => {
+                    html += `<div style="margin-top: 5px; padding: 5px; background: #eee; border-radius: 4px;">`;
+                    html += `<strong>来源 ${i+1}:</strong> ${source.content.substring(0, 100)}...`;
+                    html += `</div>`;
+                });
+                html += '</details>';
+            }
+
+            html += `<div class="message-time">${new Date().toLocaleTimeString()}</div>`;
+            html += `</div>`;
+
+            messageDiv.innerHTML = html;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function addLoadingMessage() {
+            const messagesDiv = document.getElementById('chatMessages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message bot';
+            loadingDiv.id = 'loadingMessage';
+            loadingDiv.innerHTML = `
+                <div class="message-content">
+                    <div class="loading"></div> 正在思考中...
+                </div>
+            `;
+            messagesDiv.appendChild(loadingDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function removeLoadingMessage() {
+            const loadingDiv = document.getElementById('loadingMessage');
+            if (loadingDiv) {
+                loadingDiv.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // 显示用户消息
+            addMessage(message, true);
+            input.value = '';
+
+            // 显示加载中
+            addLoadingMessage();
+
+            try {
+                console.log('发送请求:', message);
+
+                const response = await fetch(`${API_BASE}/api/chat/ask`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: message,
+                        building_id: 'B001'
+                    })
+                });
+
+                console.log('响应状态:', response.status);
+
+                // 即使状态码不是200，也尝试读取响应
+                const data = await response.json();
+                console.log('响应数据:', data);
+
+                // 移除加载中
+                removeLoadingMessage();
+
+                // 显示回答
+                if (data && data.answer) {
+                    addMessage(data.answer, false, data.sources);
+                } else {
+                    addMessage('收到空响应', false);
+                }
+
+            } catch (error) {
+                console.error('请求错误:', error);
+                removeLoadingMessage();
+
+                // 更友好的错误提示
+                let errorMsg = '请求失败: ' + error.message;
+                if (!navigator.onLine) {
+                    errorMsg = '网络连接已断开，请检查网络';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMsg = '无法连接到服务器，请确认服务是否在运行';
+                }
+
+                addMessage(errorMsg, false);
+            }
+        }
+
+        // 检测意图（可选）
+        async function detectIntent(query) {
+            try {
+                const response = await fetch(`${API_BASE}/api/chat/intent?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                console.log('意图识别:', data);
+            } catch (error) {
+                console.error('意图识别失败:', error);
+            }
+        }
+    </script>
+</body>
+</html>

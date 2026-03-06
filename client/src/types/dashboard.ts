@@ -2,47 +2,50 @@
 
 // KPI 数据
 export interface KPIData {
-  totalEnergy: number // 今日总能耗 (MWh)
-  energyChange: number // 同比变化百分比
-  deviceOnlineRate: number // 在线设备率 (%)
-  abnormalDeviceCount: number // 异常设备数量
-  co2Reduction: number // CO₂减排量 (kg)
+  totalEnergy: number
+  energyChange: number
+  deviceOnlineRate: number
+  abnormalDeviceCount: number
+  co2Reduction: number
 }
 
 // 图表数据
-export interface BuildingEnergyItem {
-  name: string // 建筑名称
-  value: number // 能耗值
-  percentage: number // 占比
-}
-
-export interface TrendDataItem {
-  date: string // 日期
-  energy: number // 能耗值
-}
-
 export interface ChartData {
-  buildingEnergy: BuildingEnergyItem[] // 各建筑能耗
-  trendData: TrendDataItem[] // 趋势数据
+  buildingEnergy?: Array<{
+    name: string
+    value: number
+    percentage?: number
+  }>
+  trendData?: Array<{
+    date: string
+    energy: number
+  }>
+  categories?: string[]
+  series?: Array<{
+    name: string
+    type: string
+    data: number[]
+    smooth?: boolean
+  }>
 }
 
 // 异常项
 export interface AnomalyItem {
-  id: string
-  time: string // 异常时间
-  buildingName: string // 建筑名称
-  type: string // 异常类型
-  status: 'pending' | 'processing' | 'resolved' // 状态
-  buildingId: string // 建筑 ID
+  id: string | number
+  time: string
+  buildingName: string
+  type: string
+  status: 'pending' | 'processing' | 'resolved'
+  buildingId: string
   timeRange: {
     start: string
     end: string
   }
 }
 
-// API 响应数据类型
-export interface DashboardResponse<T = any> {
+// 通用响应包装（后端实际格式）
+export interface DashboardResponse<T> {
   code: number
-  message: string
+  message?: string
   data: T
 }

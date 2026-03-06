@@ -202,7 +202,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, h } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, h, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { 
   Search, 
@@ -215,8 +216,12 @@ import {
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import type { DataTableColumns } from 'naive-ui'
+import * as analysisApi from '@/api/analysis'
+import type { QueryParams, QueryDataItem, QueryResponse } from '@/types/analysis'
 
 const message = useMessage()
+const router = useRouter()
+const route = useRoute()
 
 // 状态
 const queryLoading = ref(false)
@@ -370,7 +375,7 @@ const setQuickTime = (type: 'today' | 'week' | 'month') => {
   queryForm.timeRange = [start.getTime(), end.getTime()]
 }
 
-// 自然语言查询
+// 自然语言查询 - 对接真实接口
 const handleNaturalQuery = async () => {
   if (!queryForm.naturalQuery.trim()) {
     message.warning('请输入查询内容')
@@ -379,13 +384,19 @@ const handleNaturalQuery = async () => {
 
   queryLoading.value = true
   try {
-    // TODO: 调用 NL2Query 解析接口
-    // const parsedResult = await parseNaturalQuery(queryForm.naturalQuery)
+    // 调用智能问答接口
+    const parseResult = await analysisApi.parseNaturalQuery({
+      query: queryForm.naturalQuery
+    })
     
-    // Mock 解析结果
+    console.log('NL2Query 响应:', parseResult)
+    
+    // 后端返回的是 answer 文本，需要简单解析
+    // TODO: 实际应该由后端返回结构化数据
+    // 这里暂时使用 Mock 数据
     const mockParsedResult = {
-      buildings: ['building-001'],
-      parameter: 'hvac',
+      buildings: ['B001'],
+      parameter: 'electricity',
       timeRange: [Date.now() - 7 * 24 * 3600 * 1000, Date.now()]
     }
 
@@ -405,7 +416,7 @@ const handleNaturalQuery = async () => {
   }
 }
 
-// 执行查询
+// 执行查询 - 对接真实接口
 const handleQuery = async () => {
   // 验证表单
   try {
@@ -419,16 +430,61 @@ const handleQuery = async () => {
   queryLoading.value = true
 
   try {
-    // TODO: 调用数据查询接口
-    // const result = await queryData(queryForm)
-    
-    // Mock 数据
-    const mockData = generateMockData()
-    tableData.value = mockData.tableData
-    metrics.value = mockData.metrics
+    // 准备查询参数
+    const queryParams: QueryParams = {
+      buildings: queryForm.buildings,
+      parameter: queryForm.parameter,
+      startTime: queryForm.timeRange?.[0] || 0,
+      endTime: queryForm.timeRange?.[1] || 0,
+      pageSize: pagination.pageSize,
+      pageNum: pagination.page
+    }
+
+    // 并行调用多个接口获取数据
+    const [rawData, summaryData, anomalyData] = await Promise.all([
+      analysisApi.queryData(queryParams), // 原始数据
+      analysisApi.getStatisticsSummary({ // 统计摘要
+        buildings: queryParams.buildings,
+        parameter: queryParams.parameter,
+        startTime: queryParams.startTime,
+        endTime: queryParams.endTime
+      }),
+      analysisApi.getAnomalyCount({ // 异常统计
+        buildings: queryParams.buildings,
+        parameter: queryParams.parameter,
+        startTime: queryParams.startTime,
+        endTime: queryParams.endTime
+      })
+    ])
+
+    console.log('原始数据响应:', rawData)
+    console.log('统计摘要响应:', summaryData)
+    console.log('异常统计响应:', anomalyData)
+
+    // 填充表格数据
+    tableData.value = rawData.data.data.map((item: any) => ({
+      id: item.id || item.timestamp,
+      time: item.timestamp,
+      buildingId: item.building_id,
+      buildingName: '建筑', // 后端未提供，需要关联查询
+      parameterName: '电力能耗',
+      value: item.electricity,
+      unit: 'kWh',
+      isAnomaly: item.is_anomaly === 1
+    }))
+
+    // 填充指标数据
+    metrics.value = {
+      totalEnergy: summaryData.data.summary?.total_elec || 0,
+      avgEnergy: summaryData.data.summary?.avg_elec || 0,
+      anomalyCount: anomalyData.data.anomaly_count || 0
+    }
 
     // 更新图表
-    updateCharts(mockData)
+    updateCharts({
+      trendData: tableData.value,
+      distributionData: tableData.value
+    })
 
     message.success('查询成功')
     
@@ -462,17 +518,33 @@ const handleReset = () => {
   message.success('已重置')
 }
 
-// 导出报表
+// 导出报表 - 对接真实接口
 const handleExport = async () => {
   exportLoading.value = true
   message.info('正在生成报表...')
   
   try {
-    // TODO: 调用导出接口
-    // await exportReport(queryForm)
+    // 准备导出参数
+    const exportParams = {
+      buildings: queryForm.buildings,
+      parameter: queryForm.parameter,
+      startTime: queryForm.timeRange?.[0] || 0,
+      endTime: queryForm.timeRange?.[1] || 0,
+      format: 'excel' as const // 默认导出为 Excel
+    }
+
+    // 调用导出接口
+    const blob = await analysisApi.exportReport(exportParams)
     
-    // Mock 导出
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `能耗报表_${new Date().toLocaleDateString()}_${Date.now()}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
     
     message.success('报表已下载')
   } catch (error: any) {
@@ -489,51 +561,84 @@ const showChartDetail = (index: number) => {
   setTimeout(() => {
     if (detailChartRef.value) {
       detailChart = echarts.init(detailChartRef.value)
-      const option = index === 0 ? getChart1Option() : getChart2Option()
-      detailChart?.setOption(option)
+      // 使用当前已渲染的图表数据
+      const option = index === 0 ? chart1?.getOption() : chart2?.getOption()
+      if (option) {
+        detailChart?.setOption(option as EChartsOption)
+      }
     }
   }, 100)
 }
 
-// 更新图表
-const updateCharts = (data: any) => {
-  // 图表 1：能耗趋势
-  if (chart1Ref.value) {
+// 更新图表 - 对接真实数据
+const updateCharts = (data: {
+  trendData: QueryDataItem[],
+  distributionData: QueryDataItem[]
+}) => {
+  // 图表 1：能耗趋势（带异常标记）
+  if (chart1Ref.value && data.trendData.length > 0) {
     chart1 = echarts.init(chart1Ref.value)
-    chart1.setOption(getChart1Option())
+    chart1.setOption(getChart1Option(data.trendData))
   }
 
   // 图表 2：能耗分布
-  if (chart2Ref.value) {
+  if (chart2Ref.value && data.distributionData.length > 0) {
     chart2 = echarts.init(chart2Ref.value)
-    chart2.setOption(getChart2Option())
+    chart2.setOption(getChart2Option(data.distributionData))
   }
 }
 
-// 获取图表 1 配置（折线图）
-const getChart1Option = (): EChartsOption => {
+// 获取图表 1 配置（折线图 - 带异常标记）
+const getChart1Option = (trendData: any[]): EChartsOption => {
+  // 按时间分组数据
+  const timeMap = new Map<string, any[]>()
+  trendData.forEach(item => {
+    if (!timeMap.has(item.time)) {
+      timeMap.set(item.time, [])
+    }
+    timeMap.get(item.time)!.push(item)
+  })
+
+  const times = Array.from(timeMap.keys()).sort()
+  const seriesData = times.map(time => {
+    const items = timeMap.get(time)!
+    const totalValue = items.reduce((sum, item) => sum + item.value, 0)
+    const hasAnomaly = items.some(item => item.isAnomaly)
+    return {
+      value: Number(totalValue.toFixed(2)),
+      isAnomaly: hasAnomaly
+    }
+  })
+
   return {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         const point = params[0]
-        let html = `<div>${point.name}</div>`
+        let html = `<div style="font-weight: bold;">${point.name}</div>`
         params.forEach((p: any) => {
           const color = p.data.isAnomaly ? '#f5222d' : '#1890ff'
           html += `<div style="color: ${color}">
-            ${p.marker} ${p.seriesName}: ${p.value}
-            ${p.data.isAnomaly ? ' <span style="color: #f5222d; font-weight: bold;">(异常点)</span>' : ''}
+            ${p.marker} ${p.seriesName}: ${p.value} MWh
+            ${p.data.isAnomaly ? ' <span style="color: #f5222d; font-weight: bold;">(异常点（算法标记）)</span>' : ''}
           </div>`
         })
         return html
       }
     },
     legend: {
-      data: ['能耗值']
+      data: ['总能耗']
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
     },
     xAxis: {
       type: 'category',
-      data: ['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05', '2024-01-06', '2024-01-07']
+      boundaryGap: false,
+      data: times
     },
     yAxis: {
       type: 'value',
@@ -541,10 +646,15 @@ const getChart1Option = (): EChartsOption => {
     },
     series: [
       {
-        name: '能耗值',
+        name: '总能耗',
         type: 'line',
         smooth: true,
-        data: [150.5, 180.3, 220.8, 190.6, 175.2, 165.9, 155.8],
+        data: seriesData,
+        itemStyle: {
+          color: (params: any) => {
+            return params.data.isAnomaly ? '#f5222d' : '#1890ff'
+          }
+        },
         markPoint: {
           data: [
             { 
@@ -561,9 +671,6 @@ const getChart1Option = (): EChartsOption => {
               name: '平均值'
             }
           ]
-        },
-        itemStyle: {
-          color: '#1890ff'
         }
       }
     ]
@@ -571,20 +678,43 @@ const getChart1Option = (): EChartsOption => {
 }
 
 // 获取图表 2 配置（柱状图）
-const getChart2Option = (): EChartsOption => {
+const getChart2Option = (distributionData: any[]): EChartsOption => {
+  // 按建筑分组数据
+  const buildingMap = new Map<string, number>()
+  distributionData.forEach(item => {
+    if (!buildingMap.has(item.buildingName)) {
+      buildingMap.set(item.buildingName, 0)
+    }
+    buildingMap.set(item.buildingName, buildingMap.get(item.buildingName)! + item.value)
+  })
+
+  const buildings = Array.from(buildingMap.keys())
+  const values = buildings.map(b => Number(buildingMap.get(b)!.toFixed(2)))
+
   return {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
         type: 'shadow'
+      },
+      formatter: (params: any) => {
+        const point = params[0]
+        return `<div style="font-weight: bold;">${point.name}</div>
+                <div>${point.marker} 能耗：${point.value} MWh</div>`
       }
     },
     legend: {
       data: ['各建筑能耗']
     },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
     xAxis: {
       type: 'category',
-      data: ['行政楼', '教学楼 A', '教学楼 B', '图书馆', '实验楼']
+      data: buildings
     },
     yAxis: {
       type: 'value',
@@ -594,7 +724,7 @@ const getChart2Option = (): EChartsOption => {
       {
         name: '各建筑能耗',
         type: 'bar',
-        data: [350.5, 280.3, 245.8, 195.2, 185.0],
+        data: values,
         itemStyle: {
           color: '#1890ff'
         }
@@ -649,8 +779,30 @@ const handleResize = () => {
   detailChart?.resize()
 }
 
+// 处理路由参数（从 Overview 页面跳转时自动填充）
+const handleRouteParams = () => {
+  const { building, start, end } = route.query
+  
+  if (building && start && end) {
+    // 填充建筑
+    queryForm.buildings = [building as string]
+    
+    // 填充时间范围
+    const startTime = new Date(start as string).getTime()
+    const endTime = new Date(end as string).getTime()
+    queryForm.timeRange = [startTime, endTime]
+    
+    // 自动执行查询
+    message.info('已根据异常信息自动填充查询条件')
+    setTimeout(() => {
+      handleQuery()
+    }, 500)
+  }
+}
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  handleRouteParams()
 })
 
 onUnmounted(() => {

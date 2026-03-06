@@ -150,7 +150,7 @@ import { useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import * as dashboardApi from '@/api/dashboard'
-import type { AnomalyItem } from '@/types/dashboard'
+import type { AnomalyItem, KPIData, ChartData } from '@/types/dashboard'
 import { NTag, NButton } from 'naive-ui'
 import { 
   Refresh, 
@@ -169,7 +169,7 @@ const userStore = useUserStore()
 
 // 状态
 const loading = ref(false)
-const kpiData = ref({
+const kpiData = ref<KPIData>({
   totalEnergy: 0,
   energyChange: 0,
   deviceOnlineRate: 0,
@@ -258,20 +258,56 @@ const getTypeTagType = (type: string) => {
   return 'default'
 }
 
-// 加载数据
+// 加载数据 - 并行调用三个接口
 const loadData = async () => {
   loading.value = true
   try {
-    // 并行调用三个接口
-    const [kpiRes, chartRes, anomalyRes] = await Promise.all([
+    // 并行调用：KPI 数据 + 分布图数据 + 趋势图数据 + 异常列表
+    const [kpiRes, distributionRes, trendRes, anomalyRes] = await Promise.all([
       dashboardApi.getKPIData(),
       dashboardApi.getChartData(),
+      dashboardApi.getTrendData(),
       dashboardApi.getAnomalyList(5)
     ])
 
-    kpiData.value = kpiRes.data
-    chartData.value = chartRes.data
-    anomalyList.value = anomalyRes.data
+    console.log('KPI 响应:', kpiRes)
+    console.log('分布图响应:', distributionRes)
+    console.log('趋势图响应:', trendRes)
+    console.log('异常列表响应:', anomalyRes)
+
+    // 填充 KPI 数据（后端返回的是 summary 格式）
+    // 需要从 kpiRes.data.summary 中提取数据
+    const summary = kpiRes.data.summary || {}
+    kpiData.value = {
+      totalEnergy: summary.total_elec || 0,
+      energyChange: 0, // 后端未提供，需要计算或设置为 0
+      deviceOnlineRate: 100, // 后端未提供，暂时设置为 100
+      abnormalDeviceCount: 0, // 需要从异常数据中获取
+      co2Reduction: 0 // 后端未提供，暂时设置为 0
+    }
+    
+    // 填充图表数据
+    chartData.value = {
+      buildingEnergy: distributionRes.data.data?.series || [],
+      trendData: trendRes.data.data?.series?.[0]?.data.map((value: number, index: number) => ({
+        date: trendRes.data.data.categories?.[index] || '',
+        energy: value
+      })) || []
+    }
+    
+    // 填充异常列表
+    anomalyList.value = anomalyRes.data.anomalies?.map((item: any) => ({
+      id: item.timestamp,
+      time: item.timestamp,
+      buildingName: '建筑', // 后端未提供建筑名称
+      type: '能耗异常',
+      status: 'pending' as const,
+      buildingId: anomalyRes.data.building_id,
+      timeRange: {
+        start: anomalyRes.data.period.split(' 至 ')[0],
+        end: anomalyRes.data.period.split(' 至 ')[1]
+      }
+    })) || []
 
     // 初始化图表
     initCharts()

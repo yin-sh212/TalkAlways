@@ -7,6 +7,12 @@
       </div>
       <div class="user-info">
         <n-space align="center" :size="12">
+          <n-button size="small" @click="toggleTheme">
+            <template #icon>
+              <n-icon :component="isDark ? Sunny : Moon" />
+            </template>
+            {{ isDark ? '浅色' : '深色' }}
+          </n-button>
           <n-button size="small" @click="handleRefresh" :loading="loading">
             <template #icon>
               <n-icon :component="Refresh" />
@@ -128,6 +134,79 @@
         </n-space>
       </n-card>
 
+      <!-- 新增：设备状态监控面板 -->
+      <n-grid :cols="2" :x-gap="16" :y-gap="16" class="device-grid">
+        <n-grid-item>
+          <n-card title="设备运行状态" :bordered="false" content-style="padding: 20px;">
+            <template #header-extra>
+              <n-tag :type="deviceStats.healthScore > 80 ? 'success' : 'warning'" size="small">
+                健康度：{{ deviceStats.healthScore }}%
+              </n-tag>
+            </template>
+            <n-skeleton v-if="loading" :rows="4" />
+            <template v-else>
+              <n-space vertical :size="16">
+                <div class="device-stat-item">
+                  <div class="stat-header">
+                    <n-icon size="20" color="#52c41a"><CheckCircle /></n-icon>
+                    <span class="stat-label">正常运行</span>
+                  </div>
+                  <div class="stat-value success">{{ deviceStats.normalCount }}</div>
+                  <n-progress
+                    :percentage="Math.round(deviceStats.normalCount / deviceStats.totalCount * 100)"
+                    :color="'#52c41a'"
+                    :show-indicator="false"
+                  />
+                </div>
+                
+                <div class="device-stat-item">
+                  <div class="stat-header">
+                    <n-icon size="20" color="#f5222d"><Alert /></n-icon>
+                    <span class="stat-label">异常告警</span>
+                  </div>
+                  <div class="stat-value danger">{{ deviceStats.abnormalCount }}</div>
+                  <n-progress
+                    :percentage="Math.round(deviceStats.abnormalCount / deviceStats.totalCount * 100)"
+                    :color="'#f5222d'"
+                    :show-indicator="false"
+                  />
+                </div>
+                
+                <div class="device-stat-item">
+                  <div class="stat-header">
+                    <n-icon size="20" color="#faad14"><Warning /></n-icon>
+                    <span class="stat-label">离线设备</span>
+                  </div>
+                  <div class="stat-value warning">{{ deviceStats.offlineCount }}</div>
+                  <n-progress
+                    :percentage="Math.round(deviceStats.offlineCount / deviceStats.totalCount * 100)"
+                    :color="'#faad14'"
+                    :show-indicator="false"
+                  />
+                </div>
+                
+                <div class="device-stat-item">
+                  <div class="stat-header">
+                    <n-icon size="20" color="#1890ff"><Layers /></n-icon>
+                    <span class="stat-label">设备总数</span>
+                  </div>
+                  <div class="stat-value">{{ deviceStats.totalCount }}</div>
+                </div>
+              </n-space>
+            </template>
+          </n-card>
+        </n-grid-item>
+
+        <n-grid-item>
+          <n-card title="设备类型分布" :bordered="false" content-style="padding: 20px;">
+            <n-skeleton v-if="loading" :rows="4" />
+            <template v-else>
+              <div ref="deviceChartRef" class="device-chart-container"></div>
+            </template>
+          </n-card>
+        </n-grid-item>
+      </n-grid>
+
       <!-- 图表区 -->
       <n-grid :cols="2" :x-gap="16" :y-gap="16" class="chart-grid">
         <n-grid-item>
@@ -204,7 +283,13 @@ import {
   ChevronForwardOutline as ArrowRight,
   LinkOutline as LinkIcon,
   PlayOutline as Play,
-  StopOutline as Stop
+  StopOutline as Stop,
+  CheckmarkCircleOutline as CheckCircle,
+  AlertOutline as Alert,
+  WarningOutline as Warning,
+  LayersOutline as Layers,
+  SunnyOutline as Sunny,
+  MoonOutline as Moon
 } from '@vicons/ionicons5'
 import { Flash as EnergyIcon, TvOutline as Device, LeafOutline as Leaf } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
@@ -214,6 +299,9 @@ const router = useRouter()
 const dialog = useDialog()
 const message = useMessage()
 const userStore = useUserStore()
+
+// 主题状态
+const isDark = ref(false)
 
 // 状态
 const loading = ref(false)
@@ -235,10 +323,19 @@ const chartData = ref({
 })
 const anomalyList = ref<AnomalyItem[]>([])
 const rankingList = ref<any[]>([]) // 能耗排名数据
+const deviceStats = ref({
+  totalCount: 0,
+  normalCount: 0,
+  abnormalCount: 0,
+  offlineCount: 0,
+  healthScore: 0
+}) // 设备统计数据
 const pieChartRef = ref<HTMLElement | null>(null)
 const lineChartRef = ref<HTMLElement | null>(null)
+const deviceChartRef = ref<HTMLElement | null>(null) // 设备图表引用
 let pieChart: echarts.ECharts | null = null
 let lineChart: echarts.ECharts | null = null
+let deviceChart: echarts.ECharts | null = null // 设备图表实例
 
 // 表格列定义
 const tableColumns: DataTableColumns = [
@@ -439,6 +536,9 @@ const loadData = async () => {
     // 生成能耗排名数据
     generateRankingData(chartData.value.buildingEnergy)
 
+    // 生成设备统计数据
+    generateDeviceStats()
+
     // 初始化图表
     initCharts()
     
@@ -450,6 +550,65 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 生成设备统计数据（Mock 数据）
+const generateDeviceStats = () => {
+  // TODO: 实际应调用后端接口获取真实设备状态数据
+  deviceStats.value = {
+    totalCount: 150,
+    normalCount: 128,
+    abnormalCount: 12,
+    offlineCount: 10,
+    healthScore: Math.round((128 / 150) * 100)
+  }
+  
+  // 初始化设备类型分布图
+  setTimeout(() => {
+    initDeviceChart()
+  }, 100)
+}
+
+// 初始化设备类型分布图
+const initDeviceChart = () => {
+  if (!deviceChartRef.value) return
+  
+  deviceChart = echarts.init(deviceChartRef.value)
+  
+  const option: EChartsOption = {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c}台 ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      data: ['空调机组', '照明系统', '电梯设备', '水泵设备', '其他']
+    },
+    series: [
+      {
+        name: '设备类型',
+        type: 'pie',
+        radius: '60%',
+        data: [
+          { value: 45, name: '空调机组', itemStyle: { color: '#1890ff' } },
+          { value: 38, name: '照明系统', itemStyle: { color: '#52c41a' } },
+          { value: 28, name: '电梯设备', itemStyle: { color: '#faad14' } },
+          { value: 22, name: '水泵设备', itemStyle: { color: '#f5222d' } },
+          { value: 17, name: '其他', itemStyle: { color: '#722ed1' } }
+        ],
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
+          }
+        }
+      }
+    ]
+  }
+  
+  deviceChart.setOption(option)
 }
 
 // 初始化图表
@@ -633,10 +792,37 @@ const handleLogout = () => {
   })
 }
 
+// 切换主题
+const toggleTheme = () => {
+  isDark.value = !isDark.value
+  
+  // 应用深色类名到 html 元素
+  if (isDark.value) {
+    document.documentElement.classList.add('dark')
+    message.success('已切换到深色模式')
+  } else {
+    document.documentElement.classList.remove('dark')
+    message.success('已切换到浅色模式')
+  }
+  
+  // TODO: 实际应用中应该保存到 localStorage 或用户配置
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
+
+// 加载保存的主题
+const loadSavedTheme = () => {
+  const savedTheme = localStorage.getItem('theme')
+  if (savedTheme === 'dark') {
+    isDark.value = true
+    document.documentElement.classList.add('dark')
+  }
+}
+
 // 窗口大小变化时重新渲染图表
 const handleResize = () => {
   pieChart?.resize()
   lineChart?.resize()
+  deviceChart?.resize()
 }
 
 // 启动自动刷新
@@ -653,6 +839,7 @@ const startAutoRefresh = () => {
 }
 
 onMounted(() => {
+  loadSavedTheme() // 加载保存的主题
   loadData()
   startAutoRefresh() // 启动自动刷新
   window.addEventListener('resize', handleResize)
@@ -665,16 +852,28 @@ onUnmounted(() => {
   }
   pieChart?.dispose()
   lineChart?.dispose()
+  deviceChart?.dispose()
 })
+
 </script>
 
 <style scoped lang="scss">
+// 深色主题变量
+:root.dark {
+  --bg-color: #1a1a1a;
+  --card-bg: #242424;
+  --text-primary: rgba(255, 255, 255, 0.9);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --border-color: #424242;
+}
+
 .overview-container {
   width: 100%;
   height: 100%;
-  background: #f0f2f5;
+  background: var(--bg-color, #f0f2f5);
   display: flex;
   flex-direction: column;
+  transition: background 0.3s ease;
 }
 
 .header {
@@ -682,33 +881,36 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: white;
+  background: var(--card-bg, white);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: background 0.3s ease;
   
   .refresh-time {
     font-size: 12px;
-    color: #999;
+    color: var(--text-secondary, #999);
   }
-}
-
-.logo {
-  h1 {
-    font-size: 24px;
-    font-weight: bold;
-    color: #1890ff;
-    margin: 0;
+  
+  .logo {
+    h1 {
+      font-size: 24px;
+      font-weight: bold;
+      color: var(--text-primary, #1890ff);
+      margin: 0;
+      transition: color 0.3s ease;
+    }
   }
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  .username {
-    font-size: 14px;
-    font-weight: 500;
-    color: #333;
+  
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    
+    .username {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary, #333);
+      transition: color 0.3s ease;
+    }
   }
 }
 
@@ -725,11 +927,14 @@ onUnmounted(() => {
   .kpi-card {
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    background: var(--card-bg, white);
+    transition: background 0.3s ease;
     
     .card-title {
       font-size: 14px;
-      color: #666;
+      color: var(--text-secondary, #666);
       font-weight: 500;
+      transition: color 0.3s ease;
     }
 
     .kpi-value {
@@ -817,6 +1022,45 @@ onUnmounted(() => {
         color: #1890ff;
       }
     }
+  }
+}
+
+.device-grid {
+  .device-stat-item {
+    .stat-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      
+      .stat-label {
+        font-size: 14px;
+        color: #666;
+      }
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      
+      &.success {
+        color: #52c41a;
+      }
+      
+      &.danger {
+        color: #f5222d;
+      }
+      
+      &.warning {
+        color: #faad14;
+      }
+    }
+  }
+  
+  .device-chart-container {
+    height: 250px;
+    width: 100%;
   }
 }
 

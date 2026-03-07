@@ -85,6 +85,14 @@
         <!-- Tab 1: 数据表格 -->
         <n-tab-pane name="table" tab="数据表格">
           <n-card :bordered="false" content-style="padding: 16px;">
+            <template #header>
+              <n-space justify="space-between" align="center">
+                <span>数据明细</span>
+                <n-checkbox v-model:checked="enableCompare" @update:checked="handleCompareToggle">
+                  启用对比模式
+                </n-checkbox>
+              </n-space>
+            </template>
             <n-data-table
               :columns="tableColumns"
               :data="tableData"
@@ -94,6 +102,17 @@
               striped
             />
           </n-card>
+        </n-tab-pane>
+
+        <!-- 新增 Tab: 对比分析 -->
+        <n-tab-pane name="comparison" tab="对比分析" v-if="enableCompare">
+          <n-grid :cols="24" :x-gap="16" :y-gap="16">
+            <n-grid-item :span="24">
+              <n-card title="多建筑能耗对比" :bordered="false" content-style="padding: 16px;">
+                <div ref="compareChartRef" class="chart-container" style="height: 400px;"></div>
+              </n-card>
+            </n-grid-item>
+          </n-grid>
         </n-tab-pane>
 
         <!-- Tab 2: 分析视图 -->
@@ -227,15 +246,18 @@ const route = useRoute()
 const queryLoading = ref(false)
 const tableLoading = ref(false)
 const exportLoading = ref(false)
-const activeTab = ref<'table' | 'analysis'>('table')
+const activeTab = ref<'table' | 'analysis' | 'comparison'>('table')
 const showChartModal = ref(false)
+const enableCompare = ref(false) // 是否启用对比模式
 
 // 图表实例
 let chart1: echarts.ECharts | null = null
 let chart2: echarts.ECharts | null = null
+let compareChart: echarts.ECharts | null = null // 对比图表实例
 let detailChart: echarts.ECharts | null = null
 const chart1Ref = ref<HTMLElement | null>(null)
 const chart2Ref = ref<HTMLElement | null>(null)
+const compareChartRef = ref<HTMLElement | null>(null) // 对比图表引用
 const detailChartRef = ref<HTMLElement | null>(null)
 
 // 查询表单
@@ -534,10 +556,10 @@ const handleExport = async () => {
     }
 
     // 调用导出接口
-    const blob = await analysisApi.exportReport(exportParams)
+    const response = await analysisApi.exportReport(exportParams)
     
     // 创建下载链接
-    const url = window.URL.createObjectURL(blob)
+    const url = window.URL.createObjectURL(response.data as Blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `能耗报表_${new Date().toLocaleDateString()}_${Date.now()}.xlsx`
@@ -733,6 +755,81 @@ const getChart2Option = (distributionData: any[]): EChartsOption => {
   }
 }
 
+// 切换对比模式
+const handleCompareToggle = () => {
+  if (enableCompare.value) {
+    activeTab.value = 'comparison'
+    message.success('已启用对比模式')
+    // 延迟初始化对比图表
+    setTimeout(() => {
+      initCompareChart()
+    }, 100)
+  } else {
+    activeTab.value = 'table'
+    message.info('已关闭对比模式')
+  }
+}
+
+// 初始化对比图表
+const initCompareChart = () => {
+  if (!compareChartRef.value || tableData.value.length === 0) return
+  
+  compareChart = echarts.init(compareChartRef.value)
+  
+  // 按建筑分组数据
+  const buildingMap = new Map<string, number[]>()
+  tableData.value.forEach(item => {
+    if (!buildingMap.has(item.buildingName)) {
+      buildingMap.set(item.buildingName, [])
+    }
+    buildingMap.get(item.buildingName)!.push(item.value)
+  })
+  
+  // 构建系列数据 - 使用 ECharts 正确的类型
+  const series: any[] = Array.from(buildingMap.entries()).map(([name, values]) => ({
+    name,
+    type: 'bar' as const,
+    data: values.map(v => Number(v.toFixed(2))),
+    emphasis: {
+      focus: 'series'
+    }
+  }))
+  
+  const option: EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      }
+    },
+    legend: {
+      data: Array.from(buildingMap.keys()),
+      top: 10
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: ['时段 1', '时段 2', '时段 3', '时段 4', '时段 5'], // TODO: 实际应使用时间标签
+      axisLabel: {
+        interval: 0,
+        rotate: 30
+      }
+    },
+    yAxis: {
+      type: 'value',
+      name: '能耗 (kWh)'
+    },
+    series: series as any // 类型断言
+  }
+  
+  compareChart?.setOption(option)
+}
+
 // 生成 Mock 数据
 const generateMockData = () => {
   const tableData: any[] = []
@@ -776,6 +873,7 @@ const generateMockData = () => {
 const handleResize = () => {
   chart1?.resize()
   chart2?.resize()
+  compareChart?.resize()
   detailChart?.resize()
 }
 
@@ -809,8 +907,10 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   chart1?.dispose()
   chart2?.dispose()
+  compareChart?.dispose()
   detailChart?.dispose()
 })
+
 </script>
 
 <style scoped lang="scss">

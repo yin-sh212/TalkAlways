@@ -46,9 +46,10 @@ const getRankingTagType = (index: number) => {
 const getRankingColor = (index: number) => {
   if (index === 0) return '#f5222d'
   if (index === 1) return '#faad14'
-  if (index === 2) return '#1890ff'
+  if (index === 2) return '#18a058'
   return '#52c41a'
 }
+
 </script>
 
 <style scoped lang="scss">
@@ -82,7 +83,7 @@ const getRankingColor = (index: number) => {
         text-align: right;
         font-size: 14px;
         font-weight: 600;
-        color: #1890ff;
+        color: #18a058;
       }
     }
   }

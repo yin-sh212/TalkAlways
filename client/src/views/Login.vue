@@ -238,18 +238,20 @@ const handleRegister = async () => {
   width: 100vw;
   height: 100vh;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg-color);
   position: fixed;
   top: 0;
   left: 0;
+  transition: background 0.3s ease;
 }
 
 .login-card {
   width: 450px;
   padding: 40px;
-  background: white;
+  background: var(--card-bg);
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .header {
@@ -266,7 +268,8 @@ const handleRegister = async () => {
 
 .subtitle {
   font-size: 14px;
-  color: #666;
+  color: var(--text-secondary);
+  transition: color 0.3s ease;
 }
 
 :deep(.n-tabs-nav) {

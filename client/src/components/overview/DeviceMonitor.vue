@@ -51,7 +51,7 @@
             
             <div class="device-stat-item">
               <div class="stat-header">
-                <n-icon size="20" color="#1890ff"><Layers /></n-icon>
+                <n-icon size="20" color="#18a058"><Layers /></n-icon>
                 <span class="stat-label">设备总数</span>
               </div>
               <div class="stat-value">{{ deviceStats.totalCount }}</div>
@@ -123,7 +123,7 @@ const initDeviceChart = () => {
         type: 'pie',
         radius: '60%',
         data: [
-          { value: 45, name: '空调机组', itemStyle: { color: '#1890ff' } },
+          { value: 45, name: '空调机组', itemStyle: { color: '#18a058' } },
           { value: 38, name: '照明系统', itemStyle: { color: '#52c41a' } },
           { value: 28, name: '电梯设备', itemStyle: { color: '#faad14' } },
           { value: 22, name: '水泵设备', itemStyle: { color: '#f5222d' } },

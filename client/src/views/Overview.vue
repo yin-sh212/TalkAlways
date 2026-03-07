@@ -60,30 +60,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
-import { useDialog, useMessage } from 'naive-ui'
-import * as dashboardApi from '@/api/dashboard'
-import type { KPIData } from '@/types/dashboard'
-
-// 导入子组件
-import KpiCards from '@/components/overview/KpiCards.vue'
-import EnergyRanking from '@/components/overview/EnergyRanking.vue'
+import { Sunny, Moon, Refresh } from '@vicons/ionicons5'
+import { getKPIData, getChartData, getTrendData, getAnomalyList } from '@/api/dashboard'
+import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
-import DeviceMonitor from '@/components/overview/DeviceMonitor.vue'
-import AnomalyList from '@/components/overview/AnomalyList.vue'
+import KpiCards from '@/components/overview/KpiCards.vue'
 
-import { 
-  Refresh, 
-  SunnyOutline as Sunny,
-  MoonOutline as Moon
-} from '@vicons/ionicons5'
+// 声明全局 Window 类型
+declare global {
+  interface Window {
+    setTheme: (dark: boolean) => void
+    isDark: { value: boolean }
+  }
+}
 
 const router = useRouter()
-const userStore = useUserStore()
-const dialog = useDialog()
 const message = useMessage()
+const dialog = useDialog()
+const userStore = useUserStore()
 
 // 主题状态
 const isDark = ref(false)
@@ -302,21 +300,16 @@ const handleLogout = () => {
   })
 }
 
-// 切换主题
+// 切换主题 - 使用全局方法
 const toggleTheme = () => {
-  isDark.value = !isDark.value
+  const newIsDark = !isDark.value
+  window.setTheme(newIsDark)
   
-  // 应用深色类名到 html 元素
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
+  if (newIsDark) {
     message.success('已切换到深色模式')
   } else {
-    document.documentElement.classList.remove('dark')
     message.success('已切换到浅色模式')
   }
-  
-  // 保存到 localStorage
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
 }
 
 // 加载保存的主题
@@ -324,7 +317,8 @@ const loadSavedTheme = () => {
   const savedTheme = localStorage.getItem('theme')
   if (savedTheme === 'dark') {
     isDark.value = true
-    document.documentElement.classList.add('dark')
+    // 使用 data-theme 属性而不是 class
+    document.documentElement.setAttribute('data-theme', 'dark')
   }
 }
 
@@ -344,7 +338,7 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 // 深色主题变量
-:root.dark {
+:root[data-theme="dark"] {
   --bg-color: #1a1a1a;
   --card-bg: #242424;
   --text-primary: rgba(255, 255, 255, 0.9);
@@ -374,7 +368,7 @@ onUnmounted(() => {
     h1 {
       font-size: 24px;
       font-weight: bold;
-      color: var(--text-primary, #1890ff);
+      color: var(--text-primary, #18a058);
       margin: 0;
       transition: color 0.3s ease;
     }

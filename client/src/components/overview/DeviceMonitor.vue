@@ -1,0 +1,208 @@
+<template>
+  <n-grid :cols="2" :x-gap="16" :y-gap="16" class="device-grid">
+    <n-grid-item>
+      <n-card title="设备运行状态" :bordered="false" content-style="padding: 20px;">
+        <template #header-extra>
+          <n-tag :type="deviceStats.healthScore > 80 ? 'success' : 'warning'" size="small">
+            健康度：{{ deviceStats.healthScore }}%
+          </n-tag>
+        </template>
+        <n-skeleton v-if="loading" :rows="4" />
+        <template v-else>
+          <n-space vertical :size="16">
+            <div class="device-stat-item">
+              <div class="stat-header">
+                <n-icon size="20" color="#52c41a"><CheckCircle /></n-icon>
+                <span class="stat-label">正常运行</span>
+              </div>
+              <div class="stat-value success">{{ deviceStats.normalCount }}</div>
+              <n-progress
+                :percentage="Math.round(deviceStats.normalCount / deviceStats.totalCount * 100)"
+                :color="'#52c41a'"
+                :show-indicator="false"
+              />
+            </div>
+            
+            <div class="device-stat-item">
+              <div class="stat-header">
+                <n-icon size="20" color="#f5222d"><Alert /></n-icon>
+                <span class="stat-label">异常告警</span>
+              </div>
+              <div class="stat-value danger">{{ deviceStats.abnormalCount }}</div>
+              <n-progress
+                :percentage="Math.round(deviceStats.abnormalCount / deviceStats.totalCount * 100)"
+                :color="'#f5222d'"
+                :show-indicator="false"
+              />
+            </div>
+            
+            <div class="device-stat-item">
+              <div class="stat-header">
+                <n-icon size="20" color="#faad14"><Warning /></n-icon>
+                <span class="stat-label">离线设备</span>
+              </div>
+              <div class="stat-value warning">{{ deviceStats.offlineCount }}</div>
+              <n-progress
+                :percentage="Math.round(deviceStats.offlineCount / deviceStats.totalCount * 100)"
+                :color="'#faad14'"
+                :show-indicator="false"
+              />
+            </div>
+            
+            <div class="device-stat-item">
+              <div class="stat-header">
+                <n-icon size="20" color="#1890ff"><Layers /></n-icon>
+                <span class="stat-label">设备总数</span>
+              </div>
+              <div class="stat-value">{{ deviceStats.totalCount }}</div>
+            </div>
+          </n-space>
+        </template>
+      </n-card>
+    </n-grid-item>
+
+    <n-grid-item>
+      <n-card title="设备类型分布" :bordered="false" content-style="padding: 20px;">
+        <n-skeleton v-if="loading" :rows="4" />
+        <template v-else>
+          <div ref="deviceChartRef" class="device-chart-container"></div>
+        </template>
+      </n-card>
+    </n-grid-item>
+  </n-grid>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import * as echarts from 'echarts'
+import type { EChartsOption } from 'echarts'
+import { 
+  CheckmarkCircleOutline as CheckCircle,
+  AlertOutline as Alert,
+  WarningOutline as Warning,
+  LayersOutline as Layers
+} from '@vicons/ionicons5'
+
+interface DeviceStats {
+  totalCount: number
+  normalCount: number
+  abnormalCount: number
+  offlineCount: number
+  healthScore: number
+}
+
+interface Props {
+  loading: boolean
+  deviceStats: DeviceStats
+}
+
+const props = defineProps<Props>()
+
+const deviceChartRef = ref<HTMLElement | null>(null)
+let deviceChart: echarts.ECharts | null = null
+
+// 初始化设备图表
+const initDeviceChart = () => {
+  if (!deviceChartRef.value) return
+  
+  deviceChart = echarts.init(deviceChartRef.value)
+  
+  const option: EChartsOption = {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c}台 ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      data: ['空调机组', '照明系统', '电梯设备', '水泵设备', '其他']
+    },
+    series: [
+      {
+        name: '设备类型',
+        type: 'pie',
+        radius: '60%',
+        data: [
+          { value: 45, name: '空调机组', itemStyle: { color: '#1890ff' } },
+          { value: 38, name: '照明系统', itemStyle: { color: '#52c41a' } },
+          { value: 28, name: '电梯设备', itemStyle: { color: '#faad14' } },
+          { value: 22, name: '水泵设备', itemStyle: { color: '#f5222d' } },
+          { value: 17, name: '其他', itemStyle: { color: '#722ed1' } }
+        ],
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
+          }
+        }
+      }
+    ]
+  }
+  
+  deviceChart.setOption(option)
+}
+
+// 窗口大小变化时重新渲染图表
+const handleResize = () => {
+  deviceChart?.resize()
+}
+
+watch(() => props.loading, (newLoading) => {
+  if (!newLoading) {
+    setTimeout(() => {
+      initDeviceChart()
+    }, 100)
+  }
+}, { immediate: true })
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  deviceChart?.dispose()
+})
+</script>
+
+<style scoped lang="scss">
+.device-grid {
+  .device-stat-item {
+    .stat-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      
+      .stat-label {
+        font-size: 14px;
+        color: #666;
+      }
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      
+      &.success {
+        color: #52c41a;
+      }
+      
+      &.danger {
+        color: #f5222d;
+      }
+      
+      &.warning {
+        color: #faad14;
+      }
+    }
+  }
+  
+  .device-chart-container {
+    height: 250px;
+    width: 100%;
+  }
+}
+</style>

@@ -30,384 +30,96 @@
 
     <!-- 主内容区 -->
     <div class="content">
-      <!-- KPI 卡片区 -->
-      <n-grid :cols="3" :x-gap="16" :y-gap="16" class="kpi-grid">
-        <n-grid-item>
-          <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
-            <template #header>
-              <n-space justify="space-between" align="center">
-                <span class="card-title">今日总能耗</span>
-                <n-icon size="24" color="#18a058">
-                  <EnergyIcon />
-                </n-icon>
-              </n-space>
-            </template>
-            <n-skeleton v-if="loading" :rows="2" />
-            <template v-else>
-              <div class="kpi-value">
-                {{ kpiData.totalEnergy.toFixed(2) }}
-                <span class="unit">MWh</span>
-              </div>
-              <div class="kpi-changes">
-                <div class="kpi-change" :class="{ 'is-up': kpiData.dayChange >= 0 }">
-                  <n-icon :component="kpiData.dayChange >= 0 ? ArrowUpward : ArrowDownward" />
-                  {{ Math.abs(kpiData.dayChange).toFixed(1) }}%
-                  <span class="change-label">较昨日</span>
-                </div>
-                <div class="kpi-change" :class="{ 'is-up': kpiData.weekChange >= 0 }">
-                  <n-icon :component="kpiData.weekChange >= 0 ? ArrowUpward : ArrowDownward" />
-                  {{ Math.abs(kpiData.weekChange).toFixed(1) }}%
-                  <span class="change-label">较上周</span>
-                </div>
-              </div>
-            </template>
-          </n-card>
-        </n-grid-item>
+      <!-- KPI 卡片区 - 使用组件 -->
+      <KpiCards :loading="loading" :kpiData="kpiData" />
 
-        <n-grid-item>
-          <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
-            <template #header>
-              <n-space justify="space-between" align="center">
-                <span class="card-title">在线设备率</span>
-                <n-icon size="24" color="#1890ff">
-                  <Device />
-                </n-icon>
-              </n-space>
-            </template>
-            <n-skeleton v-if="loading" :rows="2" />
-            <template v-else>
-              <div class="kpi-value">
-                {{ kpiData.deviceOnlineRate }}
-                <span class="unit">%</span>
-              </div>
-              <div class="kpi-subtitle">
-                <n-tag :type="kpiData.abnormalDeviceCount > 0 ? 'warning' : 'success'" size="small">
-                  异常设备：{{ kpiData.abnormalDeviceCount }}
-                </n-tag>
-              </div>
-            </template>
-          </n-card>
-        </n-grid-item>
+      <!-- 能耗排名 TOP5 - 使用组件 -->
+      <EnergyRanking :rankingList="rankingList" />
 
-        <n-grid-item>
-          <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
-            <template #header>
-              <n-space justify="space-between" align="center">
-                <span class="card-title">今日 CO₂减排</span>
-                <n-icon size="24" color="#52c41a">
-                  <Leaf />
-                </n-icon>
-              </n-space>
-            </template>
-            <n-skeleton v-if="loading" :rows="2" />
-            <template v-else>
-              <div class="kpi-value">
-                {{ kpiData.co2Reduction.toFixed(1) }}
-                <span class="unit">kg</span>
-              </div>
-              <div class="kpi-subtitle">
-                <span class="sub-text">根据能耗换算</span>
-              </div>
-            </template>
-          </n-card>
-        </n-grid-item>
-      </n-grid>
+      <!-- 图表区 - 使用组件 -->
+      <EnergyCharts 
+        ref="energyChartsRef"
+        :loading="loading" 
+        :building-energy="chartData.buildingEnergy"
+        :trend-data="chartData.trendData"
+        @building-click="handleBuildingClick"
+      />
 
-      <!-- 新增：能耗排名 TOP5 -->
-      <n-card title="能耗排名 TOP5" :bordered="false" content-style="padding: 20px;" class="ranking-card">
-        <n-space vertical :size="16">
-          <div v-for="(item, index) in rankingList" :key="item.buildingId" class="ranking-item">
-            <div class="ranking-info">
-              <n-tag :type="getRankingTagType(index)" size="small" class="ranking-tag">
-                {{ index + 1 }}
-              </n-tag>
-              <span class="ranking-building">{{ item.buildingName }}</span>
-              <n-progress
-                :percentage="item.percentage"
-                :color="getRankingColor(index)"
-                :show-indicator="false"
-                class="ranking-progress"
-              />
-              <span class="ranking-value">{{ item.energy.toFixed(2) }} MWh</span>
-            </div>
-          </div>
-        </n-space>
-      </n-card>
+      <!-- 设备监控 - 使用组件 -->
+      <DeviceMonitor :loading="loading" :deviceStats="deviceStats" />
 
-      <!-- 新增：设备状态监控面板 -->
-      <n-grid :cols="2" :x-gap="16" :y-gap="16" class="device-grid">
-        <n-grid-item>
-          <n-card title="设备运行状态" :bordered="false" content-style="padding: 20px;">
-            <template #header-extra>
-              <n-tag :type="deviceStats.healthScore > 80 ? 'success' : 'warning'" size="small">
-                健康度：{{ deviceStats.healthScore }}%
-              </n-tag>
-            </template>
-            <n-skeleton v-if="loading" :rows="4" />
-            <template v-else>
-              <n-space vertical :size="16">
-                <div class="device-stat-item">
-                  <div class="stat-header">
-                    <n-icon size="20" color="#52c41a"><CheckCircle /></n-icon>
-                    <span class="stat-label">正常运行</span>
-                  </div>
-                  <div class="stat-value success">{{ deviceStats.normalCount }}</div>
-                  <n-progress
-                    :percentage="Math.round(deviceStats.normalCount / deviceStats.totalCount * 100)"
-                    :color="'#52c41a'"
-                    :show-indicator="false"
-                  />
-                </div>
-                
-                <div class="device-stat-item">
-                  <div class="stat-header">
-                    <n-icon size="20" color="#f5222d"><Alert /></n-icon>
-                    <span class="stat-label">异常告警</span>
-                  </div>
-                  <div class="stat-value danger">{{ deviceStats.abnormalCount }}</div>
-                  <n-progress
-                    :percentage="Math.round(deviceStats.abnormalCount / deviceStats.totalCount * 100)"
-                    :color="'#f5222d'"
-                    :show-indicator="false"
-                  />
-                </div>
-                
-                <div class="device-stat-item">
-                  <div class="stat-header">
-                    <n-icon size="20" color="#faad14"><Warning /></n-icon>
-                    <span class="stat-label">离线设备</span>
-                  </div>
-                  <div class="stat-value warning">{{ deviceStats.offlineCount }}</div>
-                  <n-progress
-                    :percentage="Math.round(deviceStats.offlineCount / deviceStats.totalCount * 100)"
-                    :color="'#faad14'"
-                    :show-indicator="false"
-                  />
-                </div>
-                
-                <div class="device-stat-item">
-                  <div class="stat-header">
-                    <n-icon size="20" color="#1890ff"><Layers /></n-icon>
-                    <span class="stat-label">设备总数</span>
-                  </div>
-                  <div class="stat-value">{{ deviceStats.totalCount }}</div>
-                </div>
-              </n-space>
-            </template>
-          </n-card>
-        </n-grid-item>
-
-        <n-grid-item>
-          <n-card title="设备类型分布" :bordered="false" content-style="padding: 20px;">
-            <n-skeleton v-if="loading" :rows="4" />
-            <template v-else>
-              <div ref="deviceChartRef" class="device-chart-container"></div>
-            </template>
-          </n-card>
-        </n-grid-item>
-      </n-grid>
-
-      <!-- 图表区 -->
-      <n-grid :cols="2" :x-gap="16" :y-gap="16" class="chart-grid">
-        <n-grid-item>
-          <n-card title="各建筑能耗占比" :bordered="false" content-style="padding: 20px;">
-            <template #header-extra>
-              <n-tooltip>
-                <template #trigger>
-                  <n-icon size="18" style="cursor: pointer; color: #1890ff;" :component="LinkIcon" />
-                </template>
-                点击环形图的某个建筑，其他图表将联动显示该建筑数据
-              </n-tooltip>
-            </template>
-            <n-skeleton v-if="loading" :rows="3" />
-            <div v-else ref="pieChartRef" class="chart-container"></div>
-          </n-card>
-        </n-grid-item>
-
-        <n-grid-item>
-          <n-card title="近 7 日总能耗趋势" :bordered="false" content-style="padding: 20px;">
-            <n-skeleton v-if="loading" :rows="3" />
-            <div v-else ref="lineChartRef" class="chart-container"></div>
-          </n-card>
-        </n-grid-item>
-      </n-grid>
-
-      <!-- 异常列表区 -->
-      <n-card title="实时异常/报警（最新 5 条）" :bordered="false" content-style="padding: 20px;">
-        <template #header-extra>
-          <n-space align="center">
-            <span class="refresh-time">最后更新：{{ lastUpdateTime }}</span>
-            <n-button text size="small" @click="toggleAutoRefresh">
-              <template #icon>
-                <n-icon :component="autoRefresh ? Stop : Play" />
-              </template>
-              {{ autoRefresh ? '停止刷新' : '自动刷新' }}
-            </n-button>
-            <n-button text size="small" @click="handleViewAll">
-              查看全部
-              <template #icon>
-                <n-icon :component="ArrowRight" />
-              </template>
-            </n-button>
-          </n-space>
-        </template>
-        
-        <n-skeleton v-if="loading" :rows="5" />
-        <n-empty v-else-if="anomalyList.length === 0" description="暂无异常报警" />
-        <n-data-table
-          v-else
-          :columns="tableColumns"
-          :data="anomalyList"
-          :row-key="(row: AnomalyItem) => row.id"
-          striped
-          @update:checked-row-keys="handleCheckAnomaly"
-        />
-      </n-card>
+      <!-- 异常列表 - 使用组件 -->
+      <AnomalyList 
+        :loading="loading" 
+        :anomaly-list="anomalyList"
+        :last-update-time="lastUpdateTime"
+        @view-all="handleViewAll"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, h } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useDialog, useMessage } from 'naive-ui'
-import type { DataTableColumns } from 'naive-ui'
 import { useUserStore } from '@/store/user'
+import { useDialog, useMessage } from 'naive-ui'
 import * as dashboardApi from '@/api/dashboard'
-import type { AnomalyItem, KPIData, ChartData } from '@/types/dashboard'
-import { NTag, NButton } from 'naive-ui'
+import type { KPIData } from '@/types/dashboard'
+
+// 导入子组件
+import KpiCards from '@/components/overview/KpiCards.vue'
+import EnergyRanking from '@/components/overview/EnergyRanking.vue'
+import EnergyCharts from '@/components/overview/EnergyCharts.vue'
+import DeviceMonitor from '@/components/overview/DeviceMonitor.vue'
+import AnomalyList from '@/components/overview/AnomalyList.vue'
+
 import { 
   Refresh, 
-  ArrowUpOutline as ArrowUpward, 
-  ArrowDownOutline as ArrowDownward, 
-  ChevronForwardOutline as ArrowRight,
-  LinkOutline as LinkIcon,
-  PlayOutline as Play,
-  StopOutline as Stop,
-  CheckmarkCircleOutline as CheckCircle,
-  AlertOutline as Alert,
-  WarningOutline as Warning,
-  LayersOutline as Layers,
   SunnyOutline as Sunny,
   MoonOutline as Moon
 } from '@vicons/ionicons5'
-import { Flash as EnergyIcon, TvOutline as Device, LeafOutline as Leaf } from '@vicons/ionicons5'
-import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
 
 const router = useRouter()
+const userStore = useUserStore()
 const dialog = useDialog()
 const message = useMessage()
-const userStore = useUserStore()
 
 // 主题状态
 const isDark = ref(false)
 
 // 状态
 const loading = ref(false)
-const autoRefresh = ref(true) // 是否自动刷新
+const autoRefresh = ref(true)
 const refreshTimer = ref<any>(null)
-const lastUpdateTime = ref('') // 最后更新时间
+const lastUpdateTime = ref('')
+
 const kpiData = ref<KPIData>({
   totalEnergy: 0,
   energyChange: 0,
-  dayChange: 0, // 日环比
-  weekChange: 0, // 周同比
+  dayChange: 0,
+  weekChange: 0,
   deviceOnlineRate: 0,
   abnormalDeviceCount: 0,
   co2Reduction: 0
 })
+
 const chartData = ref({
   buildingEnergy: [] as any[],
   trendData: [] as any[]
 })
-const anomalyList = ref<AnomalyItem[]>([])
-const rankingList = ref<any[]>([]) // 能耗排名数据
+
+const anomalyList = ref<any[]>([])
+const rankingList = ref<any[]>([])
 const deviceStats = ref({
   totalCount: 0,
   normalCount: 0,
   abnormalCount: 0,
   offlineCount: 0,
   healthScore: 0
-}) // 设备统计数据
-const pieChartRef = ref<HTMLElement | null>(null)
-const lineChartRef = ref<HTMLElement | null>(null)
-const deviceChartRef = ref<HTMLElement | null>(null) // 设备图表引用
-let pieChart: echarts.ECharts | null = null
-let lineChart: echarts.ECharts | null = null
-let deviceChart: echarts.ECharts | null = null // 设备图表实例
+})
 
-// 表格列定义
-const tableColumns: DataTableColumns = [
-  {
-    type: 'selection' as const
-  },
-  {
-    title: '异常时间',
-    key: 'time',
-    width: 180
-  },
-  {
-    title: '建筑名称',
-    key: 'buildingName',
-    width: 150
-  },
-  {
-    title: '异常类型',
-    key: 'type',
-    width: 150,
-    render: (row: any) => {
-      return h(
-        NTag,
-        { type: getTypeTagType(row.type) },
-        { default: () => row.type }
-      )
-    }
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 120,
-    render: (row: any) => {
-      const statusMap: Record<string, any> = {
-        pending: { type: 'warning', text: '待处理' },
-        processing: { type: 'info', text: '处理中' },
-        resolved: { type: 'success', text: '已解决' }
-      }
-      const status = statusMap[row.status] || { type: 'default', text: row.status }
-      return h(
-        NTag,
-        { type: status.type, size: 'small' },
-        { default: () => status.text }
-      )
-    }
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 120,
-    fixed: 'right',
-    render: (row: any) => {
-      return h(
-        NButton,
-        {
-          size: 'small',
-          type: 'primary',
-          onClick: () => handleViewDetail(row as AnomalyItem)
-        },
-        { default: () => '查看详情' }
-      )
-    }
-  }
-]
-
-// 获取异常类型对应的标签颜色
-const getTypeTagType = (type: string) => {
-  if (type.includes('突增')) return 'error'
-  if (type.includes('突降')) return 'warning'
-  if (type.includes('离线')) return 'info'
-  return 'default'
-}
+const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
 
 // 计算日环比（Mock 数据，实际应从后端获取）
 const calculateDayChange = (currentEnergy: number) => {
@@ -454,20 +166,16 @@ const generateRankingData = (buildingEnergy: any[]) => {
   }
 }
 
-// 获取排名标签类型
-const getRankingTagType = (index: number) => {
-  if (index === 0) return 'error'
-  if (index === 1) return 'warning'
-  if (index === 2) return 'info'
-  return 'default'
-}
-
-// 获取排名进度条颜色
-const getRankingColor = (index: number) => {
-  if (index === 0) return '#f5222d'
-  if (index === 1) return '#faad14'
-  if (index === 2) return '#1890ff'
-  return '#52c41a'
+// 生成设备统计数据（Mock 数据）
+const generateDeviceStats = () => {
+  // TODO: 实际应调用后端接口获取真实设备状态数据
+  deviceStats.value = {
+    totalCount: 150,
+    normalCount: 128,
+    abnormalCount: 12,
+    offlineCount: 10,
+    healthScore: Math.round((128 / 150) * 100)
+  }
 }
 
 // 更新最后更新时间
@@ -478,6 +186,19 @@ const updateLastUpdateTime = () => {
     minute: '2-digit', 
     second: '2-digit' 
   })
+}
+
+// 启动自动刷新
+const startAutoRefresh = () => {
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+  }
+  refreshTimer.value = setInterval(() => {
+    if (autoRefresh.value) {
+      loadData()
+      message.success('数据已自动刷新')
+    }
+  }, 30000) // 30 秒刷新一次
 }
 
 // 加载数据 - 并行调用三个接口
@@ -497,17 +218,16 @@ const loadData = async () => {
     console.log('趋势图响应:', trendRes)
     console.log('异常列表响应:', anomalyRes)
 
-    // 填充 KPI 数据（后端返回的是 summary 格式）
-    // 需要从 kpiRes.data.summary 中提取数据
+    // 填充 KPI 数据
     const summary = kpiRes.data.summary || {}
     kpiData.value = {
       totalEnergy: summary.total_elec || 0,
-      energyChange: 0, // 后端未提供，需要计算或设置为 0
-      dayChange: calculateDayChange(summary.total_elec), // 日环比
-      weekChange: calculateWeekChange(summary.total_elec), // 周同比
-      deviceOnlineRate: 100, // 后端未提供，暂时设置为 100
-      abnormalDeviceCount: anomalyRes.data.anomaly_count || 0, // 从异常数据中获取
-      co2Reduction: (summary.total_elec || 0) * 0.785 // 根据能耗换算
+      energyChange: 0,
+      dayChange: calculateDayChange(summary.total_elec),
+      weekChange: calculateWeekChange(summary.total_elec),
+      deviceOnlineRate: 100,
+      abnormalDeviceCount: anomalyRes.data.anomaly_count || 0,
+      co2Reduction: (summary.total_elec || 0) * 0.785
     }
     
     // 填充图表数据
@@ -523,7 +243,7 @@ const loadData = async () => {
     anomalyList.value = anomalyRes.data.anomalies?.map((item: any) => ({
       id: item.timestamp,
       time: item.timestamp,
-      buildingName: '建筑', // 后端未提供建筑名称
+      buildingName: '建筑',
       type: '能耗异常',
       status: 'pending' as const,
       buildingId: anomalyRes.data.building_id,
@@ -538,9 +258,6 @@ const loadData = async () => {
 
     // 生成设备统计数据
     generateDeviceStats()
-
-    // 初始化图表
-    initCharts()
     
     // 更新最后更新时间
     updateLastUpdateTime()
@@ -552,195 +269,11 @@ const loadData = async () => {
   }
 }
 
-// 生成设备统计数据（Mock 数据）
-const generateDeviceStats = () => {
-  // TODO: 实际应调用后端接口获取真实设备状态数据
-  deviceStats.value = {
-    totalCount: 150,
-    normalCount: 128,
-    abnormalCount: 12,
-    offlineCount: 10,
-    healthScore: Math.round((128 / 150) * 100)
+// 处理建筑点击事件（图表联动）
+const handleBuildingClick = (buildingName: string) => {
+  if (energyChartsRef.value) {
+    energyChartsRef.value.updateChartsWithBuilding(buildingName)
   }
-  
-  // 初始化设备类型分布图
-  setTimeout(() => {
-    initDeviceChart()
-  }, 100)
-}
-
-// 初始化设备类型分布图
-const initDeviceChart = () => {
-  if (!deviceChartRef.value) return
-  
-  deviceChart = echarts.init(deviceChartRef.value)
-  
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c}台 ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      left: 'left',
-      data: ['空调机组', '照明系统', '电梯设备', '水泵设备', '其他']
-    },
-    series: [
-      {
-        name: '设备类型',
-        type: 'pie',
-        radius: '60%',
-        data: [
-          { value: 45, name: '空调机组', itemStyle: { color: '#1890ff' } },
-          { value: 38, name: '照明系统', itemStyle: { color: '#52c41a' } },
-          { value: 28, name: '电梯设备', itemStyle: { color: '#faad14' } },
-          { value: 22, name: '水泵设备', itemStyle: { color: '#f5222d' } },
-          { value: 17, name: '其他', itemStyle: { color: '#722ed1' } }
-        ],
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }
-      }
-    ]
-  }
-  
-  deviceChart.setOption(option)
-}
-
-// 初始化图表
-const initCharts = () => {
-  // 环形图 - 各建筑能耗占比
-  if (pieChartRef.value && chartData.value.buildingEnergy.length > 0) {
-    pieChart = echarts.init(pieChartRef.value)
-    const pieOption: EChartsOption = {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'middle'
-      },
-      series: [
-        {
-          name: '能耗占比',
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 10,
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: {
-            show: false,
-            position: 'center'
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: 20,
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: chartData.value.buildingEnergy
-        }
-      ]
-    }
-    pieChart.setOption(pieOption)
-    
-    // 添加点击事件监听，实现图表联动
-    pieChart.on('click', (params: any) => {
-      if (params.dataIndex !== undefined) {
-        const buildingName = params.name
-        message.info(`已选择：${buildingName}，图表将联动显示该建筑数据`)
-        
-        // 触发联动事件（这里可以调用其他图表的更新函数）
-        // TODO: 实际应用中可以通过事件总线或状态管理来实现跨组件通信
-        updateChartsWithBuilding(buildingName)
-      }
-    })
-  }
-
-  // 折线图 - 近 7 日总能耗趋势
-  if (lineChartRef.value && chartData.value.trendData.length > 0) {
-    lineChart = echarts.init(lineChartRef.value)
-    const lineOption: EChartsOption = {
-      tooltip: {
-        trigger: 'axis',
-        formatter: '{b}: {c} MWh'
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: chartData.value.trendData.map(item => item.date)
-      },
-      yAxis: {
-        type: 'value',
-        name: '能耗 (MWh)',
-        axisLabel: {
-          formatter: '{value}'
-        }
-      },
-      series: [
-        {
-          name: '总能耗',
-          type: 'line',
-          smooth: true,
-          data: chartData.value.trendData.map(item => item.energy),
-          areaStyle: {
-            opacity: 0.3
-          },
-          itemStyle: {
-            color: '#1890ff'
-          }
-        }
-      ]
-    }
-    lineChart.setOption(lineOption)
-  }
-}
-
-// 根据选中的建筑更新图表（联动功能）
-const updateChartsWithBuilding = (buildingName: string) => {
-  // TODO: 实际应用中应该调用后端接口获取该建筑的详细数据
-  // 这里仅做演示，模拟更新折线图数据
-  
-  if (lineChart) {
-    // 模拟数据减少为原来的 60%-80%
-    const mockData = chartData.value.trendData.map(item => ({
-      date: item.date,
-      energy: item.energy * (0.6 + Math.random() * 0.2)
-    }))
-    
-    const newOption: EChartsOption = {
-      title: {
-        text: `${buildingName} - 近 7 日能耗趋势`,
-        left: 'center'
-      },
-      series: [{
-        data: mockData.map(item => item.energy)
-      }]
-    }
-    
-    lineChart?.setOption(newOption)
-  }
-  
-  // 可以在这里添加更多联动逻辑，如更新异常列表等
 }
 
 // 刷新数据
@@ -749,32 +282,9 @@ const handleRefresh = () => {
   message.success('数据已刷新')
 }
 
-// 切换自动刷新
-const toggleAutoRefresh = () => {
-  autoRefresh.value = !autoRefresh.value
-  if (autoRefresh.value) {
-    startAutoRefresh()
-    message.success('已开启自动刷新')
-  } else {
-    clearInterval(refreshTimer.value)
-    message.info('已关闭自动刷新')
-  }
-}
-
-// 查看异常详情
-const handleViewDetail = (row: AnomalyItem) => {
-  const url = dashboardApi.navigateToAnalysis(row.buildingId, row.timeRange)
-  router.push(url)
-}
-
 // 查看全部异常
 const handleViewAll = () => {
   router.push('/analysis?showAllAnomalies=true')
-}
-
-// 选中异常
-const handleCheckAnomaly = (checkedRowKeys: (string | number)[]) => {
-  console.log('选中的异常:', checkedRowKeys)
 }
 
 // 退出登录
@@ -805,7 +315,7 @@ const toggleTheme = () => {
     message.success('已切换到浅色模式')
   }
   
-  // TODO: 实际应用中应该保存到 localStorage 或用户配置
+  // 保存到 localStorage
   localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
 }
 
@@ -818,41 +328,16 @@ const loadSavedTheme = () => {
   }
 }
 
-// 窗口大小变化时重新渲染图表
-const handleResize = () => {
-  pieChart?.resize()
-  lineChart?.resize()
-  deviceChart?.resize()
-}
-
-// 启动自动刷新
-const startAutoRefresh = () => {
-  if (refreshTimer.value) {
-    clearInterval(refreshTimer.value)
-  }
-  refreshTimer.value = setInterval(() => {
-    if (autoRefresh.value) {
-      loadData()
-      message.success('数据已自动刷新')
-    }
-  }, 30000) // 30 秒刷新一次
-}
-
 onMounted(() => {
   loadSavedTheme() // 加载保存的主题
   loadData()
   startAutoRefresh() // 启动自动刷新
-  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
   if (refreshTimer.value) {
     clearInterval(refreshTimer.value)
   }
-  pieChart?.dispose()
-  lineChart?.dispose()
-  deviceChart?.dispose()
 })
 
 </script>
@@ -885,11 +370,6 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: background 0.3s ease;
   
-  .refresh-time {
-    font-size: 12px;
-    color: var(--text-secondary, #999);
-  }
-  
   .logo {
     h1 {
       font-size: 24px;
@@ -921,163 +401,5 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.kpi-grid {
-  .kpi-card {
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    background: var(--card-bg, white);
-    transition: background 0.3s ease;
-    
-    .card-title {
-      font-size: 14px;
-      color: var(--text-secondary, #666);
-      font-weight: 500;
-      transition: color 0.3s ease;
-    }
-
-    .kpi-value {
-      font-size: 32px;
-      font-weight: bold;
-      color: #333;
-      margin: 16px 0;
-
-      .unit {
-        font-size: 14px;
-        color: #999;
-        margin-left: 4px;
-      }
-    }
-
-    .kpi-changes {
-      display: flex;
-      gap: 16px;
-      margin-top: 8px;
-
-      .kpi-change {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 14px;
-        
-        &.is-up {
-          color: #f5222d;
-        }
-        
-        &:not(.is-up) {
-          color: #52c41a;
-        }
-
-        .change-label {
-          font-size: 12px;
-          color: #999;
-          margin-left: 4px;
-        }
-      }
-    }
-
-    .kpi-subtitle {
-      margin-top: 8px;
-
-      .sub-text {
-        font-size: 12px;
-        color: #999;
-      }
-    }
-  }
-}
-
-// 新增：排名卡片样式
-.ranking-card {
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  
-  .ranking-item {
-    .ranking-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      
-      .ranking-tag {
-        width: 24px;
-        text-align: center;
-      }
-      
-      .ranking-building {
-        width: 100px;
-        font-size: 14px;
-        color: #333;
-      }
-      
-      .ranking-progress {
-        flex: 1;
-      }
-      
-      .ranking-value {
-        width: 100px;
-        text-align: right;
-        font-size: 14px;
-        font-weight: 600;
-        color: #1890ff;
-      }
-    }
-  }
-}
-
-.device-grid {
-  .device-stat-item {
-    .stat-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-      
-      .stat-label {
-        font-size: 14px;
-        color: #666;
-      }
-    }
-    
-    .stat-value {
-      font-size: 24px;
-      font-weight: bold;
-      margin-bottom: 8px;
-      
-      &.success {
-        color: #52c41a;
-      }
-      
-      &.danger {
-        color: #f5222d;
-      }
-      
-      &.warning {
-        color: #faad14;
-      }
-    }
-  }
-  
-  .device-chart-container {
-    height: 250px;
-    width: 100%;
-  }
-}
-
-.chart-grid {
-  .chart-container {
-    height: 300px;
-    width: 100%;
-  }
-}
-
-:deep(.n-card) {
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  margin-bottom: 16px;
-}
-
-:deep(.n-data-table) {
-  font-size: 14px;
 }
 </style>

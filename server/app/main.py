@@ -47,7 +47,7 @@ async def startup_event():
     """应用启动时初始化数据库连接池"""
     await Database.get_pool()
     print(f"[OK] {config.APP_NAME} v{config.APP_VERSION} started")
-    print(f"[INFO] API docs: http://localhost:8000/docs")
+    print(f"[INFO] API docs: http://localhost:3000/docs")
 
 
 @app.on_event("shutdown")

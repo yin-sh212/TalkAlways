@@ -9,7 +9,7 @@
 server: {
   proxy: {
     '/api': {
-      target: 'http://localhost:8000',  // FastAPI 默认端口
+      target: 'http://localhost:3000',  // FastAPI 默认端口
       changeOrigin: true
     }
   }
@@ -17,8 +17,8 @@ server: {
 ```
 
 **说明**: 
-- 前端请求 `http://localhost:8080/api/xxx` 会自动代理到 `http://localhost:8000/api/xxx`
-- 无需修改后端端口，FastAPI 默认运行在 8000 端口
+- 前端请求 `http://localhost:8080/api/xxx` 会自动代理到 `http://localhost:3000/api/xxx`
+- 无需修改后端端口，FastAPI 默认运行在 3000 端口
 
 ### 2. 后端接口列表
 
@@ -187,7 +187,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-访问后端文档：http://localhost:8000/docs
+访问后端文档：http://localhost:3000/docs
 
 #### 启动前端
 ```bash
@@ -241,10 +241,10 @@ npm run dev
 #### 测试后端接口
 ```bash
 # 测试统计接口
-curl http://localhost:8000/api/statistics/summary?building_id=B001&start_date=2024-01-01&end_date=2024-01-01
+curl http://localhost:3000/api/statistics/summary?building_id=B001&start_date=2024-01-01&end_date=2024-01-01
 
 # 测试图表接口
-curl http://localhost:8000/api/charts/trend?building_id=B001&days=7
+curl http://localhost:3000/api/charts/trend?building_id=B001&days=7
 ```
 
 #### 测试前端

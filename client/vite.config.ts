@@ -45,7 +45,7 @@ export default defineConfig({
     port: 8080,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',  // FastAPI 默认端口
+        target: 'http://localhost:3000',
         changeOrigin: true
       }
     }

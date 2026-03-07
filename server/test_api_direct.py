@@ -5,7 +5,7 @@ import json
 
 
 async def test_chat_api():
-    url = "http://localhost:8000/api/chat/ask"
+    url = "http://localhost:3000/api/chat/ask"
 
     # 测试问题
     test_queries = [

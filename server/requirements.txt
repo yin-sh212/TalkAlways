@@ -7,16 +7,16 @@ aiomysql
 
 # 数据处理
 pandas
-numpy
+numpy>=2.0.0  # Python 3.13 需要 NumPy 2.x
 
 # 工具
 python-dotenv
 pydantic
 python-multipart
 
-# RAG相关
-langchain==0.1.0
-langchain-community==0.0.10
-chromadb==0.4.22
-sentence-transformers==2.2.2
-ragflow-sdk==0.24.0  # RagFlow官方SDK
+# RAG 相关 (注意：部分包可能需要较旧的 NumPy，如遇到兼容性问题可注释掉)
+# langchain==0.1.0
+# langchain-community==0.0.10
+# chromadb==0.4.22
+# sentence-transformers==2.2.2
+# ragflow-sdk==0.24.0  # RagFlow 官方 SDK

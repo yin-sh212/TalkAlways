@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme="theme">
+  <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
     <n-message-provider>
       <n-dialog-provider>
         <n-notification-provider>
@@ -11,12 +11,67 @@
 </template>
 
 <script setup lang="ts">
-import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui'
+import { ref, computed } from 'vue'
+import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, darkTheme, GlobalThemeOverrides } from 'naive-ui'
 
-const theme = null // ��n: darkTheme e/(�r;�
+// 主题状态 - 直接跟随浏览器外观
+const isDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+// 计算主题
+const theme = computed(() => isDark.value ? darkTheme : null)
+
+// 自定义主题覆盖（可选）
+const themeOverrides = ref<GlobalThemeOverrides>({
+  common: {
+    primaryColor: '#18a058',
+    primaryColorHover: '#36ad74',
+    primaryColorPressed: '#0c7a43',
+  },
+})
+
+// 设置主题并更新 DOM 属性
+const setTheme = (dark: boolean) => {
+  isDark.value = dark
+  
+  // 同步更新 html 的 data-theme 属性（用于自定义 CSS 变量）
+  if (dark) {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+  }
+}
+
+// 初始化主题
+if (isDark.value) {
+  document.documentElement.setAttribute('data-theme', 'dark')
+}
+
+// 监听浏览器外观变化 - 始终跟随系统主题
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  setTheme(e.matches)
+})
+
 </script>
 
 <style>
+/* 浅色主题变量（默认） */
+:root {
+  --bg-color: #f0f2f5;
+  --card-bg: #ffffff;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --border-color: #e8e8e8;
+}
+
+/* 深色主题变量 */
+[data-theme='dark'] {
+  --bg-color: #1a1a1a;
+  --card-bg: #242424;
+  --text-primary: rgba(255, 255, 255, 0.9);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --border-color: #424242;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -27,5 +82,8 @@ html, body, #app {
   width: 100%;
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg-color);
+  color: var(--text-primary);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 </style>

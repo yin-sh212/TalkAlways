@@ -5,7 +5,7 @@
         <template #header-extra>
           <n-tooltip>
             <template #trigger>
-              <n-icon size="18" style="cursor: pointer; color: #1890ff;" :component="LinkIcon" />
+              <n-icon size="18" style="cursor: pointer; color: #18a058;" :component="LinkIcon" />
             </template>
             点击环形图的某个建筑，其他图表将联动显示该建筑数据
           </n-tooltip>
@@ -148,10 +148,11 @@ const initCharts = () => {
             opacity: 0.3
           },
           itemStyle: {
-            color: '#1890ff'
+            color: '#18a058'
           }
         }
       ]
+
     }
     lineChart.setOption(lineOption)
   }

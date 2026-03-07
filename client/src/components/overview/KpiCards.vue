@@ -107,7 +107,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Energy, Device, Leaf, TrendingUp } from '@vicons/ionicons5'
+import { Flash, Leaf, TrendingUp, FlashOutline as Device } from '@vicons/ionicons5'
 import { 
   ArrowUpOutline as ArrowUpward, 
   ArrowDownOutline as ArrowDownward 

@@ -80,9 +80,10 @@ const handleLogout = () => {
 .home-container {
   width: 100%;
   height: 100%;
-  background: #f5f5f5;
+  background: var(--bg-color);
   display: flex;
   flex-direction: column;
+  transition: background 0.3s ease;
 }
 
 .header {
@@ -90,8 +91,9 @@ const handleLogout = () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: white;
+  background: var(--card-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .logo {
@@ -123,7 +125,8 @@ const handleLogout = () => {
   .username {
     font-size: 14px;
     font-weight: 500;
-    color: #333;
+    color: var(--text-primary);
+    transition: color 0.3s ease;
   }
 }
 

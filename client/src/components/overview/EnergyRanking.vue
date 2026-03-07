@@ -55,6 +55,8 @@ const getRankingColor = (index: number) => {
 .ranking-card {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--card-bg);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
   
   .ranking-item {
     .ranking-info {
@@ -70,7 +72,7 @@ const getRankingColor = (index: number) => {
       .ranking-building {
         width: 100px;
         font-size: 14px;
-        color: #333;
+        color: var(--text-primary);
       }
       
       .ranking-progress {

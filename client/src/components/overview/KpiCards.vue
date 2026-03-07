@@ -132,22 +132,25 @@ const props = defineProps<Props>()
   .kpi-card {
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    background: var(--card-bg);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
     
     .card-title {
       font-size: 14px;
-      color: #666;
+      color: var(--text-secondary);
       font-weight: 500;
+      transition: color 0.3s ease;
     }
 
     .kpi-value {
       font-size: 32px;
       font-weight: bold;
-      color: #333;
+      color: var(--text-primary);
       margin: 16px 0;
 
       .unit {
         font-size: 14px;
-        color: #999;
+        color: var(--text-secondary);
         margin-left: 4px;
       }
     }
@@ -173,7 +176,7 @@ const props = defineProps<Props>()
 
         .change-label {
           font-size: 12px;
-          color: #999;
+          color: var(--text-secondary);
           margin-left: 4px;
         }
       }
@@ -184,7 +187,7 @@ const props = defineProps<Props>()
 
       .sub-text {
         font-size: 12px;
-        color: #999;
+        color: var(--text-secondary);
       }
     }
   }

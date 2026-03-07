@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { useDialog, useMessage } from 'naive-ui'
@@ -85,8 +85,23 @@ const userStore = useUserStore()
 const dialog = useDialog()
 const message = useMessage()
 
-// 主题状态
-const isDark = ref(false)
+// 主题状态（从全局获取）
+declare global {
+  interface Window {
+    setTheme: (dark: boolean) => void
+    isDark: { value: boolean }
+  }
+}
+
+// 本地主题状态（同步全局）
+const isDark = ref(window.isDark?.value || false)
+
+// 监听全局主题变化
+watch(() => window.isDark?.value, (newVal) => {
+  if (newVal !== undefined) {
+    isDark.value = newVal
+  }
+})
 
 // 状态
 const loading = ref(false)
@@ -302,21 +317,16 @@ const handleLogout = () => {
   })
 }
 
-// 切换主题
+// 切换主题 - 使用全局方法
 const toggleTheme = () => {
-  isDark.value = !isDark.value
+  const newIsDark = !isDark.value
+  window.setTheme(newIsDark)
   
-  // 应用深色类名到 html 元素
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
+  if (newIsDark) {
     message.success('已切换到深色模式')
   } else {
-    document.documentElement.classList.remove('dark')
     message.success('已切换到浅色模式')
   }
-  
-  // 保存到 localStorage
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
 }
 
 // 加载保存的主题
@@ -329,7 +339,6 @@ const loadSavedTheme = () => {
 }
 
 onMounted(() => {
-  loadSavedTheme() // 加载保存的主题
   loadData()
   startAutoRefresh() // 启动自动刷新
 })
@@ -343,22 +352,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-// 深色主题变量
-:root.dark {
-  --bg-color: #1a1a1a;
-  --card-bg: #242424;
-  --text-primary: rgba(255, 255, 255, 0.9);
-  --text-secondary: rgba(255, 255, 255, 0.65);
-  --border-color: #424242;
-}
-
 .overview-container {
   width: 100%;
   height: 100%;
-  background: var(--bg-color, #f0f2f5);
+  background: var(--bg-color);
   display: flex;
   flex-direction: column;
-  transition: background 0.3s ease;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 .header {
@@ -366,15 +366,15 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: var(--card-bg, white);
+  background: var(--card-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: background 0.3s ease;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
   
   .logo {
     h1 {
       font-size: 24px;
       font-weight: bold;
-      color: var(--text-primary, #1890ff);
+      color: var(--text-primary);
       margin: 0;
       transition: color 0.3s ease;
     }
@@ -388,7 +388,7 @@ onUnmounted(() => {
     .username {
       font-size: 14px;
       font-weight: 500;
-      color: var(--text-primary, #333);
+      color: var(--text-primary);
       transition: color 0.3s ease;
     }
   }

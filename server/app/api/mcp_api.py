@@ -26,7 +26,74 @@ class MCPResponse(BaseModel):
     choices: List[Dict[str, Any]]
 
 
-@router.post("/v1/chat/completions", response_model=MCPResponse)
+@router.post(
+    "/v1/chat/completions",
+    response_model=MCPResponse,
+    responses={
+        200: {
+            "description": "成功调用MCP工具",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "query_energy": {
+                            "summary": "查询能耗数据",
+                            "value": {
+                                "choices": [{
+                                    "message": {
+                                        "role": "assistant",
+                                        "content": None,
+                                        "tool_calls": [{
+                                            "role": "tool",
+                                            "content": json.dumps({
+                                                "status": "success",
+                                                "data": [
+                                                    {
+                                                        "timestamp": "2025-01-01 08:00:00",
+                                                        "electricity": 156.32
+                                                    }
+                                                ],
+                                                "count": 1
+                                            }, ensure_ascii=False),
+                                            "tool_call_id": "call_123"
+                                        }]
+                                    }
+                                }]
+                            }
+                        },
+                        "analyze_anomaly": {
+                            "summary": "分析能耗异常",
+                            "value": {
+                                "choices": [{
+                                    "message": {
+                                        "role": "assistant",
+                                        "content": None,
+                                        "tool_calls": [{
+                                            "role": "tool",
+                                            "content": json.dumps({
+                                                "status": "success",
+                                                "building_id": "B001",
+                                                "total_points": 744,
+                                                "anomaly_count": 3,
+                                                "anomalies": [
+                                                    {
+                                                        "timestamp": "2025-01-15 14:00:00",
+                                                        "value": 345.2,
+                                                        "z_score": 4.2
+                                                    }
+                                                ]
+                                            }, ensure_ascii=False),
+                                            "tool_call_id": "call_456"
+                                        }]
+                                    }
+                                }]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def mcp_chat(request: MCPRequest):
     """MCP协议标准接口"""
     results = []
@@ -75,7 +142,41 @@ async def mcp_chat(request: MCPRequest):
     }
 
 
-@router.get("/v1/tools")
+@router.get(
+    "/v1/tools",
+    responses={
+        200: {
+            "description": "成功返回可用工具列表",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "tools": [
+                            {
+                                "name": "query_energy_data",
+                                "description": "查询建筑能耗数据",
+                                "parameters": {
+                                    "building_id": {"type": "string", "description": "建筑编号"},
+                                    "start_time": {"type": "string", "description": "开始时间 (YYYY-MM-DD)"},
+                                    "end_time": {"type": "string", "description": "结束时间 (YYYY-MM-DD)"},
+                                    "metrics": {"type": "array", "description": "查询指标"}
+                                }
+                            },
+                            {
+                                "name": "analyze_anomaly",
+                                "description": "分析能耗异常",
+                                "parameters": {
+                                    "building_id": {"type": "string", "description": "建筑编号"},
+                                    "start_date": {"type": "string", "description": "开始日期"},
+                                    "end_date": {"type": "string", "description": "结束日期"}
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def list_tools():
     """列出所有可用工具"""
     return {

@@ -107,12 +107,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { 
-  FlashOutline as Energy,
-  PhonePortraitOutline as Device,
-  LeafOutline as Leaf,
-  TrendingUpOutline as TrendingUp
-} from '@vicons/ionicons5'
+import { Energy, Device, Leaf, TrendingUp } from '@vicons/ionicons5'
 import { 
   ArrowUpOutline as ArrowUpward, 
   ArrowDownOutline as ArrowDownward 
@@ -132,25 +127,22 @@ const props = defineProps<Props>()
   .kpi-card {
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    background: var(--card-bg);
-    transition: background 0.3s ease, box-shadow 0.3s ease;
     
     .card-title {
       font-size: 14px;
-      color: var(--text-secondary);
+      color: #666;
       font-weight: 500;
-      transition: color 0.3s ease;
     }
 
     .kpi-value {
       font-size: 32px;
       font-weight: bold;
-      color: var(--text-primary);
+      color: #333;
       margin: 16px 0;
 
       .unit {
         font-size: 14px;
-        color: var(--text-secondary);
+        color: #999;
         margin-left: 4px;
       }
     }
@@ -176,7 +168,7 @@ const props = defineProps<Props>()
 
         .change-label {
           font-size: 12px;
-          color: var(--text-secondary);
+          color: #999;
           margin-left: 4px;
         }
       }
@@ -187,7 +179,7 @@ const props = defineProps<Props>()
 
       .sub-text {
         font-size: 12px;
-        color: var(--text-secondary);
+        color: #999;
       }
     }
   }

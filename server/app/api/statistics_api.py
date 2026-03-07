@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException,Query
 from typing import Optional
 from datetime import datetime
 from app.database.db import Database
@@ -7,13 +7,48 @@ from app.services.anomaly_detector import detect_anomalies_3sigma
 router = APIRouter(prefix="/api/statistics", tags=["统计分析"])
 
 
-@router.get("/summary")
+# @router.get("/summary")
+@router.get(
+    "/summary",
+    responses={
+        200: {
+            "description": "成功返回汇总数据",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "building_id": "B001",
+                        "period": "2025-01-01 至 2025-01-07",
+                        "time_unit": "day",
+                        "details": [
+                            {
+                                "period": "2025-01-01",
+                                "total_elec": 1245.6,
+                                "avg_elec": 155.7,
+                                "max_elec": 234.5,
+                                "min_elec": 89.2,
+                                "data_points": 8
+                            }
+                        ],
+                        "summary": {
+                            "total_elec": 8719.2,
+                            "avg_elec": 155.7,
+                            "total_water": 87.5
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_summary(
-        building_id: str,
-        start_date: str,
-        end_date: str,
-        group_by: str = "day"  # day, week, month
+    building_id: str,
+    start_date: str,
+    end_date: str,
+    time_unit: str = Query("day", pattern="^(hour|day|week|month)$")  # 新参数名
 ):
+    """时段汇总 - 支持 time_unit 参数"""
+    # 兼容旧的 group_by 参数（如果前端还用旧的）
+    group_by = time_unit
     """时段汇总统计"""
     # 根据group_by确定SQL
     if group_by == "day":
@@ -66,11 +101,44 @@ async def get_summary(
     }
 
 
-@router.get("/cop")
+# @router.get("/cop")
+@router.get(
+    "/cop",
+    responses={
+        200: {
+            "description": "成功返回能效比(COP)计算结果",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "building_id": "B001",
+                        "period": "2025-01-01 至 2025-01-31",
+                        "avg_cop": 3.45,
+                        "data": [
+                            {
+                                "timestamp": "2025-01-01 08:00:00",
+                                "electricity": 156.32,
+                                "supply_temp": 8.5,
+                                "return_temp": 15.2,
+                                "cop": 4.2
+                            },
+                            {
+                                "timestamp": "2025-01-01 09:00:00",
+                                "electricity": 178.21,
+                                "supply_temp": 8.7,
+                                "return_temp": 15.5,
+                                "cop": 3.8
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def calculate_cop(
-        building_id: str,
-        start_date: str,
-        end_date: str
+        building_id: str = Query(..., description="建筑编号，如：B001"),
+        start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
+        end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
 ):
     """计算能效比(COP)"""
     sql = """
@@ -111,12 +179,44 @@ async def calculate_cop(
     }
 
 
-@router.get("/anomaly")
+@router.get(
+    "/anomaly",
+    responses={
+        200: {
+            "description": "成功返回异常检测结果",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "building_id": "B001",
+                        "period": "2025-01-01 至 2025-01-31",
+                        "method": "moving_average",
+                        "threshold": "2.0倍标准差",
+                        "total_points": 744,
+                        "anomaly_count": 3,
+                        "mean": 156.3,
+                        "std": 42.5,
+                        "anomalies": [
+                            {
+                                "index": 128,
+                                "timestamp": "2025-01-15 14:00:00",
+                                "value": 345.2,
+                                "mean": 168.5,
+                                "z_score": 4.2,
+                                "deviation": "+105%"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def detect_anomaly(
-        building_id: str,
-        start_date: str,
-        end_date: str,
-        threshold: float = 2.0
+    building_id: str = Query(..., description="建筑编号，如：B001"),
+    start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
+    end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31"),
+    method: str = Query("moving_average", pattern="^(3sigma|moving_average)$", description="检测方法：3sigma/moving_average"),
+    threshold: float = Query(2.0, description="异常阈值（标准差倍数）")
 ):
     """能耗异常检测"""
     sql = """

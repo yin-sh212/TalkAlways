@@ -1,5 +1,5 @@
 # app/api/export_api.py
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Response, Query
 import pandas as pd
 from io import StringIO, BytesIO
 from app.database.db import Database
@@ -8,8 +8,20 @@ from app.database.db import Database
 router = APIRouter(prefix="/api/export", tags=["报表导出"])
 
 
-@router.get("/csv")
-async def export_csv(building_id: str, start_date: str, end_date: str):
+@router.get(
+    "/csv",
+    responses={
+        200: {
+            "description": "成功导出CSV文件",
+            "content": {"text/csv": {}}
+        }
+    }
+)
+async def export_csv(
+    building_id: str = Query(..., description="建筑编号，如：B001"),
+    start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
+    end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
+):
     """导出CSV格式报表"""
     sql = """
         SELECT * FROM energy_consumption 
@@ -32,8 +44,20 @@ async def export_csv(building_id: str, start_date: str, end_date: str):
     )
 
 
-@router.get("/excel")
-async def export_excel(building_id: str, start_date: str, end_date: str):
+@router.get(
+    "/excel",
+    responses={
+        200: {
+            "description": "成功导出Excel文件",
+            "content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}
+        }
+    }
+)
+async def export_excel(
+    building_id: str = Query(..., description="建筑编号，如：B001"),
+    start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
+    end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
+):
     """导出Excel格式报表"""
     sql = """
         SELECT * FROM energy_consumption 
@@ -57,8 +81,20 @@ async def export_excel(building_id: str, start_date: str, end_date: str):
     )
 
 
-@router.get("/pdf")
-async def export_pdf(building_id: str, start_date: str, end_date: str):
+@router.get(
+    "/pdf",
+    responses={
+        200: {
+            "description": "成功导出PDF文件",
+            "content": {"application/pdf": {}}
+        }
+    }
+)
+async def export_pdf(
+    building_id: str = Query(..., description="建筑编号，如：B001"),
+    start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
+    end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
+):
     """导出PDF报表 - 支持中文"""
 
     # 创建日志文件

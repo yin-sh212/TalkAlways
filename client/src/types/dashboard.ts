@@ -4,6 +4,8 @@
 export interface KPIData {
   totalEnergy: number
   energyChange: number
+  dayChange: number // 日环比
+  weekChange: number // 周同比
   deviceOnlineRate: number
   abnormalDeviceCount: number
   co2Reduction: number

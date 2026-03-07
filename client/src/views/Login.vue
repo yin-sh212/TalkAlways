@@ -194,7 +194,7 @@ const handleLogin = async () => {
 
     if (result.success) {
       message.success('登录成功')
-      router.push('/')
+      router.push('/overview')  // 修改为跳转到 Overview 页面
     } else {
       message.error(result.message || '登录失败')
     }
@@ -216,7 +216,7 @@ const handleRegister = async () => {
     if (result.success) {
       message.success('注册成功，即将跳转')
       setTimeout(() => {
-        router.push('/')
+        router.push('/overview')  // 修改为跳转到 Overview 页面
       }, 1000)
     } else {
       message.error(result.message || '注册失败')
@@ -227,6 +227,7 @@ const handleRegister = async () => {
     registerLoading.value = false
   }
 }
+
 </script>
 
 <style scoped lang="scss">

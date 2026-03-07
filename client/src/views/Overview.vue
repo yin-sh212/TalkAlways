@@ -42,10 +42,17 @@
                 {{ kpiData.totalEnergy.toFixed(2) }}
                 <span class="unit">MWh</span>
               </div>
-              <div class="kpi-change" :class="{ 'is-up': kpiData.energyChange >= 0 }">
-                <n-icon :component="kpiData.energyChange >= 0 ? ArrowUpward : ArrowDownward" />
-                {{ Math.abs(kpiData.energyChange).toFixed(1) }}%
-                <span class="change-label">较昨日</span>
+              <div class="kpi-changes">
+                <div class="kpi-change" :class="{ 'is-up': kpiData.dayChange >= 0 }">
+                  <n-icon :component="kpiData.dayChange >= 0 ? ArrowUpward : ArrowDownward" />
+                  {{ Math.abs(kpiData.dayChange).toFixed(1) }}%
+                  <span class="change-label">较昨日</span>
+                </div>
+                <div class="kpi-change" :class="{ 'is-up': kpiData.weekChange >= 0 }">
+                  <n-icon :component="kpiData.weekChange >= 0 ? ArrowUpward : ArrowDownward" />
+                  {{ Math.abs(kpiData.weekChange).toFixed(1) }}%
+                  <span class="change-label">较上周</span>
+                </div>
               </div>
             </template>
           </n-card>
@@ -100,10 +107,39 @@
         </n-grid-item>
       </n-grid>
 
+      <!-- 新增：能耗排名 TOP5 -->
+      <n-card title="能耗排名 TOP5" :bordered="false" content-style="padding: 20px;" class="ranking-card">
+        <n-space vertical :size="16">
+          <div v-for="(item, index) in rankingList" :key="item.buildingId" class="ranking-item">
+            <div class="ranking-info">
+              <n-tag :type="getRankingTagType(index)" size="small" class="ranking-tag">
+                {{ index + 1 }}
+              </n-tag>
+              <span class="ranking-building">{{ item.buildingName }}</span>
+              <n-progress
+                :percentage="item.percentage"
+                :color="getRankingColor(index)"
+                :show-indicator="false"
+                class="ranking-progress"
+              />
+              <span class="ranking-value">{{ item.energy.toFixed(2) }} MWh</span>
+            </div>
+          </div>
+        </n-space>
+      </n-card>
+
       <!-- 图表区 -->
       <n-grid :cols="2" :x-gap="16" :y-gap="16" class="chart-grid">
         <n-grid-item>
           <n-card title="各建筑能耗占比" :bordered="false" content-style="padding: 20px;">
+            <template #header-extra>
+              <n-tooltip>
+                <template #trigger>
+                  <n-icon size="18" style="cursor: pointer; color: #1890ff;" :component="LinkIcon" />
+                </template>
+                点击环形图的某个建筑，其他图表将联动显示该建筑数据
+              </n-tooltip>
+            </template>
             <n-skeleton v-if="loading" :rows="3" />
             <div v-else ref="pieChartRef" class="chart-container"></div>
           </n-card>
@@ -120,12 +156,21 @@
       <!-- 异常列表区 -->
       <n-card title="实时异常/报警（最新 5 条）" :bordered="false" content-style="padding: 20px;">
         <template #header-extra>
-          <n-button text size="small" @click="handleViewAll">
-            查看全部
-            <template #icon>
-              <n-icon :component="ArrowRight" />
-            </template>
-          </n-button>
+          <n-space align="center">
+            <span class="refresh-time">最后更新：{{ lastUpdateTime }}</span>
+            <n-button text size="small" @click="toggleAutoRefresh">
+              <template #icon>
+                <n-icon :component="autoRefresh ? Stop : Play" />
+              </template>
+              {{ autoRefresh ? '停止刷新' : '自动刷新' }}
+            </n-button>
+            <n-button text size="small" @click="handleViewAll">
+              查看全部
+              <template #icon>
+                <n-icon :component="ArrowRight" />
+              </template>
+            </n-button>
+          </n-space>
         </template>
         
         <n-skeleton v-if="loading" :rows="5" />
@@ -156,7 +201,10 @@ import {
   Refresh, 
   ArrowUpOutline as ArrowUpward, 
   ArrowDownOutline as ArrowDownward, 
-  ChevronForwardOutline as ArrowRight 
+  ChevronForwardOutline as ArrowRight,
+  LinkOutline as LinkIcon,
+  PlayOutline as Play,
+  StopOutline as Stop
 } from '@vicons/ionicons5'
 import { Flash as EnergyIcon, TvOutline as Device, LeafOutline as Leaf } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
@@ -169,9 +217,14 @@ const userStore = useUserStore()
 
 // 状态
 const loading = ref(false)
+const autoRefresh = ref(true) // 是否自动刷新
+const refreshTimer = ref<any>(null)
+const lastUpdateTime = ref('') // 最后更新时间
 const kpiData = ref<KPIData>({
   totalEnergy: 0,
   energyChange: 0,
+  dayChange: 0, // 日环比
+  weekChange: 0, // 周同比
   deviceOnlineRate: 0,
   abnormalDeviceCount: 0,
   co2Reduction: 0
@@ -181,6 +234,7 @@ const chartData = ref({
   trendData: [] as any[]
 })
 const anomalyList = ref<AnomalyItem[]>([])
+const rankingList = ref<any[]>([]) // 能耗排名数据
 const pieChartRef = ref<HTMLElement | null>(null)
 const lineChartRef = ref<HTMLElement | null>(null)
 let pieChart: echarts.ECharts | null = null
@@ -258,6 +312,77 @@ const getTypeTagType = (type: string) => {
   return 'default'
 }
 
+// 计算日环比（Mock 数据，实际应从后端获取）
+const calculateDayChange = (currentEnergy: number) => {
+  // TODO: 实际应从后端获取昨日数据
+  const yesterdayEnergy = currentEnergy * (1 + Math.random() * 0.2 - 0.1)
+  return ((currentEnergy - yesterdayEnergy) / yesterdayEnergy) * 100
+}
+
+// 计算周同比（Mock 数据，实际应从后端获取）
+const calculateWeekChange = (currentEnergy: number) => {
+  // TODO: 实际应从后端获取上周数据
+  const lastWeekEnergy = currentEnergy * (1 + Math.random() * 0.3 - 0.15)
+  return ((currentEnergy - lastWeekEnergy) / lastWeekEnergy) * 100
+}
+
+// 生成能耗排名数据
+const generateRankingData = (buildingEnergy: any[]) => {
+  if (!buildingEnergy || buildingEnergy.length === 0) {
+    // Mock 数据
+    rankingList.value = [
+      { buildingId: '1', buildingName: '行政楼', energy: 350.5, percentage: 90 },
+      { buildingId: '2', buildingName: '实验楼', energy: 280.3, percentage: 72 },
+      { buildingId: '3', buildingName: '教学楼 A', energy: 220.8, percentage: 57 },
+      { buildingId: '4', buildingName: '图书馆', energy: 180.2, percentage: 46 },
+      { buildingId: '5', buildingName: '教学楼 B', energy: 150.6, percentage: 39 }
+    ]
+  } else {
+    // 根据实际数据生成排名
+    rankingList.value = buildingEnergy
+      .map((item, index) => ({
+        buildingId: String(index),
+        buildingName: item.name,
+        energy: item.value,
+        percentage: 0 // 稍后计算
+      }))
+      .sort((a, b) => b.energy - a.energy)
+      .slice(0, 5)
+    
+    // 计算百分比
+    const maxEnergy = rankingList.value[0]?.energy || 1
+    rankingList.value.forEach(item => {
+      item.percentage = Math.round((item.energy / maxEnergy) * 100)
+    })
+  }
+}
+
+// 获取排名标签类型
+const getRankingTagType = (index: number) => {
+  if (index === 0) return 'error'
+  if (index === 1) return 'warning'
+  if (index === 2) return 'info'
+  return 'default'
+}
+
+// 获取排名进度条颜色
+const getRankingColor = (index: number) => {
+  if (index === 0) return '#f5222d'
+  if (index === 1) return '#faad14'
+  if (index === 2) return '#1890ff'
+  return '#52c41a'
+}
+
+// 更新最后更新时间
+const updateLastUpdateTime = () => {
+  const now = new Date()
+  lastUpdateTime.value = now.toLocaleTimeString('zh-CN', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit' 
+  })
+}
+
 // 加载数据 - 并行调用三个接口
 const loadData = async () => {
   loading.value = true
@@ -281,9 +406,11 @@ const loadData = async () => {
     kpiData.value = {
       totalEnergy: summary.total_elec || 0,
       energyChange: 0, // 后端未提供，需要计算或设置为 0
+      dayChange: calculateDayChange(summary.total_elec), // 日环比
+      weekChange: calculateWeekChange(summary.total_elec), // 周同比
       deviceOnlineRate: 100, // 后端未提供，暂时设置为 100
-      abnormalDeviceCount: 0, // 需要从异常数据中获取
-      co2Reduction: 0 // 后端未提供，暂时设置为 0
+      abnormalDeviceCount: anomalyRes.data.anomaly_count || 0, // 从异常数据中获取
+      co2Reduction: (summary.total_elec || 0) * 0.785 // 根据能耗换算
     }
     
     // 填充图表数据
@@ -309,8 +436,14 @@ const loadData = async () => {
       }
     })) || []
 
+    // 生成能耗排名数据
+    generateRankingData(chartData.value.buildingEnergy)
+
     // 初始化图表
     initCharts()
+    
+    // 更新最后更新时间
+    updateLastUpdateTime()
   } catch (error: any) {
     console.error('加载数据失败:', error)
     message.error(error.message || '加载数据失败')
@@ -364,6 +497,18 @@ const initCharts = () => {
       ]
     }
     pieChart.setOption(pieOption)
+    
+    // 添加点击事件监听，实现图表联动
+    pieChart.on('click', (params: any) => {
+      if (params.dataIndex !== undefined) {
+        const buildingName = params.name
+        message.info(`已选择：${buildingName}，图表将联动显示该建筑数据`)
+        
+        // 触发联动事件（这里可以调用其他图表的更新函数）
+        // TODO: 实际应用中可以通过事件总线或状态管理来实现跨组件通信
+        updateChartsWithBuilding(buildingName)
+      }
+    })
   }
 
   // 折线图 - 近 7 日总能耗趋势
@@ -411,10 +556,50 @@ const initCharts = () => {
   }
 }
 
+// 根据选中的建筑更新图表（联动功能）
+const updateChartsWithBuilding = (buildingName: string) => {
+  // TODO: 实际应用中应该调用后端接口获取该建筑的详细数据
+  // 这里仅做演示，模拟更新折线图数据
+  
+  if (lineChart) {
+    // 模拟数据减少为原来的 60%-80%
+    const mockData = chartData.value.trendData.map(item => ({
+      date: item.date,
+      energy: item.energy * (0.6 + Math.random() * 0.2)
+    }))
+    
+    const newOption: EChartsOption = {
+      title: {
+        text: `${buildingName} - 近 7 日能耗趋势`,
+        left: 'center'
+      },
+      series: [{
+        data: mockData.map(item => item.energy)
+      }]
+    }
+    
+    lineChart?.setOption(newOption)
+  }
+  
+  // 可以在这里添加更多联动逻辑，如更新异常列表等
+}
+
 // 刷新数据
 const handleRefresh = () => {
   loadData()
   message.success('数据已刷新')
+}
+
+// 切换自动刷新
+const toggleAutoRefresh = () => {
+  autoRefresh.value = !autoRefresh.value
+  if (autoRefresh.value) {
+    startAutoRefresh()
+    message.success('已开启自动刷新')
+  } else {
+    clearInterval(refreshTimer.value)
+    message.info('已关闭自动刷新')
+  }
 }
 
 // 查看异常详情
@@ -454,13 +639,30 @@ const handleResize = () => {
   lineChart?.resize()
 }
 
+// 启动自动刷新
+const startAutoRefresh = () => {
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+  }
+  refreshTimer.value = setInterval(() => {
+    if (autoRefresh.value) {
+      loadData()
+      message.success('数据已自动刷新')
+    }
+  }, 30000) // 30 秒刷新一次
+}
+
 onMounted(() => {
   loadData()
+  startAutoRefresh() // 启动自动刷新
   window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+  }
   pieChart?.dispose()
   lineChart?.dispose()
 })
@@ -482,6 +684,11 @@ onUnmounted(() => {
   padding: 16px 32px;
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  
+  .refresh-time {
+    font-size: 12px;
+    color: #999;
+  }
 }
 
 .logo {
@@ -538,24 +745,30 @@ onUnmounted(() => {
       }
     }
 
-    .kpi-change {
+    .kpi-changes {
       display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 14px;
-      
-      &.is-up {
-        color: #f5222d;
-      }
-      
-      &:not(.is-up) {
-        color: #52c41a;
-      }
+      gap: 16px;
+      margin-top: 8px;
 
-      .change-label {
-        font-size: 12px;
-        color: #999;
-        margin-left: 4px;
+      .kpi-change {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
+        
+        &.is-up {
+          color: #f5222d;
+        }
+        
+        &:not(.is-up) {
+          color: #52c41a;
+        }
+
+        .change-label {
+          font-size: 12px;
+          color: #999;
+          margin-left: 4px;
+        }
       }
     }
 
@@ -565,6 +778,43 @@ onUnmounted(() => {
       .sub-text {
         font-size: 12px;
         color: #999;
+      }
+    }
+  }
+}
+
+// 新增：排名卡片样式
+.ranking-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  
+  .ranking-item {
+    .ranking-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      
+      .ranking-tag {
+        width: 24px;
+        text-align: center;
+      }
+      
+      .ranking-building {
+        width: 100px;
+        font-size: 14px;
+        color: #333;
+      }
+      
+      .ranking-progress {
+        flex: 1;
+      }
+      
+      .ranking-value {
+        width: 100px;
+        text-align: right;
+        font-size: 14px;
+        font-weight: 600;
+        color: #1890ff;
       }
     }
   }

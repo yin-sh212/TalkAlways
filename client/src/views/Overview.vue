@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
@@ -329,6 +329,7 @@ onUnmounted(() => {
     h1 {
       font-size: 24px;
       font-weight: bold;
+      color: var(--text-primary, #18a058);
       color: var(--text-primary, #18a058);
       margin: 0;
       transition: color 0.3s ease;

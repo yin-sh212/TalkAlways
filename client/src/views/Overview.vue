@@ -55,7 +55,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMessage, useDialog } from 'naive-ui'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { Refresh } from '@vicons/ionicons5'
@@ -65,6 +67,8 @@ import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
 
 const router = useRouter()
+const message = useMessage()
+const dialog = useDialog()
 const message = useMessage()
 const dialog = useDialog()
 const userStore = useUserStore()
@@ -300,6 +304,7 @@ onUnmounted(() => {
 <style scoped lang="scss">
 // 深色主题变量
 :root[data-theme="dark"] {
+:root[data-theme="dark"] {
   --bg-color: #1a1a1a;
   --card-bg: #242424;
   --text-primary: rgba(255, 255, 255, 0.9);
@@ -329,6 +334,7 @@ onUnmounted(() => {
     h1 {
       font-size: 24px;
       font-weight: bold;
+      color: var(--text-primary, #18a058);
       color: var(--text-primary, #18a058);
       margin: 0;
       transition: color 0.3s ease;

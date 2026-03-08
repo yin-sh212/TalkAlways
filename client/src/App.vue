@@ -11,11 +11,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, darkTheme, GlobalThemeOverrides } from 'naive-ui'
 
-// 主题状态 - 直接跟随浏览器外观
-const isDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+// 声明全局 Window 类型
+declare global {
+  interface Window {
+    setTheme: (dark: boolean) => void
+    isDark: { value: boolean }
+  }
+}
+
+// 主题状态 - 优先从 localStorage 读取，如果没有则跟随浏览器外观
+const getInitialTheme = () => {
+  const savedTheme = localStorage.getItem('theme')
+  if (savedTheme) {
+    // 用户手动设置过，使用用户的设置
+    return savedTheme === 'dark'
+  } else {
+    // 没有手动设置过，跟随浏览器外观
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+}
+
+const isDark = ref(getInitialTheme())
 
 // 计算主题
 const theme = computed(() => isDark.value ? darkTheme : null)
@@ -29,9 +48,10 @@ const themeOverrides = ref<GlobalThemeOverrides>({
   },
 })
 
-// 设置主题并更新 DOM 属性
+// 暴露切换主题方法给全局
 const setTheme = (dark: boolean) => {
   isDark.value = dark
+  localStorage.setItem('theme', dark ? 'dark' : 'light')
   
   // 同步更新 html 的 data-theme 属性（用于自定义 CSS 变量）
   if (dark) {
@@ -46,11 +66,22 @@ if (isDark.value) {
   document.documentElement.setAttribute('data-theme', 'dark')
 }
 
-// 监听浏览器外观变化 - 始终跟随系统主题
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-  setTheme(e.matches)
+// 将 setTheme 挂载到 window，方便其他地方调用
+window.setTheme = setTheme
+window.isDark = { value: isDark.value }
+
+// 监听浏览器主题变化（仅在用户未手动设置时生效）
+watch(isDark, (newVal) => {
+  window.isDark.value = newVal
 })
 
+// 监听浏览器外观变化
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  // 只有当用户没有手动设置主题时，才跟随浏览器变化
+  if (!localStorage.getItem('theme')) {
+    setTheme(e.matches)
+  }
+})
 </script>
 
 <style>

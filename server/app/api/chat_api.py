@@ -26,7 +26,65 @@ class Answer(BaseModel):
     data: Optional[Dict] = None
 
 
-@router.post("/ask", response_model=Answer)
+# @router.post("/ask", response_model=Answer)
+@router.post(
+    "/ask",
+    response_model=Answer,
+    responses={
+        200: {
+            "description": "成功返回问答结果",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "data_query": {
+                            "summary": "数据查询类问题",
+                            "value": {
+                                "answer": "建筑 B001 昨天的总用电量为 1245.6 kWh",
+                                "type": "data",
+                                "sources": None,
+                                "data": {"value": 1245.6}
+                            }
+                        },
+                        "knowledge_query": {
+                            "summary": "知识查询类问题",
+                            "value": {
+                                "answer": "📚 找到 2 条相关信息：\n\n1. 冷水机组高压报警处理步骤：\n- 检查冷却水泵是否运行正常\n- 检查冷却塔风扇是否运转\n...\n\n2. 空调系统运维规范：\n- 夏季设定温度不低于26℃\n- 冬季设定温度不高于20℃...",
+                                "type": "knowledge",
+                                "sources": [
+                                    {
+                                        "content": "冷水机组高压报警处理步骤：1. 检查冷却水泵...",
+                                        "score": 0.89
+                                    }
+                                ]
+                            }
+                        },
+                        "diagnosis": {
+                            "summary": "异常诊断类问题",
+                            "value": {
+                                "answer": "🔍 检测到建筑 B001 最近有 3 次异常：\n\n• 2025-01-15 14:00:00: 用电量 345.2 kWh\n• 2025-01-20 10:00:00: 用电量 298.5 kWh\n\n可能的原因：当日室外温度较高（32℃），制冷负荷增大。",
+                                "type": "diagnosis",
+                                "sources": [
+                                    {
+                                        "content": "能耗异常的可能原因：\n1. 设备效率下降\n2. 运行时间过长\n3. 参数设置不合理",
+                                        "score": 0.92
+                                    }
+                                ],
+                                "data": {
+                                    "anomalies": [
+                                        {
+                                            "timestamp": "2025-01-15 14:00:00",
+                                            "value": 345.2
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def ask_question(question: Question):
     """智能问答接口 - 简化版"""
     print(f"收到问题: {question.query}")
@@ -148,6 +206,24 @@ async def handle_knowledge_query_simple(query: str):
 
 
 # 健康检查接口
-@router.get("/health")
+# @router.get("/health")
+@router.get(
+    "/health",
+    responses={
+        200: {
+            "description": "问答服务健康状态",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ok",
+                        "service": "chat_api",
+                        "rag_initialized": True,
+                        "knowledge_base": "运维手册+节能规范"
+                    }
+                }
+            }
+        }
+    }
+)
 async def chat_health():
     return {"status": "ok", "service": "chat_api"}

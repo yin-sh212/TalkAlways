@@ -32,7 +32,7 @@ export default defineConfig({
     }),
     viteMockServe({
       mockPath: 'mock',
-      enable: true
+      enable: false  // 禁用 Mock，使用真实后端接口
     })
   ],
   resolve: {
@@ -45,7 +45,7 @@ export default defineConfig({
     port: 8080,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',  // 后端 FastAPI 默认端口
+        target: 'http://localhost:3000',
         changeOrigin: true
       }
     }

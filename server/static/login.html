@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 建筑能源管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            width: 400px;
+            padding: 40px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            margin-bottom: -2px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .login-btn:hover {
+            background: #5a67d8;
+        }
+
+        .error-message {
+            color: #e53e3e;
+            font-size: 14px;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .success-message {
+            color: #38a169;
+            font-size: 14px;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .register-link {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .register-link a {
+            color: #667eea;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h2>建筑能源管理系统</h2>
+            <p>请登录后使用</p>
+        </div>
+
+        <div class="tab-container">
+            <div class="tab active" onclick="switchTab('phone')">手机号登录</div>
+            <div class="tab" onclick="switchTab('email')">邮箱登录</div>
+        </div>
+
+        <div id="loginForm">
+            <div class="input-group">
+                <label id="accountLabel">手机号</label>
+                <input type="text" id="account" placeholder="请输入手机号">
+            </div>
+            <div class="input-group">
+                <label>密码</label>
+                <input type="password" id="password" placeholder="请输入密码">
+            </div>
+            <button class="login-btn" onclick="login()">登录</button>
+        </div>
+
+        <div id="message" class="error-message"></div>
+
+        <div class="register-link">
+            还没有账号？ <a onclick="showRegister()">立即注册</a>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'phone';
+        const API_BASE = 'http://localhost:8000';
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const label = document.getElementById('accountLabel');
+            const input = document.getElementById('account');
+
+            if (tab === 'phone') {
+                label.textContent = '手机号';
+                input.placeholder = '请输入手机号';
+                input.type = 'tel';
+            } else {
+                label.textContent = '邮箱';
+                input.placeholder = '请输入邮箱';
+                input.type = 'email';
+            }
+        }
+
+        async function login() {
+            const account = document.getElementById('account').value;
+            const password = document.getElementById('password').value;
+            const messageDiv = document.getElementById('message');
+
+            if (!account || !password) {
+                messageDiv.className = 'error-message';
+                messageDiv.textContent = '账号和密码不能为空';
+                return;
+            }
+
+            messageDiv.className = 'error-message';
+            messageDiv.textContent = '登录中...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        account: account,
+                        password: password,
+                        login_type: currentTab === 'phone' ? 'phone' : 'email'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 保存token
+                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('user', JSON.stringify(data.user_info));
+
+                    messageDiv.className = 'success-message';
+                    messageDiv.textContent = '登录成功！正在跳转...';
+
+                    // 跳转到主页面
+                    setTimeout(() => {
+                        window.location.href = '/static/chat.html';
+                    }, 1500);
+                } else {
+                    messageDiv.className = 'error-message';
+                    messageDiv.textContent = data.detail || '登录失败';
+                }
+            } catch (error) {
+                messageDiv.className = 'error-message';
+                messageDiv.textContent = '网络错误，请稍后重试';
+                console.error(error);
+            }
+        }
+
+        function showRegister() {
+            alert('注册功能演示版，请直接使用测试账号：\n手机号：13800138000\n密码：123456');
+        }
+
+        // 检查是否已登录
+        if (localStorage.getItem('token')) {
+            window.location.href = '/static/chat.html';
+        }
+    </script>
+</body>
+</html>

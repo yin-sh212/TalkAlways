@@ -11,6 +11,10 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
+    redirect: '/Overview'  // 根路径重定向到 Overview
+  },
+  {
+    path: '/home',
     name: 'Home',
     component: () => import('@/views/Home.vue'),
     meta: { requiresAuth: true }

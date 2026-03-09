@@ -32,7 +32,7 @@ export default defineConfig({
     }),
     viteMockServe({
       mockPath: 'mock',
-      enable: false  // 禁用 Mock，使用真实后端接口
+      enable: true  // 启用 Mock，暂时不使用真实后端接口
     })
   ],
   resolve: {

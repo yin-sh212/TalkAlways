@@ -3,7 +3,16 @@
     <n-message-provider>
       <n-dialog-provider>
         <n-notification-provider>
-          <router-view />
+          <n-layout class="app-layout">
+            <!-- 登录页面不显示导航栏 -->
+            <template v-if="!isLoginPage">
+              <Navbar />
+            </template>
+            
+            <n-layout-content class="app-content">
+              <router-view />
+            </n-layout-content>
+          </n-layout>
         </n-notification-provider>
       </n-dialog-provider>
     </n-message-provider>
@@ -12,7 +21,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, darkTheme, GlobalThemeOverrides } from 'naive-ui'
+import { useRoute } from 'vue-router'
+import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, NLayout, NLayoutContent, darkTheme, GlobalThemeOverrides } from 'naive-ui'
+import Navbar from '@/components/layout/Navbar.vue'
 
 // 声明全局 Window 类型
 declare global {
@@ -22,19 +33,13 @@ declare global {
   }
 }
 
-// 主题状态 - 优先从 localStorage 读取，如果没有则跟随浏览器外观
-const getInitialTheme = () => {
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme) {
-    // 用户手动设置过，使用用户的设置
-    return savedTheme === 'dark'
-  } else {
-    // 没有手动设置过，跟随浏览器外观
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  }
-}
+const route = useRoute()
 
-const isDark = ref(getInitialTheme())
+// 判断是否是登录页面
+const isLoginPage = computed(() => route.path === '/login')
+
+// 主题状态 - 直接跟随浏览器外观
+const isDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
 
 // 计算主题
 const theme = computed(() => isDark.value ? darkTheme : null)
@@ -48,10 +53,9 @@ const themeOverrides = ref<GlobalThemeOverrides>({
   },
 })
 
-// 暴露切换主题方法给全局
+// 暴露切换主题方法给全局（保留以兼容现有代码）
 const setTheme = (dark: boolean) => {
   isDark.value = dark
-  localStorage.setItem('theme', dark ? 'dark' : 'light')
   
   // 同步更新 html 的 data-theme 属性（用于自定义 CSS 变量）
   if (dark) {
@@ -70,18 +74,16 @@ if (isDark.value) {
 window.setTheme = setTheme
 window.isDark = { value: isDark.value }
 
-// 监听浏览器主题变化（仅在用户未手动设置时生效）
+// 同步更新 window.isDark 的响应式值
 watch(isDark, (newVal) => {
   window.isDark.value = newVal
 })
 
-// 监听浏览器外观变化
+// 监听浏览器外观变化 - 始终跟随系统主题
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-  // 只有当用户没有手动设置主题时，才跟随浏览器变化
-  if (!localStorage.getItem('theme')) {
-    setTheme(e.matches)
-  }
+  setTheme(e.matches)
 })
+
 </script>
 
 <style>
@@ -116,5 +118,16 @@ html, body, #app {
   background: var(--bg-color);
   color: var(--text-primary);
   transition: background 0.3s ease, color 0.3s ease;
+}
+
+.app-layout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  overflow: auto;
 }
 </style>

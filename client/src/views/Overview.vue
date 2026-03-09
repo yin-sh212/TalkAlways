@@ -1,7 +1,7 @@
 <template>
   <div class="overview-container">
     <!-- 顶部导航栏 -->
-    <div class="header">
+    <!-- <div class="header">
       <div class="logo">
         <h1>智慧能源管理系统</h1>
       </div>
@@ -20,7 +20,7 @@
           <n-button text @click="handleLogout">退出登录</n-button>
         </n-space>
       </div>
-    </div>
+    </div> -->
 
     <!-- 主内容区 -->
     <div class="content">
@@ -54,20 +54,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
-import { Refresh } from '@vicons/ionicons5'
+import { Sunny, Moon, Refresh } from '@vicons/ionicons5'
 import { getKPIData, getChartData, getTrendData, getAnomalyList } from '@/api/dashboard'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
 
+// 声明全局 Window 类型
+declare global {
+  interface Window {
+    setTheme: (dark: boolean) => void
+    isDark: { value: boolean }
+  }
+}
+
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const userStore = useUserStore()
+
+// 主题状态 - 从全局获取（跟随浏览器）
+const isDark = ref(window.isDark?.value || false)
+
+// 监听全局主题变化
+watch(() => window.isDark?.value, (newVal) => {
+  isDark.value = newVal
+})
 
 // 状态
 const loading = ref(false)
@@ -283,6 +299,18 @@ const handleLogout = () => {
   })
 }
 
+// 切换主题 - 现在只是切换按钮状态，实际跟随浏览器
+const toggleTheme = () => {
+  // 点击按钮时切换主题（用于测试或临时切换）
+  const newIsDark = !isDark.value
+  window.setTheme(newIsDark)
+  
+  if (newIsDark) {
+    message.success('已切换到深色模式')
+  } else {
+    message.success('已切换到浅色模式')
+  }
+}
 
 onMounted(() => {
   loadData()
@@ -329,7 +357,6 @@ onUnmounted(() => {
     h1 {
       font-size: 24px;
       font-weight: bold;
-      color: var(--text-primary, #18a058);
       color: var(--text-primary, #18a058);
       margin: 0;
       transition: color 0.3s ease;

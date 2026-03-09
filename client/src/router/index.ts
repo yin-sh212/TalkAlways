@@ -32,10 +32,16 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/alarm',
-    name: 'Alarm',
-    component: () => import('@/views/Alarm.vue'),
-    meta: { requiresAuth: true }
+   path: '/alarm',
+   name: 'Alarm',
+   component: () => import('@/views/Alarm.vue'),
+   meta: { requiresAuth: true }
+  },
+  {
+   path: '/workspace',
+   name: 'Workspace',
+   component: () => import('@/views/Workspace.vue'),
+   meta: { requiresAuth: true }
   }
 ]
 

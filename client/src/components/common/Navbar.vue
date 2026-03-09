@@ -50,7 +50,8 @@ import {
   Home, 
   Analytics, 
   AlertCircle, 
-  LogOutOutline 
+  LogOutOutline,
+  Settings
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -76,6 +77,11 @@ const menuOptions: MenuOption[] = [
     label: '告警',
     key: 'Alarm',
     icon: () => h(NIcon, null, { default: () => h(AlertCircle) })
+  },
+  {
+    label: '工作区',
+    key: 'Workspace',
+    icon: () => h(NIcon, null, { default: () => h(Settings) })
   }
 ]
 
@@ -98,11 +104,12 @@ const handleMenuSelect = (key: string) => {
   const routeMap: Record<string, string> = {
     'Overview': '/overview',
     'Analysis': '/analysis',
-    'Alarm': '/alarm'
+    'Alarm': '/alarm',
+    'Workspace': '/workspace'
   }
   
   if (routeMap[key]) {
-    router.push(routeMap[key])
+   router.push(routeMap[key])
   }
 }
 
@@ -195,7 +202,7 @@ router.afterEach((to) => {
   &.n-menu--horizontal {
     .n-menu-item {
       &:hover {
-        background: transparent;
+       background: transparent;
       }
     }
   }

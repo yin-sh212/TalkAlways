@@ -23,7 +23,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, NLayout, NLayoutContent, darkTheme, GlobalThemeOverrides } from 'naive-ui'
-import Navbar from '@/components/layout/Navbar.vue'
+import Navbar from '@/components/common/Navbar.vue'
 
 // 声明全局 Window 类型
 declare global {

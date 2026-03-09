@@ -15,7 +15,6 @@ from app.api import chat_api
 from app.api import mcp_api
 from app.api import export_api  # 新增：导入报表导出模块
 from app.api import upload_api
-from app.api import auth_api
 
 from datetime import datetime
 import os
@@ -143,7 +142,6 @@ app.include_router(chat_api.router)
 app.include_router(mcp_api.router)
 app.include_router(export_api.router)  # 新增：注册报表导出路由
 app.include_router(upload_api.router)
-app.include_router(auth_api.router)
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")

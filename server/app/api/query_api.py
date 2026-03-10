@@ -319,13 +319,13 @@ async def get_device_status(
 )
 async def query_data(
         building_ids: List[str] = Body(["B001"], description="建筑编号列表，如：['B001', 'B002']"),
-        start_time: str = Body(None, description="开始时间，格式：YYYY-MM-DD，例如：2025-01-01"),
-        end_time: str = Body(None, description="结束时间，格式：YYYY-MM-DD，例如：2025-01-31"),
+        start_time: Optional[str] = Body(None, description="开始时间，格式：YYYY-MM-DD，例如：2025-01-01"),
+        end_time: Optional[str] = Body(None, description="结束时间，格式：YYYY-MM-DD，例如：2025-01-31"),
         param_type: str = Body("electricity", description="查询参数类型：electricity/water/temperature"),
         limit: int = Body(100, description="返回条数，默认100")
 ):
     """简化版查询接口"""
-    # 调用已有的查询逻辑
+    # 构建查询条件
     conditions = []
     params = []
 
@@ -334,30 +334,31 @@ async def query_data(
         conditions.append(f"building_id IN ({placeholders})")
         params.extend(building_ids)
 
-    if start_time:
+    # 修复：检查 start_time 是否是有效的字符串且不等于 "string"
+    if start_time and start_time != "string" and start_time.lower() != "string":
         conditions.append("DATE(timestamp) >= %s")
         params.append(start_time)
 
-    if end_time:
+    if end_time and end_time != "string" and end_time.lower() != "string":
         conditions.append("DATE(timestamp) <= %s")
         params.append(end_time)
 
-    # ... 复用现有查询逻辑
-
+    # 构建SQL
     sql = f"SELECT timestamp, {param_type} FROM energy_consumption"
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY timestamp DESC LIMIT %s"
     params.append(limit)
 
+    # 查询数据
     data = await Database.fetch_all(sql, tuple(params))
-    # return {"code": 200, "data": data}
+
     return {
         "code": 200,
         "data": data,
         "meta": {
             "total": len(data),
             "param_type": param_type,
-            "time_range": f"{start_time} 至 {end_time}" if start_time and end_time else "全部"
+            "time_range": f"{start_time} 至 {end_time}" if start_time and end_time and start_time != "string" and end_time != "string" else "全部"
         }
     }

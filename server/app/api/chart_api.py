@@ -45,58 +45,82 @@ async def get_trend_data(
         days: int = Query(7, ge=1, le=30, description="天数，默认7天")
 ):
     """获取趋势图数据（ECharts格式）"""
-    sql = """
-        SELECT 
-            CONCAT(DATE(timestamp), ' ', HOUR(timestamp), ':00') as hour,
-            AVG(electricity) as avg_elec,
-            MAX(electricity) as max_elec,
-            MIN(electricity) as min_elec
-        FROM energy_consumption
-        WHERE building_id = %s 
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL %s DAY)
-        GROUP BY DATE(timestamp), HOUR(timestamp)
-        ORDER BY DATE(timestamp), HOUR(timestamp)
-    """
+    try:
+        # 先用一个简单的查询获取数据
+        sql = """
+            SELECT 
+                DATE(timestamp) as date,
+                HOUR(timestamp) as hour,
+                AVG(electricity) as avg_elec,
+                MAX(electricity) as max_elec,
+                MIN(electricity) as min_elec
+            FROM energy_consumption
+            WHERE building_id = %s 
+                AND timestamp >= DATE_SUB(NOW(), INTERVAL %s DAY)
+            GROUP BY DATE(timestamp), HOUR(timestamp)
+            ORDER BY date, hour
+        """
 
-    data = await Database.fetch_all(sql, (building_id, days))
+        data = await Database.fetch_all(sql, (building_id, days))
 
-    if not data:
+        if not data:
+            return {
+                "code": 200,
+                "data": {
+                    "categories": [],
+                    "series": [
+                        {"name": "平均用电量", "type": "line", "data": [], "smooth": True},
+                        {"name": "最大用电量", "type": "line", "data": [], "smooth": True,
+                         "lineStyle": {"type": "dashed"}}
+                    ]
+                }
+            }
+
+        # 在Python中格式化时间字符串，而不是在SQL中
+        categories = []
+        avg_values = []
+        max_values = []
+
+        for item in data:
+            # 格式化成 "YYYY-MM-DD HH:00"
+            hour_str = f"{item['date']} {item['hour']:02d}:00"
+            categories.append(hour_str)
+            avg_values.append(float(item['avg_elec']) if item['avg_elec'] is not None else 0)
+            max_values.append(float(item['max_elec']) if item['max_elec'] is not None else 0)
+
+        series = [
+            {
+                "name": "平均用电量",
+                "type": "line",
+                "data": avg_values,
+                "smooth": True
+            },
+            {
+                "name": "最大用电量",
+                "type": "line",
+                "data": max_values,
+                "smooth": True,
+                "lineStyle": {"type": "dashed"}
+            }
+        ]
+
         return {
             "code": 200,
             "data": {
-                "categories": [],
-                "series": [
-                    {"name": "平均用电量", "type": "line", "data": [], "smooth": True},
-                    {"name": "最大用电量", "type": "line", "data": [], "smooth": True, "lineStyle": {"type": "dashed"}}
-                ]
+                "categories": categories,
+                "series": series
             }
         }
-
-    categories = [item['hour'] for item in data]
-    series = [
-        {
-            "name": "平均用电量",
-            "type": "line",
-            "data": [float(item['avg_elec']) if item['avg_elec'] is not None else 0 for item in data],
-            "smooth": True
-        },
-        {
-            "name": "最大用电量",
-            "type": "line",
-            "data": [float(item['max_elec']) if item['max_elec'] is not None else 0 for item in data],
-            "smooth": True,
-            "lineStyle": {"type": "dashed"}
+    except Exception as e:
+        print(f"趋势图错误: {e}")
+        return {
+            "code": 500,
+            "message": str(e),
+            "data": {
+                "categories": [],
+                "series": []
+            }
         }
-    ]
-
-    return {
-        "code": 200,
-        "data": {
-            "categories": categories,
-            "series": series
-        }
-    }
-
 
 @router.get(
     "/comparison",

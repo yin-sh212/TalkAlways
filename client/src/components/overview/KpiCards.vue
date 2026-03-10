@@ -36,29 +36,6 @@
       <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
         <template #header>
           <n-space justify="space-between" align="center">
-            <span class="card-title">较昨日变化</span>
-            <n-icon size="24" color="#faad14">
-              <TrendingUp />
-            </n-icon>
-          </n-space>
-        </template>
-        <n-skeleton v-if="loading" :rows="2" />
-        <template v-else>
-          <div class="kpi-value">
-            {{ kpiData.energyChange > 0 ? '+' : '' }}{{ kpiData.energyChange.toFixed(2) }}
-            <span class="unit">MWh</span>
-          </div>
-          <div class="kpi-subtitle">
-            <span class="sub-text">能耗变化趋势</span>
-          </div>
-        </template>
-      </n-card>
-    </n-grid-item>
-
-    <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
-        <template #header>
-          <n-space justify="space-between" align="center">
             <span class="card-title">在线设备率</span>
             <n-icon size="24" color="#1890ff">
               <Device />

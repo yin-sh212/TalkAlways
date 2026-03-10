@@ -430,7 +430,7 @@ onMounted(() => {
 <style scoped>
 .alarm-container {
   padding: 16px;
-  background-color: #f5f7fa;
+  background-color:var(--bg-color);
   min-height: 100vh;
 }
 

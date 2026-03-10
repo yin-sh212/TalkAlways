@@ -14,6 +14,8 @@ import redis
 import os
 from dotenv import load_dotenv
 
+from app.services.user_storage import load_users, save_users
+
 load_dotenv()
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
@@ -81,6 +83,7 @@ class RegisterRequest(BaseModel):
     """注册请求"""
     username: str = Field(..., description="用户名", min_length=2, max_length=20)
     phone: str = Field(..., description="手机号", pattern=r'^1[3-9]\d{9}$')
+    code: str = Field(..., description="验证码", min_length=6, max_length=6)
     password: str = Field(..., description="密码", min_length=6, max_length=20)
 
 
@@ -93,6 +96,7 @@ class UserResponse(BaseModel):
 
 
 # ==================== 模拟用户数据库 ====================
+'''
 fake_users_db = {
     "testuser": {
         "user_id": "U001",
@@ -111,7 +115,10 @@ fake_users_db = {
         "created_at": "2025-01-01 00:00:00"
     }
 }
+'''
 
+fake_users_db = load_users()
+print(f"📁 已加载 {len(fake_users_db)} 个用户")
 
 # ==================== 工具函数 ====================
 
@@ -151,7 +158,18 @@ def get_user_by_phone(phone: str) -> Optional[Dict]:
 
 def create_user(username: str, phone: str, password: str) -> Dict:
     """创建新用户"""
-    user_id = f"U{len(fake_users_db) + 1:03d}"
+    # 计算新的user_id
+    existing_ids = set()
+    for user in fake_users_db.values():
+        if isinstance(user, dict) and "user_id" in user:
+            existing_ids.add(user["user_id"])
+
+    # 生成新的user_id (U001, U002, ...)
+    for i in range(1, 1000):
+        user_id = f"U{i:03d}"
+        if user_id not in existing_ids:
+            break
+
     user = {
         "user_id": user_id,
         "username": username,
@@ -160,9 +178,15 @@ def create_user(username: str, phone: str, password: str) -> Dict:
         "name": username,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
+
     # 同时用用户名和手机号作为key存储
     fake_users_db[username] = user
     fake_users_db[phone] = user
+
+    # 保存到文件
+    save_users(fake_users_db)
+    print(f"💾 用户 {username} 已保存到文件")
+
     return user
 
 
@@ -211,28 +235,28 @@ async def get_current_user(authorization: str = Header(None)) -> Dict:
 
 async def store_code(phone: str, code: str, expire_seconds: int = 300):
     """存储验证码（5分钟有效）"""
-    if REDIS_AVAILABLE:
-        await redis_client.setex(f"sms:{phone}", expire_seconds, code)
-    else:
-        code_storage[phone] = {
-            "code": code,
-            "expire_time": time.time() + expire_seconds
+    #if REDIS_AVAILABLE:
+        #await redis_client.setex(f"sms:{phone}", expire_seconds, code)
+    #else:
+    code_storage[phone] = {
+        "code": code,
+        "expire_time": time.time() + expire_seconds
         }
     print(f"📱 验证码已存储: {phone} -> {code}")
 
 
 async def verify_code(phone: str, input_code: str) -> bool:
     """验证验证码"""
-    if REDIS_AVAILABLE:
-        stored_code = await redis_client.get(f"sms:{phone}")
-        if stored_code and stored_code == input_code:
-            await redis_client.delete(f"sms:{phone}")
-            return True
-    else:
-        stored = code_storage.get(phone)
-        if stored and stored["code"] == input_code and stored["expire_time"] > time.time():
-            del code_storage[phone]
-            return True
+    #if REDIS_AVAILABLE:
+        #stored_code = await redis_client.get(f"sms:{phone}")
+        #if stored_code and stored_code == input_code:
+            #await redis_client.delete(f"sms:{phone}")
+            #return True
+    #else:
+    stored = code_storage.get(phone)
+    if stored and stored["code"] == input_code and stored["expire_time"] > time.time():
+        del code_storage[phone]
+        return True
     return False
 
 
@@ -680,6 +704,13 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             "content": {
                 "application/json": {
                     "examples": {
+                        "invalid_code": {
+                            "value": {
+                                "code": 400,
+                                "message": "验证码错误或已过期",
+                                "data": None
+                            }
+                        },
                         "username_exists": {
                             "value": {
                                 "code": 400,
@@ -720,6 +751,7 @@ async def register(request: RegisterRequest):
 
     - username: 用户名（字母数字下划线，2-20位）
     - phone: 手机号
+    - code: 验证码（6位数字）
     - password: 密码（6-20位）
     """
     # 1. 验证手机号
@@ -738,7 +770,15 @@ async def register(request: RegisterRequest):
             "data": None
         }
 
-    # 3. 检查用户名是否已存在
+    # 3. 验证验证码
+    if not await verify_code(request.phone, request.code):
+        return {
+            "code": 400,
+            "message": "验证码错误或已过期",
+            "data": None
+        }
+
+    # 4. 检查用户名是否已存在
     if request.username in fake_users_db:
         return {
             "code": 400,
@@ -746,7 +786,7 @@ async def register(request: RegisterRequest):
             "data": None
         }
 
-    # 4. 检查手机号是否已注册
+    # 5. 检查手机号是否已注册
     for user in fake_users_db.values():
         if user["phone"] == request.phone:
             return {
@@ -755,7 +795,7 @@ async def register(request: RegisterRequest):
                 "data": None
             }
 
-    # 5. 创建新用户
+    # 6. 创建新用户
     user = create_user(request.username, request.phone, request.password)
 
     return {
@@ -767,7 +807,6 @@ async def register(request: RegisterRequest):
             "phone": user["phone"]
         }
     }
-
 
 # ==================== 开发测试接口 ====================
 

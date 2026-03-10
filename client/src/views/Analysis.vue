@@ -917,7 +917,7 @@ onUnmounted(() => {
 .analysis-container {
   width: 100%;
   height: 100%;
-  background: #f0f2f5;
+  background: var(--bg-color);
   display: flex;
   flex-direction: column;
   padding: 16px;
@@ -934,10 +934,10 @@ onUnmounted(() => {
 }
 
 .chart-wrapper {
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 16px;
-  background: #fff;
+  background: var(--bg-color);
 
   .chart-header {
     display: flex;

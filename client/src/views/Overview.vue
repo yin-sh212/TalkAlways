@@ -1,27 +1,5 @@
 <template>
   <div class="overview-container">
-    <!-- 顶部导航栏 -->
-    <!-- <div class="header">
-      <div class="logo">
-        <h1>智慧能源管理系统</h1>
-      </div>
-      <div class="user-info">
-        <n-space align="center" :size="12">
-          <n-button size="small" @click="handleRefresh" :loading="loading">
-            <template #icon>
-              <n-icon :component="Refresh" />
-            </template>
-            刷新
-          </n-button>
-          <n-avatar round size="medium">
-            {{ userStore.userInfo?.username?.charAt(0).toUpperCase() }}
-          </n-avatar>
-          <span class="username">{{ userStore.userInfo?.username }}</span>
-          <n-button text @click="handleLogout">退出登录</n-button>
-        </n-space>
-      </div>
-    </div> -->
-
     <!-- 主内容区 -->
     <div class="content">
       <!-- KPI 卡片区 - 使用组件 -->
@@ -338,7 +316,7 @@ onUnmounted(() => {
 .overview-container {
   width: 100%;
   height: 100%;
-  background: var(--bg-color, #f0f2f5);
+  background: var(--bg-color);
   display: flex;
   flex-direction: column;
   transition: background 0.3s ease;

@@ -1,15 +1,29 @@
 import http from './http'
 import type { 
   QueryParams, 
-  QueryResponse, 
   NL2QueryParams, 
-  NL2QueryResponse, 
-  ExportParams,
   StatisticsParams,
-  StatisticsResponse,
   AnomalyCountParams,
-  AnomalyCountResponse
 } from '../types/analysis'
+
+// 上传文件到知识库
+export const uploadDocument = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  return http.post<UploadResponse>('/upload/document', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+// 下载上传模板
+export const downloadTemplate = () => {
+  return http.get('/admin/upload/template', {
+   responseType: 'blob'
+  })
+}
 
 // 自然语言查询解析 - 对接智能问答接口
 export const parseNaturalQuery = (params: NL2QueryParams) => {
@@ -62,6 +76,13 @@ export const getAnomalyCount = (params: AnomalyCountParams) => {
 }
 
 // 导出报表 - 支持多种格式
+export interface ExportParams {
+  buildings: string[]
+  startTime: string | Date
+  endTime: string | Date
+  format?: 'csv' | 'excel' | 'pdf'
+}
+
 export const exportReport = (params: ExportParams) => {
   // 后端接口：GET /api/export/{format}
   const format = params.format || 'excel'

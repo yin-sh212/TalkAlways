@@ -142,6 +142,7 @@ app.include_router(chat_api.router)
 app.include_router(mcp_api.router)
 app.include_router(export_api.router)  # 新增：注册报表导出路由
 app.include_router(upload_api.router)
+app.include_router(upload_api.knowledge_router)  # 注册知识库文档上传路由
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")

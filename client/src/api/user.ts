@@ -3,12 +3,12 @@ import type { LoginParams, RegisterParams, LoginResponse, ApiResponse, User } fr
 
 // 用户登录
 export const login = (params: LoginParams) => {
-  return http.post<ApiResponse<LoginResponse>>('/user/login', params)
+  return http.post<ApiResponse<LoginResponse>>('/auth/login', params)
 }
 
 // 用户注册
 export const register = (params: RegisterParams) => {
-  return http.post<ApiResponse<LoginResponse>>('/user/register', params)
+  return http.post<ApiResponse<LoginResponse>>('/auth/register', params)
 }
 
 // 获取用户信息

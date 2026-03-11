@@ -48,12 +48,13 @@ code_storage = {}
 
 # ==================== 数据模型 ====================
 
-class TokenResponse(BaseModel):
-    """登录响应"""
-    access_token: str
-    token_type: str
-    expires_in: int
-    user_info: Dict
+# ✅ 注释掉 TokenResponse，因为现在统一用 {code, message, data} 格式
+# class TokenResponse(BaseModel):
+#     """登录响应"""
+#     access_token: str
+#     token_type: str
+#     expires_in: int
+#     user_info: Dict
 
 
 class LoginRequest(BaseModel):
@@ -435,20 +436,24 @@ async def verify_verification_code(request: VerifyCodeRequest):
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
+    # ✅ 去掉 response_model=TokenResponse
     responses={
         200: {
             "description": "登录成功",
             "content": {
                 "application/json": {
                     "example": {
-                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "token_type": "bearer",
-                        "expires_in": 1800,
-                        "user_info": {
-                            "user_id": "U001",
-                            "username": "testuser",
-                            "phone": "13800138000"
+                        "code": 200,
+                        "message": "登录成功",
+                        "data": {
+                            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                            "token_type": "bearer",
+                            "expires_in": 1800,
+                            "user_info": {
+                                "user_id": "U001",
+                                "username": "testuser",
+                                "phone": "13800138000"
+                            }
                         }
                     }
                 }
@@ -508,21 +513,25 @@ async def login(request: LoginRequest):
         expires_delta=access_token_expires
     )
 
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user_info={
-            "user_id": user["user_id"],
-            "username": user["username"],
-            "phone": user["phone"]
+    # ✅ 统一返回格式
+    return {
+        "code": 200,
+        "message": "登录成功",
+        "data": {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user_info": {
+                "user_id": user["user_id"],
+                "username": user["username"],
+                "phone": user["phone"]
+            }
         }
-    )
+    }
 
 
 @router.post(
     "/login/code",
-    # 去掉 response_model=TokenResponse，因为可能返回错误
     responses={
         200: {
             "description": "登录成功",
@@ -594,7 +603,7 @@ async def login_with_code(request: CodeLoginRequest):
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    # 5. 返回成功（注意这里返回的是带 code/data 的格式）
+    # 5. 返回成功
     return {
         "code": 200,
         "message": "登录成功",
@@ -641,17 +650,21 @@ async def logout(current_user: dict = Depends(get_current_user)):
 
 @router.get(
     "/me",
-    response_model=UserResponse,
+    # ✅ 去掉 response_model=UserResponse，统一返回格式
     responses={
         200: {
             "description": "成功获取用户信息",
             "content": {
                 "application/json": {
                     "example": {
-                        "user_id": "U001",
-                        "username": "testuser",
-                        "phone": "13800138000",
-                        "created_at": "2025-01-01 00:00:00"
+                        "code": 200,
+                        "message": "成功",
+                        "data": {
+                            "user_id": "U001",
+                            "username": "testuser",
+                            "phone": "13800138000",
+                            "created_at": "2025-01-01 00:00:00"
+                        }
                     }
                 }
             }
@@ -673,10 +686,14 @@ async def logout(current_user: dict = Depends(get_current_user)):
 async def get_me(current_user: dict = Depends(get_current_user)):
     """获取当前用户信息"""
     return {
-        "user_id": current_user["user_id"],
-        "username": current_user["username"],
-        "phone": current_user["phone"],
-        "created_at": current_user.get("created_at")
+        "code": 200,
+        "message": "成功",
+        "data": {
+            "user_id": current_user["user_id"],
+            "username": current_user["username"],
+            "phone": current_user["phone"],
+            "created_at": current_user.get("created_at")
+        }
     }
 
 
@@ -931,13 +948,18 @@ async def login_with_code_get(phone: Optional[str] = None, code: Optional[str] =
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user_info={
-            "user_id": user["user_id"],
-            "username": user["username"],
-            "phone": user["phone"]
+    # 注意：这个GET接口暂时还返回TokenResponse，因为是临时测试接口
+    return {
+        "code": 200,
+        "message": "登录成功",
+        "data": {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user_info": {
+                "user_id": user["user_id"],
+                "username": user["username"],
+                "phone": user["phone"]
+            }
         }
-    )
+    }

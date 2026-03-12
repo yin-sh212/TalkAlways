@@ -1,5 +1,8 @@
 import http from './http'
 import type { KPIData, ChartData, AnomalyItem, DashboardResponse, SummaryResponse, DistributionResponse, TrendResponse, AnomalyResponse } from '@/types/dashboard'
+import { getSummary, detectAnomaly } from './statistics'
+import { getDistributionData, getTrendData as getTrendDataFromCharts } from './charts'
+import { getDeviceStatus } from './query'
 
 // 获取 KPI 数据 - 对接真实接口
 export const getKPIData = async () => {
@@ -7,13 +10,11 @@ export const getKPIData = async () => {
   const today = new Date().toISOString().split('T')[0]
   
   try {
-    const response = await http.get<DashboardResponse<SummaryResponse>>('/statistics/summary', {
-      params: {
-        building_id: 'B001',  // 默认建筑
-        start_date: today,
-        end_date: today,
-        time_unit: 'day'  // 修正：参数名应为 time_unit 而不是 group_by
-      }
+    const response = await getSummary({
+      building_id: 'B001',  // 默认建筑
+      start_date: today,
+      end_date: today,
+      time_unit: 'day'
     })
     
     // 将后端数据转换为前端需要的格式
@@ -65,11 +66,9 @@ export const getChartData = async () => {
   const today = new Date().toISOString().split('T')[0]
   
   try {
-    const response = await http.get<DashboardResponse<DistributionResponse>>('/charts/distribution', {
-      params: {
-        building_id: 'B001',
-        date: today
-      }
+    const response = await getDistributionData({
+      building_id: 'B001',
+      date: today
     })
     
     const distributionData = response.data.data
@@ -93,11 +92,9 @@ export const getChartData = async () => {
 export const getTrendData = async () => {
   // 后端接口：GET /api/charts/trend?building_id=xxx&days=7
   try {
-    const response = await http.get<DashboardResponse<TrendResponse>>('/charts/trend', {
-      params: {
-        building_id: 'B001',
-        days: 7
-      }
+    const response = await getTrendDataFromCharts({
+      building_id: 'B001',
+      days: 7
     })
     
     return response
@@ -122,13 +119,11 @@ export const getAnomalyList = async (limit = 5) => {
   const today = new Date().toISOString().split('T')[0]
   
   try {
-    const response = await http.get<DashboardResponse<AnomalyResponse>>('/statistics/anomaly', {
-      params: {
-        building_id: 'B001',
-        start_date: today,
-        end_date: today,
-        threshold: 2.0
-      }
+    const response = await detectAnomaly({
+      building_id: 'B001',
+      start_date: today,
+      end_date: today,
+      threshold: 2.0
     })
     
     return response

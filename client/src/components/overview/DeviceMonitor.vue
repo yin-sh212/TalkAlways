@@ -18,7 +18,7 @@
               <div class="stat-value success">{{ deviceStats.normalCount }}</div>
               <n-progress
                 :percentage="Math.round(deviceStats.normalCount / deviceStats.totalCount * 100)"
-                :color="'#52c41a'"
+                :color="'\#52c41a'"
                 :show-indicator="false"
               />
             </div>
@@ -31,7 +31,7 @@
               <div class="stat-value danger">{{ deviceStats.abnormalCount }}</div>
               <n-progress
                 :percentage="Math.round(deviceStats.abnormalCount / deviceStats.totalCount * 100)"
-                :color="'#f5222d'"
+                :color="'\#f5222d'"
                 :show-indicator="false"
               />
             </div>
@@ -44,7 +44,7 @@
               <div class="stat-value warning">{{ deviceStats.offlineCount }}</div>
               <n-progress
                 :percentage="Math.round(deviceStats.offlineCount / deviceStats.totalCount * 100)"
-                :color="'#faad14'"
+                :color="'\#faad14'"
                 :show-indicator="false"
               />
             </div>
@@ -82,6 +82,7 @@ import {
   WarningOutline as Warning,
   LayersOutline as Layers
 } from '@vicons/ionicons5'
+import { getMeters } from '@/api/query'
 
 interface DeviceStats {
   totalCount: number
@@ -102,8 +103,11 @@ const deviceChartRef = ref<HTMLElement | null>(null)
 let deviceChart: echarts.ECharts | null = null
 
 // 初始化设备图表
-const initDeviceChart = () => {
+const initDeviceChart = async () => {
   if (!deviceChartRef.value) return
+  
+  // 获取监测点数据并聚合为设备类型分布
+  const meterData = await getMeterTypeDistribution()
   
   deviceChart = echarts.init(deviceChartRef.value)
   
@@ -115,20 +119,17 @@ const initDeviceChart = () => {
     legend: {
       orient: 'vertical',
       left: 'left',
-      data: ['空调机组', '照明系统', '电梯设备', '水泵设备', '其他']
+      data: Array.from(meterData.keys())
     },
     series: [
       {
         name: '设备类型',
         type: 'pie',
         radius: '60%',
-        data: [
-          { value: 45, name: '空调机组', itemStyle: { color: '#18a058' } },
-          { value: 38, name: '照明系统', itemStyle: { color: '#52c41a' } },
-          { value: 28, name: '电梯设备', itemStyle: { color: '#faad14' } },
-          { value: 22, name: '水泵设备', itemStyle: { color: '#f5222d' } },
-          { value: 17, name: '其他', itemStyle: { color: '#722ed1' } }
-        ],
+        data: Array.from(meterData.entries()).map(([name, value]) => ({
+          value: value,
+          name: name
+        })),
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
@@ -141,6 +142,33 @@ const initDeviceChart = () => {
   }
   
   deviceChart.setOption(option)
+}
+
+// 获取监测点数据并按设备类型聚合
+const getMeterTypeDistribution = async (): Promise<Map<string, number>> => {
+  try {
+    const response = await getMeters()
+    const meters = response.data.data || []
+    
+    // 按设备类型聚合
+    const typeMap = new Map<string, number>()
+    meters.forEach((meter: any) => {
+      const type = meter.type || '未知'
+      typeMap.set(type, (typeMap.get(type) || 0) + 1)
+    })
+    
+    return typeMap
+  } catch (error) {
+    console.error('获取监测点数据失败:', error)
+    // 返回默认数据
+    return new Map([
+      ['空调机组', 45],
+      ['照明系统', 38],
+      ['电梯设备', 28],
+      ['水泵设备', 22],
+      ['其他', 17]
+    ])
+  }
 }
 
 // 窗口大小变化时重新渲染图表

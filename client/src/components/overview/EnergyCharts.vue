@@ -37,6 +37,7 @@ import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { LinkOutline as LinkIcon } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
+import { getSummary } from '@/api/statistics'
 
 interface TrendDataItem {
   date: string
@@ -79,13 +80,17 @@ const message = useMessage()
 
 // 初始化图表
 const initCharts = () => {
-  // 1. 环形图 - 各建筑能耗占比（暂时显示空状态或提示）
-  if (pieChartRef.value) {
+  // 1. 环形图 - 各建筑能耗占比
+  if (pieChartRef.value && props.buildingEnergy.length > 0) {
     pieChart = echarts.init(pieChartRef.value)
+    
+    // 创建按建筑名称索引的映射
+    const buildingMap = new Map(props.buildingEnergy.map(item => [item.name, item]))
+    
     const pieOption: EChartsOption = {
       tooltip: {
         trigger: 'item',
-        formatter: '{b}: 暂无数据'
+        formatter: '{b}: {c} MWh ({d}%)'
       },
       legend: {
         orient: 'vertical',
@@ -117,11 +122,40 @@ const initCharts = () => {
           labelLine: {
             show: false
           },
-          data: [] // 等待后端提供建筑排名数据
+          data: props.buildingEnergy.map(item => ({
+            value: item.value,
+            name: item.name
+          })),
+          // 添加点击事件
+          selectedMode: 'single',
+          selectedOffset: 10
         }
       ]
     }
+    
     pieChart.setOption(pieOption)
+    
+    // 添加点击事件监听
+    pieChart.on('click', async (params: any) => {
+      if (params.data?.name) {
+        emit('buildingClick', params.data.name)
+      }
+    })
+  } else if (pieChartRef.value) {
+    // 没有数据时显示空状态
+    pieChart = echarts.init(pieChartRef.value)
+    const emptyOption: EChartsOption = {
+      title: {
+        text: '暂无数据',
+        left: 'center',
+        top: 'center',
+        textStyle: {
+          fontSize: 16,
+          color: '#999'
+        }
+      }
+    }
+    pieChart.setOption(emptyOption)
   }
 
   // 2. 折线图 - 24 小时能耗分布（使用 distribution 数据）
@@ -247,28 +281,42 @@ const initCharts = () => {
 }
 
 // 根据选中的建筑更新图表（联动功能）
-const updateChartsWithBuilding = (buildingName: string) => {
-  if (trendChart) {
-    // 模拟数据减少为原来的 60%-80%
-    const mockData = props.trendData.map(item => ({
-      date: item.date,
-      energy: item.energy * (0.6 + Math.random() * 0.2)
-    }))
+const updateChartsWithBuilding = async (buildingName: string) => {
+  try {
+    // 获取该建筑的7日趋势数据
+    const today = new Date().toISOString().split('T')[0]
+    const sevenDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     
-    const newOption: EChartsOption = {
-      title: {
-        text: `${buildingName} - 近 7 日能耗趋势`,
-        left: 'center'
-      },
-      series: [{
-        data: mockData.map(item => item.energy)
-      }]
+    const response = await getSummary({
+      building_id: buildingName,
+      start_date: sevenDaysAgo,
+      end_date: today,
+      time_unit: 'day'
+    })
+    
+    const summaryData = response.data.data.summary
+    const totalEnergy = (summaryData.total_elec || 0) / 1000 // kWh to MWh
+    
+    // 更新折线图
+    if (trendChart) {
+      const newOption: EChartsOption = {
+        title: {
+          text: `${buildingName} - 近 7 日能耗趋势`,
+          left: 'center'
+        },
+        series: [{
+          data: props.trendData.map(item => item.energy * (totalEnergy / kpiData.value.totalEnergy))
+        }]
+      }
+      
+      trendChart?.setOption(newOption)
     }
     
-    trendChart?.setOption(newOption)
+    message.info(`已选择：${buildingName}，图表已联动`)
+  } catch (error) {
+    console.error('更新图表失败:', error)
+    message.error('更新图表失败')
   }
-  
-  message.info(`已选择：${buildingName}，图表已联动`)
 }
 
 // 暴露方法给父组件

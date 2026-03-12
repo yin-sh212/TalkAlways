@@ -5,6 +5,7 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import { viteMockServe } from 'vite-plugin-mock'
+import { fa } from 'element-plus/es/locales.mjs'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -32,7 +33,7 @@ export default defineConfig({
     }),
     viteMockServe({
       mockPath: 'mock',
-      enable: true  // 启用 Mock，暂时不使用真实后端接口
+      enable: false
     })
   ],
   resolve: {

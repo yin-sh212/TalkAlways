@@ -1,6 +1,7 @@
 # app/services/sms_aliyun.py
 from aliyunsdkcore.client import AcsClient
-from aliyunsdkdysmsapi.request.v20170525 import SendSmsRequest
+# from aliyunsdkdysmsapi.request.v20170525 import SendSmsRequest
+from aliyunsdkcore.request import RpcRequest
 import json
 import os
 from dotenv import load_dotenv

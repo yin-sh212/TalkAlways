@@ -16,9 +16,16 @@
     </n-grid-item>
 
     <n-grid-item>
+      <n-card title="24 小时能耗分布" :bordered="false" content-style="padding: 20px;">
+        <n-skeleton v-if="loading" :rows="3" />
+        <div v-else ref="distributionChartRef" class="chart-container"></div>
+      </n-card>
+    </n-grid-item>
+
+    <n-grid-item>
       <n-card title="近 7 日总能耗趋势" :bordered="false" content-style="padding: 20px;">
         <n-skeleton v-if="loading" :rows="3" />
-        <div v-else ref="lineChartRef" class="chart-container"></div>
+        <div v-else ref="trendChartRef" class="chart-container"></div>
       </n-card>
     </n-grid-item>
   </n-grid>
@@ -40,6 +47,16 @@ interface Props {
   loading: boolean
   buildingEnergy: any[]
   trendData: TrendDataItem[]
+  distributionData?: {
+    categories: string[]
+    series: Array<{
+      name: string
+      type: string
+      data: number[]
+      areaStyle?: any
+      lineStyle?: any
+    }>
+  }
 }
 
 const props = defineProps<Props>()
@@ -49,22 +66,26 @@ const emit = defineEmits<{
   (e: 'buildingClick', buildingName: string): void
 }>()
 
+// 图表引用
 const pieChartRef = ref<HTMLElement | null>(null)
-const lineChartRef = ref<HTMLElement | null>(null)
+const distributionChartRef = ref<HTMLElement | null>(null)
+const trendChartRef = ref<HTMLElement | null>(null)
+
 let pieChart: echarts.ECharts | null = null
-let lineChart: echarts.ECharts | null = null
+let distributionChart: echarts.ECharts | null = null
+let trendChart: echarts.ECharts | null = null
 
 const message = useMessage()
 
 // 初始化图表
 const initCharts = () => {
-  // 环形图 - 各建筑能耗占比
-  if (pieChartRef.value && props.buildingEnergy.length > 0) {
+  // 1. 环形图 - 各建筑能耗占比（暂时显示空状态或提示）
+  if (pieChartRef.value) {
     pieChart = echarts.init(pieChartRef.value)
     const pieOption: EChartsOption = {
       tooltip: {
         trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
+        formatter: '{b}: 暂无数据'
       },
       legend: {
         orient: 'vertical',
@@ -89,33 +110,84 @@ const initCharts = () => {
           emphasis: {
             label: {
               show: true,
-              fontSize: 20,
+              fontSize: 14,
               fontWeight: 'bold'
             }
           },
           labelLine: {
             show: false
           },
-          data: props.buildingEnergy
+          data: [] // 等待后端提供建筑排名数据
         }
       ]
     }
     pieChart.setOption(pieOption)
-    
-    // 添加点击事件监听，实现图表联动
-    pieChart.on('click', (params: any) => {
-      if (params.dataIndex !== undefined) {
-        const buildingName = params.name
-        message.info(`已选择：${buildingName}，图表将联动显示该建筑数据`)
-        emit('buildingClick', buildingName)
-      }
-    })
   }
 
-  // 折线图 - 近 7 日总能耗趋势
-  if (lineChartRef.value && props.trendData.length > 0) {
-    lineChart = echarts.init(lineChartRef.value)
-    const lineOption: EChartsOption = {
+  // 2. 折线图 - 24 小时能耗分布（使用 distribution 数据）
+  if (distributionChartRef.value && props.distributionData) {
+    distributionChart = echarts.init(distributionChartRef.value)
+    const distData = props.distributionData
+    
+    const distOption: EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        formatter: '{b}: {c} kWh'
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: distData.categories
+      },
+      yAxis: {
+        type: 'value',
+        name: '能耗 (kWh)',
+        axisLabel: {
+          formatter: '{value}'
+        }
+      },
+      series: distData.series.map(s => ({
+        name: s.name,
+        type: 'line' as const,
+        smooth: true,
+        data: s.data,
+        areaStyle: s.areaStyle || { opacity: 0.3 },
+        itemStyle: {
+          color: '#18a058'
+        },
+        lineStyle: s.lineStyle
+      }))
+    }
+    distributionChart.setOption(distOption)
+  } else if (distributionChartRef.value) {
+    // 没有数据时显示空状态
+    distributionChart = echarts.init(distributionChartRef.value)
+    const emptyOption: EChartsOption = {
+      tooltip: {
+        trigger: 'axis'
+      },
+      xAxis: {
+        type: 'category',
+        data: []
+      },
+      yAxis: {
+        type: 'value'
+      },
+      series: []
+    }
+    distributionChart.setOption(emptyOption)
+  }
+
+  // 3. 折线图 - 近 7 日总能耗趋势（使用 trend 数据）
+  if (trendChartRef.value && props.trendData.length > 0) {
+    trendChart = echarts.init(trendChartRef.value)
+    const trendOption: EChartsOption = {
       tooltip: {
         trigger: 'axis',
         formatter: '{b}: {c} MWh'
@@ -152,15 +224,31 @@ const initCharts = () => {
           }
         }
       ]
-
     }
-    lineChart.setOption(lineOption)
+    trendChart.setOption(trendOption)
+  } else if (trendChartRef.value) {
+    // 没有数据时显示空状态
+    trendChart = echarts.init(trendChartRef.value)
+    const emptyOption: EChartsOption = {
+      tooltip: {
+        trigger: 'axis'
+      },
+      xAxis: {
+        type: 'category',
+        data: []
+      },
+      yAxis: {
+        type: 'value'
+      },
+      series: []
+    }
+    trendChart.setOption(emptyOption)
   }
 }
 
 // 根据选中的建筑更新图表（联动功能）
 const updateChartsWithBuilding = (buildingName: string) => {
-  if (lineChart) {
+  if (trendChart) {
     // 模拟数据减少为原来的 60%-80%
     const mockData = props.trendData.map(item => ({
       date: item.date,
@@ -177,8 +265,10 @@ const updateChartsWithBuilding = (buildingName: string) => {
       }]
     }
     
-    lineChart?.setOption(newOption)
+    trendChart?.setOption(newOption)
   }
+  
+  message.info(`已选择：${buildingName}，图表已联动`)
 }
 
 // 暴露方法给父组件
@@ -189,8 +279,22 @@ defineExpose({
 // 窗口大小变化时重新渲染图表
 const handleResize = () => {
   pieChart?.resize()
-  lineChart?.resize()
+  distributionChart?.resize()
+  trendChart?.resize()
 }
+
+// 监听数据变化重新渲染图表
+watch(() => props.distributionData, () => {
+  if (!props.loading) {
+    initCharts()
+  }
+}, { deep: true })
+
+watch(() => props.trendData, () => {
+  if (!props.loading) {
+    initCharts()
+  }
+}, { deep: true })
 
 watch(() => props.buildingEnergy, () => {
   if (!props.loading) {
@@ -208,7 +312,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   pieChart?.dispose()
-  lineChart?.dispose()
+  distributionChart?.dispose()
+  trendChart?.dispose()
 })
 </script>
 

@@ -4,23 +4,34 @@ import type { User } from '@/types/user'
 import * as userApi from '@/api/user'
 
 export const useUserStore = defineStore('user', () => {
-  // 状态
+  // 状态 - 添加错误处理，兼容旧的 localStorage 数据
   const token = ref<string>(localStorage.getItem('token') || '')
-  const userInfo = ref<User | null>(
-    localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null
-  )
+  
+  // 安全地解析 localStorage 中的用户信息
+  let storedUser: User | null = null
+  try {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      storedUser = JSON.parse(userStr)
+    }
+  } catch (error) {
+    console.warn('Failed to parse stored user data, clearing invalid data')
+    localStorage.removeItem('user')
+  }
+  
+  const userInfo = ref<User | null>(storedUser)
 
   // 登录
   const loginAction = async (username: string, password: string) => {
     try {
       const response = await userApi.login({ username, password })
-      const { token: newToken, user } = response.data.data
+      const { access_token, user_info } = response.data.data
 
       // 保存 token 和用户信息
-      token.value = newToken
-      userInfo.value = user
-      localStorage.setItem('token', newToken)
-      localStorage.setItem('user', JSON.stringify(user))
+      token.value = access_token
+      userInfo.value = user_info
+      localStorage.setItem('token', access_token)
+      localStorage.setItem('user', JSON.stringify(user_info))
 
       return { success: true }
     } catch (error: any) {
@@ -37,13 +48,13 @@ export const useUserStore = defineStore('user', () => {
   }) => {
     try {
       const response = await userApi.register(params)
-      const { token: newToken, user } = response.data.data
+      const { access_token, user_info } = response.data.data
 
       // 保存 token 和用户信息
-      token.value = newToken
-      userInfo.value = user
-      localStorage.setItem('token', newToken)
-      localStorage.setItem('user', JSON.stringify(user))
+      token.value = access_token
+      userInfo.value = user_info
+      localStorage.setItem('token', access_token)
+      localStorage.setItem('user', JSON.stringify(user_info))
 
       return { success: true }
     } catch (error: any) {

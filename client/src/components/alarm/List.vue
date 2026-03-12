@@ -15,7 +15,7 @@
       :data="tableData"
       :loading="loading"
       :pagination="pagination"
-      :row-key="(row) => row.id"
+      :row-key="(row) => row.id || row.alarm_id || 'unknown'"
       :checked-row-keys="checkedRowKeys"
       @update:checked-row-keys="onChecked"
       striped

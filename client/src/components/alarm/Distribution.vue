@@ -59,29 +59,89 @@ const initChart = () => {
 }
 
 // 更新图表数据
-const updateChart = (data: AlarmDataItem[]) => {
-  if (!chart || data.length === 0) return
+const updateChart = (data: any) => {
+  if (!chart) return
   
-  // 按告警类型分组
-  const typeMap = new Map<string, number>()
-  data.forEach(item => {
-    if (!typeMap.has(item.alarmType)) {
-      typeMap.set(item.alarmType, 0)
-    }
-    typeMap.set(item.alarmType, typeMap.get(item.alarmType)! + 1)
-  })
+  // 情况 1：后端返回 { categories: [], series: [] } - 时间序列数据（折线图）
+  if (data.categories && data.series) {
+    const categories = data.categories
+    const series = data.series || []
+    
+    chart?.setOption({
+      xAxis: {
+        type: 'category',
+        data: categories,
+        boundaryGap: false
+      },
+      yAxis: {
+        type: 'value',
+        name: '告警数量'
+      },
+      tooltip: {
+        trigger: 'axis'
+      },
+      legend: {
+        data: series.map((s: any) => s.name)
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      series: series.map((s: any) => ({
+        name: s.name,
+        type: s.type || 'line',
+        data: s.data || [],
+        smooth: s.smooth !== undefined ? s.smooth : true,
+        areaStyle: s.areaStyle ? { opacity: 0.3 } : undefined,
+        itemStyle: { color: s.color || '#1890ff' },
+        lineStyle: s.lineStyle || {}
+      }))
+    })
+    return
+  }
   
-  const pieData = Array.from(typeMap.entries()).map(([name, value]) => ({
-    name,
-    value
-  }))
+  // 情况 2：后端返回数组 - 分类统计数据（饼图）
+  if (Array.isArray(data) && data.length > 0) {
+    const pieData = data.map(item => ({
+      name: item.name || item.type || item.category || item.alarm_type,
+      value: item.value || item.count || 0
+    }))
+    
+    chart?.setOption({
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c} ({d}%)'
+      },
+      legend: {
+        orient: 'vertical',
+        left: 'left',
+        top: 'middle'
+      },
+      series: [
+        {
+          name: '告警分布',
+          type: 'pie',
+          radius: '60%',
+          data: pieData,
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          }
+        }
+      ]
+    })
+    return
+  }
   
+  // 空数据或格式不对，清空图表
   chart?.setOption({
-    series: [
-      {
-        data: pieData
-      }
-    ]
+    xAxis: { data: [] },
+    series: []
   })
 }
 

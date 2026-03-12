@@ -61,69 +61,77 @@ const initChart = () => {
 }
 
 // 更新图表数据
-const updateChart = (data: AlarmDataItem[]) => {
-  if (!chart || data.length === 0) return
+const updateChart = (data: any) => {
+  if (!chart) return
   
-  // 按时间和级别分组
-  const timeMap = new Map<string, any>()
-  data.forEach(item => {
-    if (!timeMap.has(item.time)) {
-      timeMap.set(item.time, {
-        critical: 0,
-        major: 0,
-        minor: 0,
-        warning: 0
-      })
-    }
-    const timeData = timeMap.get(item.time)
-    timeData[item.severity]++
-  })
+  // 后端返回的是 { categories: [], series: [] } 格式
+  if (!data || !data.categories || !data.series || data.categories.length === 0) {
+    // 空数据或格式不对，清空图表
+    chart?.setOption({
+      xAxis: { data: [] },
+      series: []
+    })
+    return
+  }
   
-  const times = Array.from(timeMap.keys()).sort()
-  const criticalData = times.map(t => timeMap.get(t).critical)
-  const majorData = times.map(t => timeMap.get(t).major)
-  const minorData = times.map(t => timeMap.get(t).minor)
-  const warningData = times.map(t => timeMap.get(t).warning)
+  const categories = data.categories
+  const series = data.series || []
+  
+  // 映射系列配置
+  const mappedSeries = series.map((s: any) => ({
+    name: s.name,
+    type: (s.type || 'line') as 'line' | 'bar',
+    smooth: s.smooth !== undefined ? s.smooth : true,
+    data: s.data || [],
+    itemStyle: { 
+      color: s.color || getColorByName(s.name) 
+    },
+    areaStyle: s.areaStyle ? { opacity: 0.1 } : undefined,
+    lineStyle: s.lineStyle || {}
+  }))
   
   chart?.setOption({
-    xAxis: {
-      data: times
-    },
-    series: [
-      {
-        name: '紧急',
-        type: 'line',
-        smooth: true,
-        data: criticalData,
-        itemStyle: { color: '#f5222d' },
-        areaStyle: { opacity: 0.1 }
-      },
-      {
-        name: '重要',
-        type: 'line',
-        smooth: true,
-        data: majorData,
-        itemStyle: { color: '#fa8c16' },
-        areaStyle: { opacity: 0.1 }
-      },
-      {
-        name: '一般',
-        type: 'line',
-        smooth: true,
-        data: minorData,
-        itemStyle: { color: '#1890ff' },
-        areaStyle: { opacity: 0.1 }
-      },
-      {
-        name: '提示',
-        type: 'line',
-        smooth: true,
-        data: warningData,
-        itemStyle: { color: '#52c41a' },
-        areaStyle: { opacity: 0.1 }
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross'
       }
-    ]
+    },
+    legend: {
+      data: series.map((s: any) => s.name)
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: categories
+    },
+    yAxis: {
+      type: 'value',
+      name: '告警数量'
+    },
+    series: mappedSeries
   })
+}
+
+// 根据系列名称获取默认颜色
+const getColorByName = (name: string): string => {
+  const colorMap: Record<string, string> = {
+    '紧急': '#f5222d',
+    '重要': '#fa8c16',
+    '一般': '#1890ff',
+    '提示': '#52c41a',
+    '平均用电量': '#1890ff',
+    '最大用电量': '#fa8c16',
+    '用电量 (kWh)': '#1890ff',
+    '告警数量': '#1890ff'
+  }
+  return colorMap[name] || '#1890ff'
 }
 
 // 清空图表

@@ -30,6 +30,11 @@ http.interceptors.request.use(
 // 响应拦截器
 http.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
+    // 如果是 blob 类型，直接返回
+    if (response.config.responseType === 'blob') {
+      return response
+    }
+    
     const { data } = response
 
     // 根据业务状态码判断

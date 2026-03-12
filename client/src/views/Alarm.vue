@@ -138,8 +138,8 @@ import AlarmKpiCards from '@/components/alarm/KpiCards.vue'
 import AlarmTrend from '@/components/alarm/Trend.vue'
 import AlarmDistribution from '@/components/alarm/Distribution.vue'
 import AlarmList from '@/components/alarm/List.vue'
-import * as analysisApi from '@/api/analysis'
-import type { QueryParams } from '@/types/analysis'
+import * as alarmApi from '@/api/alarm'
+import type { AlarmItem, AlarmQueryParams } from '@/api/alarm'
 
 const message = useMessage()
 
@@ -161,21 +161,26 @@ const queryForm = reactive({
 
 // 验证规则
 const queryRules = {
-  timeRange: {
-    required: true,
-    message: '请选择时间范围',
-    trigger: 'change'
-  }
+  timeRange: [
+    {
+      required: true,
+      message: '请选择时间范围',
+      trigger: ['blur', 'change'],
+      validator: (rule: any, value: [number, number] | null) => {
+        if (!value || !Array.isArray(value) || value.length !== 2) {
+          return new Error('请选择时间范围')
+        }
+        if (!value[0] || !value[1]) {
+          return new Error('请选择时间范围')
+        }
+        return true
+      }
+    }
+  ]
 }
 
-// 建筑选项
-const buildingOptions = [
-  { label: '行政楼', value: 'building-001' },
-  { label: '教学楼 A', value: 'building-002' },
-  { label: '教学楼 B', value: 'building-003' },
-  { label: '图书馆', value: 'building-004' },
-  { label: '实验楼', value: 'building-005' }
-]
+// 建筑选项（从后端获取）
+const buildingOptions = ref<any[]>([])
 
 // 告警级别选项
 const severityOptions = [
@@ -227,6 +232,29 @@ const alarmTrendRef = ref<InstanceType<typeof AlarmTrend> | null>(null)
 const alarmDistributionRef = ref<InstanceType<typeof AlarmDistribution> | null>(null)
 const alarmListRef = ref<InstanceType<typeof AlarmList> | null>(null)
 
+// 获取建筑列表
+const loadBuildings = async () => {
+  try {
+    const response = await alarmApi.getBuildings()
+    const buildings = response.data.data || []
+    
+    buildingOptions.value = buildings.map((building: any) => ({
+      label: building.name || `建筑${building.id || building.building_id}`,
+      value: building.id || building.building_id
+    }))
+  } catch (error: any) {
+    console.error('获取建筑列表失败:', error)
+    // 使用默认 Mock 数据
+    buildingOptions.value = [
+      { label: '行政楼', value: 'building-001' },
+      { label: '教学楼 A', value: 'building-002' },
+      { label: '教学楼 B', value: 'building-003' },
+      { label: '图书馆', value: 'building-004' },
+      { label: '实验楼', value: 'building-005' }
+    ]
+  }
+}
+
 // 设置快捷时间
 const setQuickTime = (type: 'today' | 'week' | 'month') => {
   const now = new Date()
@@ -254,7 +282,7 @@ const setQuickTime = (type: 'today' | 'week' | 'month') => {
   queryForm.timeRange = [start.getTime(), end.getTime()]
 }
 
-// 执行查询
+// 执行查询 - 对接真实接口
 const handleQuery = async () => {
   try {
     await queryFormRef.value?.validate()
@@ -269,50 +297,76 @@ const handleQuery = async () => {
   chartLoading.value = true
 
   try {
-    const queryParams: QueryParams = {
-      buildings: queryForm.buildings,
-      parameter: 'alarm',
-      startTime: queryForm.timeRange?.[0] || 0,
-      endTime: queryForm.timeRange?.[1] || 0,
-      pageSize: pagination.pageSize,
-      pageNum: pagination.page
-    }
-
+    // 准备查询参数
+    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const buildingId = queryForm.buildings[0] || 'B001'
+    
     // 并行调用多个接口
-    const [alarmData, statsData] = await Promise.all([
-      analysisApi.queryData(queryParams),
-      analysisApi.getStatisticsSummary({
-        buildings: queryParams.buildings,
-        parameter: 'alarm',
-        startTime: queryParams.startTime,
-        endTime: queryParams.endTime
+    const [alarmRes, summaryRes, trendRes, distributionRes] = await Promise.all([
+      alarmApi.queryAlarms({ // 告警查询
+        building_ids: queryForm.buildings.length > 0 ? queryForm.buildings : [buildingId],
+        start_date: startDate,
+        end_date: endDate,
+        severity: queryForm.severity.length > 0 ? queryForm.severity : undefined,
+        alarm_type: queryForm.alarmType.length > 0 ? queryForm.alarmType : undefined,
+        page: pagination.page,
+        page_size: pagination.pageSize
+      }),
+      alarmApi.getAlarmSummary({ // 统计摘要
+        building_id: buildingId,
+        start_date: startDate,
+        end_date: endDate,
+        time_unit: 'day'
+      }),
+      alarmApi.getAlarmTrend({ // 趋势图数据
+        building_id: buildingId,
+        start_date: startDate,
+        end_date: endDate
+      }),
+      alarmApi.getAlarmDistribution({ // 分布图数据
+        building_id: buildingId,
+        date: endDate
       })
     ])
 
-    // 填充表格数据
-    tableData.value = alarmData.data.data.map((item: any) => ({
-      id: item.id,
-      time: item.timestamp,
-      buildingName: item.building_name || '未知建筑',
-      alarmType: item.alarm_type || '未知类型',
-      severity: item.severity || 'warning',
-      description: item.description || '',
+    console.log('告警查询响应:', alarmRes)
+    console.log('统计摘要响应:', summaryRes)
+    console.log('趋势图响应:', trendRes)
+    console.log('分布图响应:', distributionRes)
+
+    // 填充表格数据 - 后端返回的是数组格式
+    const alarms = Array.isArray(alarmRes.data.data) ? alarmRes.data.data : []
+    
+    tableData.value = alarms.map((item: any, index: number) => ({
+      id: item.id || item.alarm_id || `alarm_${index}`,
+      timestamp: item.timestamp || item.time,
+      building_id: item.building_id,
+      building_name: item.building_name,
+      alarm_type: item.alarm_type,
+      severity: item.severity,
       status: item.status || 'unresolved',
-      acknowledgeTime: item.acknowledge_time,
-      resolveTime: item.resolve_time
+      description: item.description,
+      buildingName: item.building_name || '未知建筑',
+      alarmTypeName: getAlarmTypeName(item.alarm_type),
+      severityName: getSeverityName(item.severity)
     }))
 
-    // 填充指标数据
+    // 填充指标数据 - 使用确切路径 data.data.summary
+    const summaryData = summaryRes.data.data?.summary || {}
     metrics.value = {
-      totalAlarms: tableData.value.length,
-      unresolvedCount: tableData.value.filter(item => item.status === 'unresolved').length,
-      criticalCount: tableData.value.filter(item => item.severity === 'critical').length,
-      acknowledgedCount: tableData.value.filter(item => item.status === 'acknowledged').length
+      totalAlarms: summaryData?.total_alarm_count || alarms.length,
+      unresolvedCount: summaryData?.unresolved_count || alarms.filter(a => a.status === 'unresolved').length,
+      criticalCount: summaryData?.critical_count || alarms.filter(a => a.severity === 'critical').length,
+      acknowledgedCount: summaryData?.acknowledged_count || alarms.filter(a => a.status === 'acknowledged').length
     }
 
-    // 准备图表数据
-    trendData.value = tableData.value
-    distributionData.value = tableData.value
+    // 图表数据 - 后端返回的是 { categories, series } 格式
+    trendData.value = trendRes.data.data || { categories: [], series: [] }
+    distributionData.value = distributionRes.data.data || { categories: [], series: [] }
+
+    console.log('趋势图数据:', trendData.value)
+    console.log('分布图数据:', distributionData.value)
 
     // 更新图表
     if (alarmTrendRef.value) {
@@ -324,7 +378,8 @@ const handleQuery = async () => {
 
     message.success('查询成功')
   } catch (error: any) {
-    message.error('查询失败：' + error.message)
+    console.error('查询失败:', error)
+    message.error('查询失败：' + (error.message || '未知错误'))
   } finally {
     queryLoading.value = false
     tableLoading.value = false
@@ -366,43 +421,77 @@ const handleTableUpdate = (page: number, pageSize: number) => {
   handleQuery()
 }
 
-// 确认告警
+// 获取告警类型名称
+const getAlarmTypeName = (type: string) => {
+  const typeMap: Record<string, string> = {
+    'energy_anomaly': '能耗异常',
+    'device_fault': '设备故障',
+    'sensor_error': '传感器异常',
+    'communication_error': '通信故障',
+    'threshold_exceeded': '超限告警'
+  }
+  return typeMap[type] || type
+}
+
+// 获取级别名称
+const getSeverityName = (severity: string) => {
+  const severityMap: Record<string, string> = {
+    'critical': '紧急',
+    'major': '重要',
+    'minor': '一般',
+    'warning': '提示'
+  }
+  return severityMap[severity] || severity
+}
+
+// 确认告警 - 对接真实接口
 const handleAcknowledge = async (alarmId: string) => {
   try {
-    // TODO: 调用后端确认接口
+    await alarmApi.acknowledgeAlarm({
+      alarm_id: alarmId,
+      operator: 'current_user' // 实际应从用户信息中获取
+    })
     message.success('告警已确认')
-    handleQuery()
+    handleQuery() // 刷新列表
   } catch (error: any) {
-    message.error('确认失败：' + error.message)
+    console.error('确认失败:', error)
+    message.error('确认失败：' + (error.message || '未知错误'))
   }
 }
 
-// 解决告警
+// 解决告警 - 对接真实接口
 const handleResolve = async (alarmId: string) => {
   try {
-    // TODO: 调用后端解决接口
+    await alarmApi.resolveAlarm({
+      alarm_id: alarmId,
+      operator: 'current_user',
+      resolution: '已处理'
+    })
     message.success('告警已解决')
-    handleQuery()
+    handleQuery() // 刷新列表
   } catch (error: any) {
-    message.error('解决失败：' + error.message)
+    console.error('解决失败:', error)
+    message.error('解决失败：' + (error.message || '未知错误'))
   }
 }
 
-// 导出报表
+// 导出报表 - 对接真实接口
 const handleExport = async () => {
   exportLoading.value = true
   message.info('正在生成报表...')
   
   try {
+    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    
     const exportParams = {
-      buildings: queryForm.buildings,
-      parameter: 'alarm',
-      startTime: queryForm.timeRange?.[0] || 0,
-      endTime: queryForm.timeRange?.[1] || 0,
+      building_ids: queryForm.buildings.length > 0 ? queryForm.buildings : ['B001'],
+      startTime: startDate,
+      endTime: endDate,
       format: 'excel' as const
     }
 
-    const response = await analysisApi.exportReport(exportParams)
+    const response = await alarmApi.exportExcel(exportParams)
     
     const url = window.URL.createObjectURL(response.data as Blob)
     const link = document.createElement('a')
@@ -415,7 +504,8 @@ const handleExport = async () => {
     
     message.success('报表已下载')
   } catch (error: any) {
-    message.error('导出失败：' + error.message)
+    console.error('导出失败:', error)
+    message.error('导出失败：' + (error.message || '未知错误'))
   } finally {
     exportLoading.value = false
   }
@@ -423,6 +513,7 @@ const handleExport = async () => {
 
 onMounted(() => {
   // 初始化时执行一次查询
+  loadBuildings()
   handleQuery()
 })
 </script>

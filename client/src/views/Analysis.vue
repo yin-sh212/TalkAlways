@@ -236,7 +236,7 @@ import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import type { DataTableColumns } from 'naive-ui'
 import * as analysisApi from '@/api/analysis'
-import type { QueryParams, QueryDataItem, QueryResponse } from '@/types/analysis'
+import type { QueryDataItem } from '@/types/analysis'
 
 const message = useMessage()
 const router = useRouter()
@@ -271,26 +271,40 @@ const queryForm = reactive({
 
 // 验证规则
 const queryRules = {
-  buildings: {
-    required: true,
-    message: '请选择建筑',
-    trigger: 'change'
-  },
-  timeRange: {
-    required: true,
-    message: '请选择时间范围',
-    trigger: 'change'
-  }
+  buildings: [
+    {
+      required: true,
+      message: '请选择建筑',
+      trigger: ['blur', 'change'],
+      validator: (rule: any, value: string[]) => {
+        if (!value || value.length === 0) {
+          return new Error('请选择建筑')
+        }
+        return true
+      }
+    }
+  ],
+  timeRange: [
+    {
+      required: true,
+      message: '请选择时间范围',
+      trigger: ['blur', 'change'],
+      validator: (rule: any, value: [number, number] | null) => {
+        if (!value || !Array.isArray(value) || value.length !== 2) {
+          return new Error('请选择时间范围')
+        }
+        // 检查是否两个日期都选择了
+        if (!value[0] || !value[1]) {
+          return new Error('请选择时间范围')
+        }
+        return true
+      }
+    }
+  ]
 }
 
-// 建筑选项（Mock 数据）
-const buildingOptions = [
-  { label: '行政楼', value: 'building-001' },
-  { label: '教学楼 A', value: 'building-002' },
-  { label: '教学楼 B', value: 'building-003' },
-  { label: '图书馆', value: 'building-004' },
-  { label: '实验楼', value: 'building-005' }
-]
+// 建筑选项（从后端获取）
+const buildingOptions = ref<any[]>([])
 
 // 参数选项
 const parameterOptions = [
@@ -370,6 +384,30 @@ const metrics = ref({
   anomalyCount: 0
 })
 
+// 获取建筑列表
+const loadBuildings = async () => {
+  try {
+    const response = await analysisApi.getBuildings()
+    const buildings = response.data.data || []
+    
+    // 转换为下拉选项格式
+    buildingOptions.value = buildings.map((building: any) => ({
+      label: building.name || `建筑${building.id || building.building_id}`,
+      value: building.id || building.building_id
+    }))
+  } catch (error: any) {
+    console.error('获取建筑列表失败:', error)
+    // 使用默认 Mock 数据
+    buildingOptions.value = [
+      { label: '行政楼', value: 'building-001' },
+      { label: '教学楼 A', value: 'building-002' },
+      { label: '教学楼 B', value: 'building-003' },
+      { label: '图书馆', value: 'building-004' },
+      { label: '实验楼', value: 'building-005' }
+    ]
+  }
+}
+
 // 设置快捷时间
 const setQuickTime = (type: 'today' | 'week' | 'month') => {
   const now = new Date()
@@ -395,6 +433,11 @@ const setQuickTime = (type: 'today' | 'week' | 'month') => {
   }
 
   queryForm.timeRange = [start.getTime(), end.getTime()]
+  
+  // 触发验证，清除错误提示
+  if (queryFormRef.value) {
+    queryFormRef.value.validate('timeRange').catch(() => {})
+  }
 }
 
 // 自然语言查询 - 对接真实接口
@@ -443,69 +486,85 @@ const handleQuery = async () => {
   // 验证表单
   try {
     await queryFormRef.value?.validate()
+    // 验证通过后清除可能存在的错误状态
+    queryFormRef.value?.restoreValidation()
   } catch (error) {
     message.warning('请填写完整的查询条件')
     return
   }
 
   tableLoading.value = true
-  queryLoading.value = true
+  queryLoading.value = false
 
   try {
     // 准备查询参数
-    const queryParams: QueryParams = {
-      buildings: queryForm.buildings,
-      parameter: queryForm.parameter,
-      startTime: queryForm.timeRange?.[0] || 0,
-      endTime: queryForm.timeRange?.[1] || 0,
-      pageSize: pagination.pageSize,
-      pageNum: pagination.page
-    }
-
+    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const buildingId = queryForm.buildings[0] || 'B001'
+    
     // 并行调用多个接口获取数据
-    const [rawData, summaryData, anomalyData] = await Promise.all([
-      analysisApi.queryData(queryParams), // 原始数据
-      analysisApi.getStatisticsSummary({ // 统计摘要
-        buildings: queryParams.buildings,
-        parameter: queryParams.parameter,
-        startTime: queryParams.startTime,
-        endTime: queryParams.endTime
+    const [queryRes, summaryRes, anomalyRes, trendRes, distributionRes] = await Promise.all([
+      analysisApi.queryData({ // 核心查询接口
+        building_id: buildingId,
+        parameter: queryForm.parameter,
+        start_date: startDate,
+        end_date: endDate,
+        time_unit: 'day'
       }),
-      analysisApi.getAnomalyCount({ // 异常统计
-        buildings: queryParams.buildings,
-        parameter: queryParams.parameter,
-        startTime: queryParams.startTime,
-        endTime: queryParams.endTime
+      analysisApi.getStatisticsSummary({ // 统计摘要
+        building_id: buildingId,
+        start_date: startDate,
+        end_date: endDate,
+        time_unit: 'day'
+      }),
+      analysisApi.detectAnomaly({ // 异常检测
+        building_id: buildingId,
+        start_date: startDate,
+        end_date: endDate,
+        threshold: 2.0
+      }),
+      analysisApi.getTrendData({ // 趋势图数据
+        building_id: buildingId,
+        start_date: startDate,
+        end_date: endDate
+      }),
+      analysisApi.getDistributionData({ // 分布图数据
+        building_id: buildingId,
+        date: endDate
       })
     ])
 
-    console.log('原始数据响应:', rawData)
-    console.log('统计摘要响应:', summaryData)
-    console.log('异常统计响应:', anomalyData)
+    console.log('查询响应:', queryRes)
+    console.log('统计摘要响应:', summaryRes)
+    console.log('异常检测响应:', anomalyRes)
+    console.log('趋势图响应:', trendRes)
+    console.log('分布图响应:', distributionRes)
 
     // 填充表格数据
-    tableData.value = rawData.data.data.map((item: any) => ({
+    const queryData = queryRes.data.data || []
+    tableData.value = queryData.map((item: any) => ({
       id: item.id || item.timestamp,
       time: item.timestamp,
       buildingId: item.building_id,
-      buildingName: '建筑', // 后端未提供，需要关联查询
-      parameterName: '电力能耗',
-      value: item.electricity,
-      unit: 'kWh',
-      isAnomaly: item.is_anomaly === 1
+      buildingName: item.building_name || '建筑',
+      parameterName: item.parameter_name || '电力能耗',
+      value: item.value || item.electricity || 0,
+      unit: item.unit || 'kWh',
+      isAnomaly: item.is_anomaly === 1 || item.status === '异常'
     }))
 
     // 填充指标数据
+    const summaryData = summaryRes.data.data?.summary
     metrics.value = {
-      totalEnergy: summaryData.data.summary?.total_elec || 0,
-      avgEnergy: summaryData.data.summary?.avg_elec || 0,
-      anomalyCount: anomalyData.data.anomaly_count || 0
+      totalEnergy: summaryData?.total_elec ? Number((summaryData.total_elec / 1000).toFixed(2)) : 0, // kWh 转 MWh
+      avgEnergy: summaryData?.avg_elec ? Number((summaryData.avg_elec / 1000).toFixed(2)) : 0,
+      anomalyCount: anomalyRes.data.data?.anomaly_count || 0
     }
 
     // 更新图表
     updateCharts({
-      trendData: tableData.value,
-      distributionData: tableData.value
+      trendData: trendRes.data.data || [],
+      distributionData: distributionRes.data.data || []
     })
 
     message.success('查询成功')
@@ -513,7 +572,8 @@ const handleQuery = async () => {
     // 切换到表格 Tab
     activeTab.value = 'table'
   } catch (error: any) {
-    message.error('查询失败：' + error.message)
+    console.error('查询失败:', error)
+    message.error('查询失败：' + (error.message || '未知错误'))
   } finally {
     tableLoading.value = false
     queryLoading.value = false
@@ -547,16 +607,18 @@ const handleExport = async () => {
   
   try {
     // 准备导出参数
+    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    
     const exportParams = {
       buildings: queryForm.buildings,
-      parameter: queryForm.parameter,
-      startTime: queryForm.timeRange?.[0] || 0,
-      endTime: queryForm.timeRange?.[1] || 0,
+      startTime: startDate,
+      endTime: endDate,
       format: 'excel' as const // 默认导出为 Excel
     }
 
-    // 调用导出接口
-    const response = await analysisApi.exportReport(exportParams)
+    // 调用导出接口（默认 Excel）
+    const response = await analysisApi.exportExcel(exportParams)
     
     // 创建下载链接
     const url = window.URL.createObjectURL(response.data as Blob)
@@ -570,7 +632,8 @@ const handleExport = async () => {
     
     message.success('报表已下载')
   } catch (error: any) {
-    message.error('导出失败：' + error.message)
+    console.error('导出失败:', error)
+    message.error('导出失败：' + (error.message || '未知错误'))
   } finally {
     exportLoading.value = false
   }
@@ -594,44 +657,28 @@ const showChartDetail = (index: number) => {
 
 // 更新图表 - 对接真实数据
 const updateCharts = (data: {
-  trendData: QueryDataItem[],
-  distributionData: QueryDataItem[]
+  trendData: any,
+  distributionData: any
 }) => {
   // 图表 1：能耗趋势（带异常标记）
-  if (chart1Ref.value && data.trendData.length > 0) {
+  if (chart1Ref.value && data.trendData) {
     chart1 = echarts.init(chart1Ref.value)
     chart1.setOption(getChart1Option(data.trendData))
   }
 
   // 图表 2：能耗分布
-  if (chart2Ref.value && data.distributionData.length > 0) {
+  if (chart2Ref.value && data.distributionData) {
     chart2 = echarts.init(chart2Ref.value)
     chart2.setOption(getChart2Option(data.distributionData))
   }
 }
 
 // 获取图表 1 配置（折线图 - 带异常标记）
-const getChart1Option = (trendData: any[]): EChartsOption => {
-  // 按时间分组数据
-  const timeMap = new Map<string, any[]>()
-  trendData.forEach(item => {
-    if (!timeMap.has(item.time)) {
-      timeMap.set(item.time, [])
-    }
-    timeMap.get(item.time)!.push(item)
-  })
-
-  const times = Array.from(timeMap.keys()).sort()
-  const seriesData = times.map(time => {
-    const items = timeMap.get(time)!
-    const totalValue = items.reduce((sum, item) => sum + item.value, 0)
-    const hasAnomaly = items.some(item => item.isAnomaly)
-    return {
-      value: Number(totalValue.toFixed(2)),
-      isAnomaly: hasAnomaly
-    }
-  })
-
+const getChart1Option = (trendData: any): EChartsOption => {
+  // 后端返回的格式：{ categories: [], series: [] }
+  const categories = trendData.categories || []
+  const series = trendData.series || []
+  
   return {
     tooltip: {
       trigger: 'axis',
@@ -639,17 +686,17 @@ const getChart1Option = (trendData: any[]): EChartsOption => {
         const point = params[0]
         let html = `<div style="font-weight: bold;">${point.name}</div>`
         params.forEach((p: any) => {
-          const color = p.data.isAnomaly ? '#f5222d' : '#1890ff'
+          const color = p.data?.isAnomaly ? '#f5222d' : '#1890ff'
           html += `<div style="color: ${color}">
             ${p.marker} ${p.seriesName}: ${p.value} MWh
-            ${p.data.isAnomaly ? ' <span style="color: #f5222d; font-weight: bold;">(异常点（算法标记）)</span>' : ''}
+            ${p.data?.isAnomaly ? ' <span style="color: #f5222d; font-weight: bold;">(异常)</span>' : ''}
           </div>`
         })
         return html
       }
     },
     legend: {
-      data: ['总能耗']
+      data: series.map((s: any) => s.name)
     },
     grid: {
       left: '3%',
@@ -660,59 +707,48 @@ const getChart1Option = (trendData: any[]): EChartsOption => {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: times
+      data: categories
     },
     yAxis: {
       type: 'value',
       name: '能耗 (MWh)'
     },
-    series: [
-      {
-        name: '总能耗',
-        type: 'line',
-        smooth: true,
-        data: seriesData,
-        itemStyle: {
-          color: (params: any) => {
-            return params.data.isAnomaly ? '#f5222d' : '#1890ff'
+    series: series.map((s: any) => ({
+      name: s.name,
+      type: 'line',
+      smooth: true,
+      data: s.data,
+      itemStyle: {
+        color: s.color || '#1890ff'
+      },
+      areaStyle: s.areaStyle,
+      markPoint: {
+        data: [
+          { 
+            type: 'max', 
+            name: '最大值',
+            itemStyle: { color: '#f5222d' }
           }
-        },
-        markPoint: {
-          data: [
-            { 
-              type: 'max', 
-              name: '最大值',
-              itemStyle: { color: '#f5222d' }
-            }
-          ]
-        },
-        markLine: {
-          data: [
-            {
-              type: 'average',
-              name: '平均值'
-            }
-          ]
-        }
+        ]
+      },
+      markLine: {
+        data: [
+          {
+            type: 'average',
+            name: '平均值'
+          }
+        ]
       }
-    ]
+    }))
   }
 }
 
 // 获取图表 2 配置（柱状图）
-const getChart2Option = (distributionData: any[]): EChartsOption => {
-  // 按建筑分组数据
-  const buildingMap = new Map<string, number>()
-  distributionData.forEach(item => {
-    if (!buildingMap.has(item.buildingName)) {
-      buildingMap.set(item.buildingName, 0)
-    }
-    buildingMap.set(item.buildingName, buildingMap.get(item.buildingName)! + item.value)
-  })
-
-  const buildings = Array.from(buildingMap.keys())
-  const values = buildings.map(b => Number(buildingMap.get(b)!.toFixed(2)))
-
+const getChart2Option = (distributionData: any): EChartsOption => {
+  // 后端返回的格式：{ categories: [], series: [] }
+  const categories = distributionData.categories || []
+  const series = distributionData.series || []
+  
   return {
     tooltip: {
       trigger: 'axis',
@@ -726,7 +762,7 @@ const getChart2Option = (distributionData: any[]): EChartsOption => {
       }
     },
     legend: {
-      data: ['各建筑能耗']
+      data: series.map((s: any) => s.name)
     },
     grid: {
       left: '3%',
@@ -736,22 +772,20 @@ const getChart2Option = (distributionData: any[]): EChartsOption => {
     },
     xAxis: {
       type: 'category',
-      data: buildings
+      data: categories
     },
     yAxis: {
       type: 'value',
       name: '能耗 (MWh)'
     },
-    series: [
-      {
-        name: '各建筑能耗',
-        type: 'bar',
-        data: values,
-        itemStyle: {
-          color: '#1890ff'
-        }
+    series: series.map((s: any) => ({
+      name: s.name,
+      type: 'bar',
+      data: s.data,
+      itemStyle: {
+        color: s.color || '#1890ff'
       }
-    ]
+    }))
   }
 }
 
@@ -771,7 +805,74 @@ const handleCompareToggle = () => {
 }
 
 // 初始化对比图表
-const initCompareChart = () => {
+const initCompareChart = async () => {
+  if (!compareChartRef.value || queryForm.buildings.length === 0) return
+  
+  compareChart = echarts.init(compareChartRef.value)
+  
+  try {
+    // 调用对比接口
+    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    
+    const response = await analysisApi.getComparisonData({
+      building_ids: queryForm.buildings, // 传递多个建筑 ID
+      start_date: startDate,
+      end_date: endDate
+    })
+    
+    const comparisonData = response.data.data
+    const categories = comparisonData.categories || []
+    const series = comparisonData.series || []
+    
+    const option: EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'shadow'
+        }
+      },
+      legend: {
+        data: series.map((s: any) => s.name)
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: categories
+      },
+      yAxis: {
+        type: 'value',
+        name: '能耗 (MWh)'
+      },
+      series: series.map((s: any) => ({
+        name: s.name,
+        type: 'bar' as const,
+        data: s.data,
+        emphasis: {
+          focus: 'series'
+        }
+      }))
+    }
+    
+    compareChart?.setOption(option)
+  } catch (error: any) {
+    console.error('加载对比数据失败:', error)
+    // 如果后端接口失败，使用表格数据生成简单的对比图
+    if (tableData.value.length > 0) {
+      generateComparisonChartFromTable()
+    } else {
+      message.error('加载对比数据失败')
+    }
+  }
+}
+
+// 从表格数据生成对比图表（备用方案）
+const generateComparisonChartFromTable = () => {
   if (!compareChartRef.value || tableData.value.length === 0) return
   
   compareChart = echarts.init(compareChartRef.value)
@@ -785,15 +886,15 @@ const initCompareChart = () => {
     buildingMap.get(item.buildingName)!.push(item.value)
   })
   
-  // 构建系列数据 - 使用 ECharts 正确的类型
-  const series: any[] = Array.from(buildingMap.entries()).map(([name, values]) => ({
-    name,
+  const categories = Array.from(buildingMap.keys())
+  const series = [{
+    name: '能耗',
     type: 'bar' as const,
-    data: values.map(v => Number(v.toFixed(2))),
-    emphasis: {
-      focus: 'series'
-    }
-  }))
+    data: categories.map(name => {
+      const values = buildingMap.get(name)!
+      return Number(values.reduce((sum, v) => sum + v, 0).toFixed(2))
+    })
+  }]
   
   const option: EChartsOption = {
     tooltip: {
@@ -803,8 +904,7 @@ const initCompareChart = () => {
       }
     },
     legend: {
-      data: Array.from(buildingMap.keys()),
-      top: 10
+      data: ['能耗']
     },
     grid: {
       left: '3%',
@@ -814,17 +914,13 @@ const initCompareChart = () => {
     },
     xAxis: {
       type: 'category',
-      data: ['时段 1', '时段 2', '时段 3', '时段 4', '时段 5'], // TODO: 实际应使用时间标签
-      axisLabel: {
-        interval: 0,
-        rotate: 30
-      }
+      data: categories
     },
     yAxis: {
       type: 'value',
-      name: '能耗 (kWh)'
+      name: '能耗 (MWh)'
     },
-    series: series as any // 类型断言
+    series
   }
   
   compareChart?.setOption(option)
@@ -899,8 +995,33 @@ const handleRouteParams = () => {
 }
 
 onMounted(() => {
+  // 加载建筑列表
+  loadBuildings()
+  
+  // 初始化图表
+  if (chart1Ref.value) {
+    chart1 = echarts.init(chart1Ref.value)
+  }
+  if (chart2Ref.value) {
+    chart2 = echarts.init(chart2Ref.value)
+  }
+  if (compareChartRef.value) {
+    compareChart = echarts.init(compareChartRef.value)
+  }
+  
+  // 从路由参数中获取查询条件（如果有）
+  if (route.query.building) {
+    queryForm.buildings = [route.query.building as string]
+  }
+  if (route.query.start && route.query.end) {
+    queryForm.timeRange = [
+      new Date(route.query.start as string).getTime(),
+      new Date(route.query.end as string).getTime()
+    ]
+  }
+  
+  // 绑定窗口大小变化事件
   window.addEventListener('resize', handleResize)
-  handleRouteParams()
 })
 
 onUnmounted(() => {

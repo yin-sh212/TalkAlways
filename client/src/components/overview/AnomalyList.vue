@@ -17,7 +17,7 @@
       <n-empty v-if="anomalyList.length === 0" description="暂无异常数据" />
       <n-timeline v-else>
         <n-timeline-item
-          v-for="item in anomalyList"
+          v-for="item in sortedAnomalyList"
           :key="item.id"
           :type="getTypeTagType(item.type)"
           :time="item.time"
@@ -69,6 +69,17 @@ const getTypeTagType = (type: string) => {
 const handleViewAll = () => {
   emit('view-all')
 }
+
+// 按时间倒序排列的异常列表
+const sortedAnomalyList = computed(() => {
+  return [...props.anomalyList].sort((a, b) => {
+    // 将时间字符串转换为Date对象进行比较
+    const dateA = new Date(a.time)
+    const dateB = new Date(b.time)
+    // 倒序排列，最新的在前面
+    return dateB.getTime() - dateA.getTime()
+  }).slice(0, 5) // 只取前5条
+})
 </script>
 
 <style scoped lang="scss">

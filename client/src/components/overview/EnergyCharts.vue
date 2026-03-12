@@ -16,6 +16,13 @@
     </n-grid-item>
 
     <n-grid-item>
+      <n-card title="24 小时能耗分布" :bordered="false" content-style="padding: 20px;">
+        <n-skeleton v-if="loading" :rows="3" />
+        <div v-else ref="lineChartRef" class="chart-container"></div>
+      </n-card>
+    </n-grid-item>
+
+    <n-grid-item>
       <n-card title="近 7 日总能耗趋势" :bordered="false" content-style="padding: 20px;">
         <n-skeleton v-if="loading" :rows="3" />
         <div v-else ref="lineChartRef" class="chart-container"></div>
@@ -25,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, withDefaults } from 'vue'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { LinkOutline as LinkIcon } from '@vicons/ionicons5'
@@ -40,9 +47,20 @@ interface Props {
   loading: boolean
   buildingEnergy: any[]
   trendData: TrendDataItem[]
+  distributionData?: {
+    categories: string[]
+    series: Array<{
+      name: string
+      type: string
+      data: number[]
+      areaStyle?: any
+    }>
+  }
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  distributionData: undefined
+})
 
 // 定义事件
 const emit = defineEmits<{
@@ -58,62 +76,48 @@ const message = useMessage()
 
 // 初始化图表
 const initCharts = () => {
-  // 环形图 - 各建筑能耗占比
-  if (pieChartRef.value && props.buildingEnergy.length > 0) {
-    pieChart = echarts.init(pieChartRef.value)
-    const pieOption: EChartsOption = {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'middle'
-      },
-      series: [
-        {
-          name: '能耗占比',
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 10,
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: {
-            show: false,
-            position: 'center'
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: 20,
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: props.buildingEnergy
-        }
-      ]
-    }
-    pieChart.setOption(pieOption)
+  // 折线图 - 24 小时能耗分布（使用 distribution 数据）
+  if (lineChartRef.value && props.distributionData) {
+    lineChart = echarts.init(lineChartRef.value)
+    const distData = props.distributionData
     
-    // 添加点击事件监听，实现图表联动
-    pieChart.on('click', (params: any) => {
-      if (params.dataIndex !== undefined) {
-        const buildingName = params.name
-        message.info(`已选择：${buildingName}，图表将联动显示该建筑数据`)
-        emit('buildingClick', buildingName)
-      }
-    })
-  }
-
-  // 折线图 - 近 7 日总能耗趋势
-  if (lineChartRef.value && props.trendData.length > 0) {
+    const lineOption: EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        formatter: '{b}: {c} kWh'
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: distData.categories
+      },
+      yAxis: {
+        type: 'value',
+        name: '能耗 (kWh)',
+        axisLabel: {
+          formatter: '{value}'
+        }
+      },
+      series: distData.series.map(s => ({
+        name: s.name,
+        type: s.type,
+        smooth: true,
+        data: s.data,
+        areaStyle: s.areaStyle || { opacity: 0.3 },
+        itemStyle: {
+          color: '#18a058'
+        }
+      }))
+    }
+    lineChart.setOption(lineOption)
+  } else if (lineChartRef.value && props.trendData.length > 0) {
+    // 如果没有 distribution 数据，使用 trendData 作为后备
     lineChart = echarts.init(lineChartRef.value)
     const lineOption: EChartsOption = {
       tooltip: {
@@ -152,10 +156,12 @@ const initCharts = () => {
           }
         }
       ]
-
     }
     lineChart.setOption(lineOption)
   }
+  
+  // 环形图暂时隐藏，等后端提供建筑排名数据后再启用
+  // if (pieChartRef.value && props.buildingEnergy.length > 0) { ... }
 }
 
 // 根据选中的建筑更新图表（联动功能）
@@ -191,6 +197,19 @@ const handleResize = () => {
   pieChart?.resize()
   lineChart?.resize()
 }
+
+// 监听数据变化重新渲染图表
+watch(() => props.distributionData, () => {
+  if (!props.loading) {
+    initCharts()
+  }
+}, { deep: true })
+
+watch(() => props.trendData, () => {
+  if (!props.loading && !props.distributionData) {
+    initCharts()
+  }
+}, { deep: true })
 
 watch(() => props.buildingEnergy, () => {
   if (!props.loading) {

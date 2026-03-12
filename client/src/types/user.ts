@@ -1,11 +1,11 @@
 // 用户相关类型定义
 
 export interface User {
-  id: string
+  user_id: string
   username: string
-  email: string
+  phone?: string
+  email?: string
   avatar?: string
-  createdAt?: string
 }
 
 export interface LoginParams {
@@ -21,8 +21,10 @@ export interface RegisterParams {
 }
 
 export interface LoginResponse {
-  token: string
-  user: User
+  access_token: string
+  token_type: string
+  expires_in: number
+  user_info: User
 }
 
 export interface ApiResponse<T = any> {

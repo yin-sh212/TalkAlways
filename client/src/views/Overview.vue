@@ -14,6 +14,7 @@
         :loading="loading" 
         :building-energy="chartData.buildingEnergy"
         :trend-data="chartData.trendData"
+        :distribution-data="chartData.distributionData"
         @building-click="handleBuildingClick"
       />
 
@@ -81,7 +82,8 @@ const kpiData = ref<KPIData>({
 
 const chartData = ref({
   buildingEnergy: [] as any[],
-  trendData: [] as any[]
+  trendData: [] as any[],
+  distributionData: undefined as any
 })
 
 const anomalyList = ref<any[]>([])
@@ -193,40 +195,40 @@ const loadData = async () => {
     console.log('趋势图响应:', trendRes)
     console.log('异常列表响应:', anomalyRes)
 
-    // 填充 KPI 数据 - 注意：后端返回的数据在 data.data 中
-    const summary = kpiRes.data.data?.summary || {}
-    kpiData.value = {
-      totalEnergy: summary.total_elec || 0,
-      energyChange: 0,
-      dayChange: calculateDayChange(summary.total_elec),
-      weekChange: calculateWeekChange(summary.total_elec),
-      deviceOnlineRate: 100,
-      abnormalDeviceCount: anomalyRes.data.data?.anomaly_count || 0,
-      co2Reduction: (summary.total_elec || 0) * 0.785
-    }
+    // 填充 KPI 数据 - getKPIData() 已经返回了处理好的数据
+    kpiData.value = kpiRes
     
-    // 填充图表数据
+    // 填充图表数据 - distributionRes 已经是处理好的格式
     chartData.value = {
-      buildingEnergy: distributionRes.data.data?.series || [],
-      trendData: trendRes.data.data?.series?.[0]?.data.map((value: number, index: number) => ({
-        date: trendRes.data.data.categories?.[index] || '',
-        energy: value
-      })) || []
+      buildingEnergy: [], // Distribution 数据不直接用于排名，先留空
+      trendData: [],
+      distributionData: distributionRes // 新增：保存分布图数据
     }
     
-    // 填充异常列表 - 注意：后端返回的数据在 data.data 中
-    anomalyList.value = anomalyRes.data.data?.anomalies?.map((item: any) => ({
-      id: item.timestamp,
-      time: item.timestamp,
-      buildingName: '建筑',
-      type: '能耗异常',
-      status: 'pending' as const,
-      buildingId: anomalyRes.data.data.building_id,
-      timeRange: {
-        start: anomalyRes.data.data.period.split(' 至 ')[0],
-        end: anomalyRes.data.data.period.split(' 至 ')[1]
-      }
-    })) || []
+    // 从趋势图中提取数据
+    if (trendRes.data.data?.categories && trendRes.data.data?.series) {
+      chartData.value.trendData = trendRes.data.data.categories.map((date: string, index: number) => ({
+        date: date,
+        energy: trendRes.data.data.series[0]?.data[index] || 0
+      }))
+    }
+    
+    // 填充异常列表 - anomalyRes 是原始响应
+    anomalyList.value = []
+    if (anomalyRes.data.data?.anomalies) {
+      anomalyList.value = anomalyRes.data.data.anomalies.map((item: any) => ({
+        id: item.timestamp || Date.now(),
+        time: item.timestamp,
+        buildingName: '建筑',
+        type: '能耗异常',
+        status: 'pending' as const,
+        buildingId: anomalyRes.data.data.building_id || 'B001',
+        timeRange: {
+          start: anomalyRes.data.data.start_date || '',
+          end: anomalyRes.data.data.end_date || ''
+        }
+      }))
+    }
 
     // 生成能耗排名数据
     generateRankingData(chartData.value.buildingEnergy)

@@ -28,6 +28,7 @@ export interface ChartData {
     type: string
     data: number[]
     smooth?: boolean
+    areaStyle?: any
   }>
 }
 
@@ -50,4 +51,28 @@ export interface DashboardResponse<T> {
   code: number
   message?: string
   data: T
+}
+
+// Summary 接口返回的数据结构
+export interface SummaryResponse {
+  building_id: string
+  period: string
+  time_unit: string
+  details: any[]
+  summary: {
+    total_elec: number | null
+    avg_elec: number | null
+    total_water: number | null
+  }
+}
+
+// Distribution 接口返回的数据结构
+export interface DistributionResponse {
+  categories: string[]
+  series: Array<{
+    name: string
+    type: string
+    data: number[]
+    areaStyle?: any
+  }>
 }

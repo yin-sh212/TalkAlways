@@ -34,7 +34,6 @@ http.interceptors.response.use(
 
     // 根据业务状态码判断
     if (data.code === 0 || data.code === 200) {
-      console.log('请求成功',response)
       return response
     } else {
       // 业务错误

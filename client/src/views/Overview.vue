@@ -1,14 +1,33 @@
 <template>
   <div class="overview-container">
+    <!-- 头部工具栏 -->
+    <div class="header">
+      <h2>能耗监控仪表盘</h2>
+      <div class="toolbar">
+        <span class="last-update">最后更新：{{ lastUpdateTime }}</span>
+        <n-button 
+          type="primary" 
+          size="small"
+          :loading="loading"
+          @click="handleRefresh"
+        >
+          <template #icon>
+            <n-icon :component="Refresh" />
+          </template>
+          刷新数据
+        </n-button>
+      </div>
+    </div>
+
     <!-- 主内容区 -->
     <div class="content">
-      <!-- KPI 卡片区 - 使用组件 -->
+      <!-- KPI 卡片区 -->
       <KpiCards :loading="loading" :kpiData="kpiData" />
 
-      <!-- 能耗排名 TOP5 - 使用组件 -->
+      <!-- 能耗排名 TOP5 -->
       <EnergyRanking :rankingList="rankingList" />
 
-      <!-- 图表区 - 使用组件 -->
+      <!-- 图表区 -->
       <EnergyCharts 
         ref="energyChartsRef"
         :loading="loading" 
@@ -18,10 +37,10 @@
         @building-click="handleBuildingClick"
       />
 
-      <!-- 设备监控 - 使用组件 -->
+      <!-- 设备监控 -->
       <DeviceMonitor :loading="loading" :deviceStats="deviceStats" />
 
-      <!-- 异常列表 - 使用组件 -->
+      <!-- 异常列表 -->
       <AnomalyList 
         :loading="loading" 
         :anomaly-list="anomalyList"
@@ -37,7 +56,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
-import { Sunny, Moon, Refresh } from '@vicons/ionicons5'
+import { Refresh } from '@vicons/ionicons5'
 import { getKPIData, getChartData, getTrendData, getAnomalyList } from '@/api/dashboard'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
@@ -66,8 +85,6 @@ watch(() => window.isDark?.value, (newVal) => {
 
 // 状态
 const loading = ref(false)
-const autoRefresh = ref(true)
-const refreshTimer = ref<any>(null)
 const lastUpdateTime = ref('')
 
 const kpiData = ref<KPIData>({
@@ -165,19 +182,6 @@ const updateLastUpdateTime = () => {
   })
 }
 
-// 启动自动刷新
-const startAutoRefresh = () => {
-  if (refreshTimer.value) {
-    clearInterval(refreshTimer.value)
-  }
-  refreshTimer.value = setInterval(() => {
-    if (autoRefresh.value) {
-      loadData()
-      message.success('数据已自动刷新')
-    }
-  }, 30000) // 30 秒刷新一次
-}
-
 // 加载数据 - 并行调用三个接口
 const loadData = async () => {
   loading.value = true
@@ -205,17 +209,21 @@ const loadData = async () => {
       distributionData: distributionRes // 新增：保存分布图数据
     }
     
-    // 从趋势图中提取数据
+    // 从趋势图中提取数据（使用 trendRes）
     if (trendRes.data.data?.categories && trendRes.data.data?.series) {
-      chartData.value.trendData = trendRes.data.data.categories.map((date: string, index: number) => ({
-        date: date,
-        energy: trendRes.data.data.series[0]?.data[index] || 0
-      }))
+      // 使用第一个 series 的数据作为趋势数据
+      const firstSeries = trendRes.data.data.series[0]
+      if (firstSeries) {
+        chartData.value.trendData = trendRes.data.data.categories.map((date: string, index: number) => ({
+          date: date,
+          energy: firstSeries.data[index] || 0
+        }))
+      }
     }
     
     // 填充异常列表 - anomalyRes 是原始响应
     anomalyList.value = []
-    if (anomalyRes.data.data?.anomalies) {
+    if (anomalyRes.data.data?.anomalies && anomalyRes.data.data.anomalies.length > 0) {
       anomalyList.value = anomalyRes.data.data.anomalies.map((item: any) => ({
         id: item.timestamp || Date.now(),
         time: item.timestamp,
@@ -224,8 +232,8 @@ const loadData = async () => {
         status: 'pending' as const,
         buildingId: anomalyRes.data.data.building_id || 'B001',
         timeRange: {
-          start: anomalyRes.data.data.start_date || '',
-          end: anomalyRes.data.data.end_date || ''
+          start: anomalyRes.data.data.period.split(' 至 ')[0],
+          end: anomalyRes.data.data.period.split(' 至 ')[1]
         }
       }))
     }
@@ -255,8 +263,10 @@ const handleBuildingClick = (buildingName: string) => {
 
 // 刷新数据
 const handleRefresh = () => {
-  loadData()
-  message.success('数据已刷新')
+  loading.value = true
+  loadData().finally(() => {
+    loading.value = false
+  })
 }
 
 // 查看全部异常
@@ -294,13 +304,10 @@ const toggleTheme = () => {
 
 onMounted(() => {
   loadData()
-  startAutoRefresh() // 启动自动刷新
 })
 
 onUnmounted(() => {
-  if (refreshTimer.value) {
-    clearInterval(refreshTimer.value)
-  }
+  // 清理逻辑已移除，不再需要清除定时器
 })
 
 </script>
@@ -322,39 +329,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   transition: background 0.3s ease;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 32px;
-  background: var(--card-bg, white);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: background 0.3s ease;
-  
-  .logo {
-    h1 {
-      font-size: 24px;
-      font-weight: bold;
-      color: var(--text-primary, #18a058);
-      margin: 0;
-      transition: color 0.3s ease;
-    }
-  }
-  
-  .user-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    
-    .username {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-primary, #333);
-      transition: color 0.3s ease;
-    }
-  }
 }
 
 .content {

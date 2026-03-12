@@ -29,6 +29,7 @@ export interface ChartData {
     data: number[]
     smooth?: boolean
     areaStyle?: any
+    lineStyle?: any
   }>
 }
 
@@ -75,4 +76,25 @@ export interface DistributionResponse {
     data: number[]
     areaStyle?: any
   }>
+}
+
+// Trend 接口返回的数据结构
+export interface TrendResponse {
+  categories: string[]
+  series: Array<{
+    name: string
+    type: string
+    data: number[]
+    smooth?: boolean
+    lineStyle?: any
+  }>
+}
+
+// Anomaly 接口返回的数据结构
+export interface AnomalyResponse {
+  building_id: string
+  period: string
+  total_points: number
+  anomaly_count: number
+  anomalies: any[]
 }

@@ -1,5 +1,5 @@
 import http from './http'
-import type { KPIData, ChartData, AnomalyItem, DashboardResponse, SummaryResponse, DistributionResponse } from '@/types/dashboard'
+import type { KPIData, ChartData, AnomalyItem, DashboardResponse, SummaryResponse, DistributionResponse, TrendResponse, AnomalyResponse } from '@/types/dashboard'
 
 // 获取 KPI 数据 - 对接真实接口
 export const getKPIData = async () => {
@@ -90,29 +90,65 @@ export const getChartData = async () => {
 }
 
 // 获取趋势数据 - 对接真实接口
-export const getTrendData = () => {
+export const getTrendData = async () => {
   // 后端接口：GET /api/charts/trend?building_id=xxx&days=7
-  return http.get('/charts/trend', {
-    params: {
-      building_id: 'B001',
-      days: 7
+  try {
+    const response = await http.get<DashboardResponse<TrendResponse>>('/charts/trend', {
+      params: {
+        building_id: 'B001',
+        days: 7
+      }
+    })
+    
+    return response
+  } catch (error) {
+    console.error('获取趋势数据失败:', error)
+    // 返回空响应
+    return {
+      data: {
+        code: 200,
+        data: {
+          categories: [],
+          series: []
+        }
+      }
     }
-  })
+  }
 }
 
 // 获取异常列表 - 对接真实接口
-export const getAnomalyList = (limit = 5) => {
+export const getAnomalyList = async (limit = 5) => {
   // 后端接口：GET /api/statistics/anomaly?building_id=xxx&start_date=xxx&end_date=xxx
   const today = new Date().toISOString().split('T')[0]
   
-  return http.get('/statistics/anomaly', {
-    params: {
-      building_id: 'B001',
-      start_date: today,
-      end_date: today,
-      threshold: 2.0
+  try {
+    const response = await http.get<DashboardResponse<AnomalyResponse>>('/statistics/anomaly', {
+      params: {
+        building_id: 'B001',
+        start_date: today,
+        end_date: today,
+        threshold: 2.0
+      }
+    })
+    
+    return response
+  } catch (error) {
+    console.error('获取异常列表失败:', error)
+    // 返回空响应
+    return {
+      data: {
+        code: 200,
+        message: '成功',
+        data: {
+          building_id: 'B001',
+          period: `${today} 至 ${today}`,
+          total_points: 0,
+          anomaly_count: 0,
+          anomalies: []
+        }
+      }
     }
-  })
+  }
 }
 
 // 跳转到分析页面并带入查询条件

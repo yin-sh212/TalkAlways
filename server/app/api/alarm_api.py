@@ -98,7 +98,8 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
             WHERE id IN ({placeholders}) AND status = 'pending'
         """
 
-        async with Database.get_pool() as conn:
+        pool = await Database.get_pool()
+        async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(sql, request.alarm_ids)
                 affected_rows = cursor.rowcount
@@ -112,7 +113,7 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
                 SELECT id FROM alarms 
                 WHERE id IN ({placeholders}) AND status != 'pending'
             """
-            async with Database.get_pool() as conn:
+            async with pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await cursor.execute(check_sql, request.alarm_ids)
                     failed = await cursor.fetchall()
@@ -202,7 +203,8 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
             WHERE id IN ({placeholders}) AND status != 'resolved'
         """
 
-        async with Database.get_pool() as conn:
+        pool = await Database.get_pool()
+        async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(sql, request.alarm_ids)
                 affected_rows = cursor.rowcount
@@ -215,7 +217,7 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
                 SELECT id FROM alarms 
                 WHERE id IN ({placeholders}) AND status = 'resolved'
             """
-            async with Database.get_pool() as conn:
+            async with pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await cursor.execute(check_sql, request.alarm_ids)
                     failed = await cursor.fetchall()

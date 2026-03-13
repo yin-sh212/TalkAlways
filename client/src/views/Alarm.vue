@@ -67,7 +67,7 @@
               <!-- 操作按钮 -->
               <n-space justify="end" style="margin-top: 16px;">
                 <n-button @click="handleReset">重置</n-button>
-                <n-button type="primary" @click="handleQuery" :loading="queryLoading">
+                <n-button type="primary" @click="() => handleQuery(false)" :loading="queryLoading">
                   查询
                 </n-button>
               </n-space>
@@ -317,12 +317,14 @@ const setQuickTime = (type: 'today' | 'week' | 'month') => {
 }
 
 // 执行查询 - 对接真实接口
-const handleQuery = async () => {
-  try {
-    await queryFormRef.value?.validate()
-  } catch (error) {
-    message.warning('请填写完整的查询条件')
-    return
+const handleQuery = async (skipValidation: boolean = false) => {
+  if (!skipValidation) {
+    try {
+      await queryFormRef.value?.validate()
+    } catch (error) {
+      message.warning('请填写完整的查询条件')
+      return
+    }
   }
 
   queryLoading.value = true
@@ -505,7 +507,7 @@ const handleAcknowledge = async (alarmId: string) => {
       alarm_ids: [parseInt(alarmId) || 0]
     })
     message.success('告警已确认')
-    handleQuery() // 刷新列表
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     console.error('确认失败:', error)
     message.error('确认失败：' + (error.message || '未知错误'))
@@ -520,7 +522,7 @@ const handleResolve = async (alarmId: string) => {
       alarm_ids: [parseInt(alarmId) || 0]
     })
     message.success('告警已解决')
-    handleQuery() // 刷新列表
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     console.error('解决失败:', error)
     message.error('解决失败：' + (error.message || '未知错误'))
@@ -553,7 +555,7 @@ const handleBatchAcknowledge = async (alarmIds: string[]) => {
       message.warning(`${failedCount} 条告警无法确认（可能已处理）`)
     }
 
-    handleQuery() // 刷新列表
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     console.error('批量确认失败:', error)
     message.error('批量确认失败：' + (error.message || '未知错误'))
@@ -586,7 +588,7 @@ const handleBatchResolve = async (alarmIds: string[]) => {
       message.warning(`${failedCount} 条告警无法解决（可能已解决）`)
     }
 
-    handleQuery() // 刷新列表
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     console.error('批量解决失败:', error)
     message.error('批量解决失败：' + (error.message || '未知错误'))

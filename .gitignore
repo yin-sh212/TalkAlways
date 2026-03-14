@@ -38,12 +38,16 @@ __pycache__/
 *.egg-info/
 venv/
 env/
+.env
 .env/
 .pytest_cache/
 .coverage
 htmlcov/
+<<<<<<< HEAD
 *.pkl
 *.faiss
+=======
+>>>>>>> origin/backend
 
 # Java
 *.class

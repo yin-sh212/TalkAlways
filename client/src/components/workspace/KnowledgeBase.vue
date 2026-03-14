@@ -504,6 +504,7 @@ const handleAddDocument = async () => {
 
 // 文件上传事件处理
 const uploading = ref(false);
+const uploadedFiles = ref<any[]>([]);
 
 const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
   const validTypes = [
@@ -531,7 +532,7 @@ const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
   return true;
 };
 
-const handleUploadFinish = async ({ file }: { file: UploadFileInfo }) => {
+const handleUploadFinish = ({ file, event }: { file: UploadFileInfo, event?: ProgressEvent }) => {
   if (!file.file) {
     message.error("文件无效");
     return;
@@ -539,39 +540,59 @@ const handleUploadFinish = async ({ file }: { file: UploadFileInfo }) => {
 
   uploading.value = true;
 
-  try {
-    const response = await uploadDocument(file.file);
+  // 使用 IIFE 包裹异步逻辑
+  (async () => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file.file!);
+      
+      const response = await fetch('/api/upload/document', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 200 && result.data.success) {
+        message.success(`✅ "${file.name}" 上传成功！${result.data.message}`);
+        
+        // 记录上传的文件
+        uploadedFiles.value.push({
+          name: file.name,
+          savedName: result.data.saved_filename,
+          uploadTime: new Date().toLocaleString('zh-CN'),
+          blocksIndexed: result.data.stats?.blocks_indexed || 0
+        });
 
-    if (response.data.success) {
-      message.success(`文件 "${file.name}" 上传成功，正在建立知识库索引...`);
+        // 上传成功后创建文档记录
+        const newDoc: Document = {
+          id: `DOC${String(documents.value.length + 1).padStart(3, "0")}`,
+          title: file.name.replace(/\.[^/.]+$/, ""), // 去掉文件扩展名作为标题
+          category: "technical", // 默认分类为技术文档
+          tags: [], // 初始标签为空
+          summary: `上传文件：${file.name}`,
+          description: `文件 ${file.name} 已上传至知识库，共建立 ${result.data.stats?.blocks_indexed || 0} 个文本块索引。`,
+          solution: "可通过 AI 助手检索此文档内容",
+          notes: [`原始文件名：${file.name}`, `保存路径：${result.data.saved_filename}`],
+          createDate: new Date().toLocaleDateString("zh-CN"),
+          views: 0,
+        };
 
-      // 上传成功后创建文档记录
-      const newDoc: Document = {
-        id: `DOC${String(documents.value.length + 1).padStart(3, "0")}`,
-        title: file.name.replace(/\.[^/.]+$/, ""), // 去掉文件扩展名作为标题
-        category: "technical", // 默认分类为技术文档
-        tags: [], // 初始标签为空
-        summary: `上传文件：${file.name}`,
-        description: `文件 ${file.name} 已上传至知识库，等待进一步处理。`,
-        solution: "待补充",
-        notes: [],
-        createDate: new Date().toLocaleDateString("zh-CN"),
-        views: 0,
-      };
+        documents.value.push(newDoc);
+        message.success("📄 文档记录已创建");
 
-      documents.value.push(newDoc);
-      message.success("文档记录已创建");
-
-      // 刷新文档列表 - 从后端获取真实数据
-      await fetchDocuments();
-    } else {
-      throw new Error(response.data.message || "上传失败");
+        // 刷新文档列表
+        await fetchDocuments();
+      } else {
+        throw new Error(result.message || "上传失败");
+      }
+    } catch (error: any) {
+      console.error('上传错误:', error);
+      message.error(`❌ 上传失败：${error.message}`);
+    } finally {
+      uploading.value = false;
     }
-  } catch (error: any) {
-    message.error(`上传失败：${error.message}`);
-  } finally {
-    uploading.value = false;
-  }
+  })();
 };
 
 const handleUploadError = ({ file }: { file: UploadFileInfo }) => {

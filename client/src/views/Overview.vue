@@ -1,7 +1,7 @@
 <template>
   <div class="overview-container">
     <!-- 头部工具栏 -->
-    <div class="header">
+    <!-- <div class="header">
       <h2>能耗监控仪表盘</h2>
       <div class="toolbar">
         <span class="last-update">最后更新：{{ lastUpdateTime }}</span>
@@ -17,7 +17,7 @@
           刷新数据
         </n-button>
       </div>
-    </div>
+    </div> -->
 
     <!-- 主内容区 -->
     <div class="content">
@@ -77,6 +77,9 @@ const message = useMessage()
 const dialog = useDialog()
 const userStore = useUserStore()
 
+// 当前建筑 ID - 初始为空，等待获取
+const currentBuildingId = ref<string>('')
+
 // 主题状态 - 从全局获取（跟随浏览器）
 const isDark = ref(window.isDark?.value || false)
 
@@ -117,20 +120,6 @@ const deviceStats = ref({
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
 
-// 计算日环比（Mock 数据，实际应从后端获取）
-const calculateDayChange = (currentEnergy: number) => {
-  // TODO: 实际应从后端获取昨日数据
-  const yesterdayEnergy = currentEnergy * (1 + Math.random() * 0.2 - 0.1)
-  return ((currentEnergy - yesterdayEnergy) / yesterdayEnergy) * 100
-}
-
-// 计算周同比（Mock 数据，实际应从后端获取）
-const calculateWeekChange = (currentEnergy: number) => {
-  // TODO: 实际应从后端获取上周数据
-  const lastWeekEnergy = currentEnergy * (1 + Math.random() * 0.3 - 0.15)
-  return ((currentEnergy - lastWeekEnergy) / lastWeekEnergy) * 100
-}
-
 // 生成能耗排名数据
 const generateRankingData = (buildingEnergy: any[]) => {
   if (!buildingEnergy || buildingEnergy.length === 0) {
@@ -165,7 +154,7 @@ const generateRankingData = (buildingEnergy: any[]) => {
 // 更新设备统计数据
 const updateDeviceStats = async () => {
   try {
-    const response = await getDeviceStatus('B001')
+    const response = await getDeviceStatus(currentBuildingId.value)
     const data = response.data.data
     
     deviceStats.value = {
@@ -188,13 +177,13 @@ const updateDeviceStats = async () => {
   }
 }
 
-// 更新今日CO₂减排
+// 更新今日 CO₂减排
 const updateCO2Reduction = async () => {
   try {
     // 获取今日总能耗
     const today = new Date().toISOString().split('T')[0]
     const summaryResponse = await getSummary({
-      building_id: 'B001',
+      building_id: currentBuildingId.value,
       start_date: today,
       end_date: today,
       time_unit: 'day'
@@ -214,7 +203,7 @@ const updateAbnormalDeviceCount = async () => {
   try {
     const today = new Date().toISOString().split('T')[0]
     const anomalyResponse = await detectAnomaly({
-      building_id: 'B001',
+      building_id: currentBuildingId.value,
       start_date: today,
       end_date: today,
       threshold: 2.0
@@ -233,7 +222,7 @@ const updateDayAndWeekChange = async () => {
     // 获取今日数据
     const today = new Date().toISOString().split('T')[0]
     const todayResponse = await getSummary({
-      building_id: 'B001',
+      building_id: currentBuildingId.value,
       start_date: today,
       end_date: today,
       time_unit: 'day'
@@ -243,7 +232,7 @@ const updateDayAndWeekChange = async () => {
     // 获取昨日数据
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const yesterdayResponse = await getSummary({
-      building_id: 'B001',
+      building_id: currentBuildingId.value,
       start_date: yesterday,
       end_date: yesterday,
       time_unit: 'day'
@@ -253,7 +242,7 @@ const updateDayAndWeekChange = async () => {
     // 获取上周同期数据
     const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const lastWeekResponse = await getSummary({
-      building_id: 'B001',
+      building_id: currentBuildingId.value,
       start_date: lastWeek,
       end_date: lastWeek,
       time_unit: 'day'
@@ -336,8 +325,50 @@ const updateLastUpdateTime = () => {
   })
 }
 
+// 获取当前建筑 ID
+const fetchCurrentBuildingId = async () => {
+  try {
+    // 如果 store 中已有建筑 ID，直接使用
+    if (userStore.buildingId) {
+      currentBuildingId.value = userStore.buildingId
+      return
+    }
+    
+    // 否则从接口获取建筑列表
+    const buildingsResponse = await getBuildings()
+    const buildings = buildingsResponse.data.data || []
+    
+    if (buildings && buildings.length > 0) {
+      // 提取第一个建筑 ID
+      const firstBuilding = buildings[0]
+      const buildingId = typeof firstBuilding === 'string' 
+        ? firstBuilding 
+        : (firstBuilding.id || firstBuilding.building_id)
+      
+      currentBuildingId.value = buildingId
+      
+      // 同步到 userStore
+      userStore.setBuildingId(buildingId)
+    } else {
+      // 如果没有建筑列表，使用默认值
+      currentBuildingId.value = 'B001'
+      userStore.setBuildingId('B001')
+    }
+  } catch (error) {
+    console.error('获取建筑 ID 失败:', error)
+    // 使用默认值
+    currentBuildingId.value = 'B001'
+    userStore.setBuildingId('B001')
+  }
+}
+
 // 加载数据 - 并行调用多个接口
 const loadData = async () => {
+  // 确保建筑 ID 已获取后再加载数据
+  if (!currentBuildingId.value) {
+    await fetchCurrentBuildingId()
+  }
+  
   loading.value = true
   try {
     // 并行调用：KPI 数据 + 分布图数据 + 异常列表 + 建筑能耗数据 + 设备状态
@@ -348,10 +379,6 @@ const loadData = async () => {
       updateBuildingEnergyData(),
       updateDeviceStats()
     ])
-
-    console.log('KPI 响应:', kpiRes)
-    console.log('分布图响应:', distributionRes)
-    console.log('异常列表响应:', anomalyRes)
 
     // 填充 KPI 数据
     kpiData.value = kpiRes
@@ -383,7 +410,7 @@ const loadData = async () => {
         buildingName: '建筑',
         type: '能耗异常',
         status: 'pending' as const,
-        buildingId: anomalyRes.data.data.building_id || 'B001',
+        buildingId: currentBuildingId.value,
         timeRange: {
           start: anomalyRes.data.data.period.split(' 至 ')[0],
           end: anomalyRes.data.data.period.split(' 至 ')[1]
@@ -457,7 +484,10 @@ const toggleTheme = () => {
 }
 
 onMounted(() => {
-  loadData()
+  // 先获取建筑 ID，再加载数据
+  fetchCurrentBuildingId().then(() => {
+    loadData()
+  })
 })
 
 onUnmounted(() => {

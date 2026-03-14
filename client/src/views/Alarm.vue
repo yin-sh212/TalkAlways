@@ -362,11 +362,6 @@ const handleQuery = async (skipValidation: boolean = false) => {
       })
     ])
 
-    console.log('告警查询响应:', alarmRes)
-    console.log('统计摘要响应:', summaryRes)
-    console.log('趋势图响应:', trendRes)
-    console.log('分布图响应:', distributionRes)
-
     // 填充表格数据 - 新接口返回格式：{ total, page, page_size, items }
     const alarmData = alarmRes.data?.data || {}
     const alarms = Array.isArray(alarmData.items) ? alarmData.items : []
@@ -397,9 +392,6 @@ const handleQuery = async (skipValidation: boolean = false) => {
     // 图表数据 - 后端返回的是 { categories, series } 格式
     trendData.value = trendRes.data.data || { categories: [], series: [] }
     distributionData.value = distributionRes.data.data || { categories: [], series: [] }
-
-    console.log('趋势图数据:', trendData.value)
-    console.log('分布图数据:', distributionData.value)
 
     // 更新图表
     if (alarmTrendRef.value) {

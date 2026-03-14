@@ -1,11 +1,9 @@
 # app/api/export_api.py
-from fastapi import APIRouter, Response, Query, HTTPException
+from fastapi import APIRouter, Response, Query
 import pandas as pd
 from io import StringIO, BytesIO
 from app.database.db import Database
-from typing import Optional
-import os
-import datetime
+
 
 router = APIRouter(prefix="/api/export", tags=["报表导出"])
 
@@ -15,47 +13,7 @@ router = APIRouter(prefix="/api/export", tags=["报表导出"])
     responses={
         200: {
             "description": "成功导出CSV文件",
-            "content": {
-                "text/csv": {
-                    "example": "building_id,timestamp,electricity,water\nB001,2025-01-01 08:00:00,156.32,12.5\nB001,2025-01-01 09:00:00,178.21,13.2"
-                }
-            }
-        },
-        400: {
-            "description": "参数错误或无数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 400,
-                        "message": "没有数据可导出",
-                        "data": None
-                    }
-                }
-            }
-        },
-        401: {
-            "description": "未认证",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 401,
-                        "message": "未提供认证信息",
-                        "data": None
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "服务器内部错误",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 500,
-                        "message": "导出失败: 数据库连接错误",
-                        "data": None
-                    }
-                }
-            }
+            "content": {"text/csv": {}}
         }
     }
 )
@@ -65,39 +23,25 @@ async def export_csv(
     end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
 ):
     """导出CSV格式报表"""
-    try:
-        sql = """
-            SELECT * FROM energy_consumption 
-            WHERE building_id = %s AND DATE(timestamp) BETWEEN %s AND %s
-            ORDER BY timestamp
-        """
-        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+    sql = """
+        SELECT * FROM energy_consumption 
+        WHERE building_id = %s AND DATE(timestamp) BETWEEN %s AND %s
+        ORDER BY timestamp
+    """
+    data = await Database.fetch_all(sql, (building_id, start_date, end_date))
 
-        if not data:
-            return {
-                "code": 400,
-                "message": "没有数据可导出",
-                "data": None
-            }
+    # 转为DataFrame
+    df = pd.DataFrame(data)
 
-        # 转为DataFrame
-        df = pd.DataFrame(data)
+    # 生成CSV
+    output = StringIO()
+    df.to_csv(output, index=False, encoding='utf-8-sig')
 
-        # 生成CSV
-        output = StringIO()
-        df.to_csv(output, index=False, encoding='utf-8-sig')
-
-        return Response(
-            content=output.getvalue(),
-            media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=energy_{building_id}_{start_date}.csv"}
-        )
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"导出失败: {str(e)}",
-            "data": None
-        }
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=energy_{building_id}_{start_date}.csv"}
+    )
 
 
 @router.get(
@@ -105,47 +49,7 @@ async def export_csv(
     responses={
         200: {
             "description": "成功导出Excel文件",
-            "content": {
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-                    "example": "（二进制文件，此处无法展示示例）"
-                }
-            }
-        },
-        400: {
-            "description": "参数错误或无数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 400,
-                        "message": "没有数据可导出",
-                        "data": None
-                    }
-                }
-            }
-        },
-        401: {
-            "description": "未认证",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 401,
-                        "message": "未提供认证信息",
-                        "data": None
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "服务器内部错误",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 500,
-                        "message": "导出失败: 数据库连接错误",
-                        "data": None
-                    }
-                }
-            }
+            "content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}
         }
     }
 )
@@ -155,40 +59,26 @@ async def export_excel(
     end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
 ):
     """导出Excel格式报表"""
-    try:
-        sql = """
-            SELECT * FROM energy_consumption 
-            WHERE building_id = %s AND DATE(timestamp) BETWEEN %s AND %s
-            ORDER BY timestamp
-        """
-        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+    sql = """
+        SELECT * FROM energy_consumption 
+        WHERE building_id = %s AND DATE(timestamp) BETWEEN %s AND %s
+        ORDER BY timestamp
+    """
+    data = await Database.fetch_all(sql, (building_id, start_date, end_date))
 
-        if not data:
-            return {
-                "code": 400,
-                "message": "没有数据可导出",
-                "data": None
-            }
+    # 转为DataFrame
+    df = pd.DataFrame(data)
 
-        # 转为DataFrame
-        df = pd.DataFrame(data)
+    # 生成Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='能耗数据')
 
-        # 生成Excel
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='能耗数据')
-
-        return Response(
-            content=output.getvalue(),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=energy_{building_id}_{start_date}.xlsx"}
-        )
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"导出失败: {str(e)}",
-            "data": None
-        }
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=energy_{building_id}_{start_date}.xlsx"}
+    )
 
 
 @router.get(
@@ -196,47 +86,7 @@ async def export_excel(
     responses={
         200: {
             "description": "成功导出PDF文件",
-            "content": {
-                "application/pdf": {
-                    "example": "（二进制文件，此处无法展示示例）"
-                }
-            }
-        },
-        400: {
-            "description": "参数错误或无数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 400,
-                        "message": "没有数据可导出",
-                        "data": None
-                    }
-                }
-            }
-        },
-        401: {
-            "description": "未认证",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 401,
-                        "message": "未提供认证信息",
-                        "data": None
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "服务器内部错误",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 500,
-                        "message": "PDF生成失败: 字体错误",
-                        "data": None
-                    }
-                }
-            }
+            "content": {"application/pdf": {}}
         }
     }
 )
@@ -246,12 +96,15 @@ async def export_pdf(
     end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
 ):
     """导出PDF报表 - 支持中文"""
+
+    # 创建日志文件
+    import datetime
     log_file = f"pdf_debug_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
     def log(msg):
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(f"{datetime.datetime.now()}: {msg}\n")
-        print(msg, flush=True)
+        print(msg, flush=True)  # 同时打印到控制台
 
     log("\n" + "=" * 50)
     log("📄 PDF导出调试日志")
@@ -289,11 +142,7 @@ async def export_pdf(
 
         if not data:
             log("❌ 没有数据")
-            return {
-                "code": 400,
-                "message": "没有数据可导出",
-                "data": None
-            }
+            return {"error": "没有数据"}
 
         # 检查字体文件
         log("\n🔍 检查字体文件：")
@@ -324,9 +173,13 @@ async def export_pdf(
 
         log("\n🔤 尝试注册字体：")
 
+        # 尝试每个可用字体
         for font_path, display_name in available_fonts:
             try:
-                font_key = display_name.replace('黑体', 'SimHei').replace('微软雅黑', 'MicrosoftYaHei').replace('宋体', 'SimSun').replace('楷体', 'KaiTi')
+                # 生成字体名
+                font_key = display_name.replace('黑体', 'SimHei').replace('微软雅黑', 'MicrosoftYaHei').replace('宋体',
+                                                                                                                'SimSun').replace(
+                    '楷体', 'KaiTi')
                 pdfmetrics.registerFont(TTFont(font_key, font_path))
                 font_name = font_key
                 font_registered = True
@@ -343,6 +196,7 @@ async def export_pdf(
         # 创建样式
         styles = getSampleStyleSheet()
 
+        # 标题样式
         if font_registered:
             title_style = ParagraphStyle(
                 'CustomTitle',
@@ -365,7 +219,7 @@ async def export_pdf(
             normal_style = styles['Normal']
             log("⚠️ 使用默认英文字体")
 
-        # 标题
+        # 标题（测试中文）
         title_text = f"建筑 {building_id} 能耗报表 ({start_date} 至 {end_date})"
         log(f"📝 标题: {title_text}")
         elements.append(Paragraph(title_text, title_style))
@@ -449,8 +303,4 @@ async def export_pdf(
         log(f"\n❌ PDF导出错误: {e}")
         import traceback
         traceback.print_exc(file=open(log_file, 'a'))
-        return {
-            "code": 500,
-            "message": f"PDF生成失败: {str(e)}",
-            "data": None
-        }
+        return {"error": str(e)}

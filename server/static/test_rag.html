@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RAG测试</title>
+</head>
+<body>
+    <h2>🔧 RAG配置测试</h2>
+
+    <div>
+        <h3>1. 配置阿里云Qwen</h3>
+        <input id="apiKey" placeholder="输入阿里云API Key" size="50">
+        <select id="model">
+            <option value="qwen-plus">qwen-plus</option>
+            <option value="qwen-turbo">qwen-turbo</option>
+            <option value="qwen-max">qwen-max</option>
+        </select>
+        <button onclick="configureLLM()">配置</button>
+        <p id="configResult"></p>
+    </div>
+
+    <div>
+        <h3>2. 测试问答</h3>
+        <input id="question" placeholder="输入问题" size="50" value="冷水机组故障怎么处理？">
+        <button onclick="askQuestion()">提问</button>
+        <div id="answer" style="margin-top:20px; padding:10px; background:#f0f0f0; white-space:pre-wrap;"></div>
+    </div>
+
+    <div>
+        <h3>3. RAG状态</h3>
+        <button onclick="checkHealth()">检查状态</button>
+        <pre id="health" style="background:#f0f0f0; padding:10px;"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+
+        async function configureLLM() {
+            const apiKey = document.getElementById('apiKey').value;
+            const model = document.getElementById('model').value;
+
+            const res = await fetch(`${API_BASE}/api/chat/configure-llm`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({api_key: apiKey, model: model})
+            });
+            const data = await res.json();
+            document.getElementById('configResult').innerText = JSON.stringify(data, null, 2);
+        }
+
+        async function askQuestion() {
+            const query = document.getElementById('question').value;
+
+            const res = await fetch(`${API_BASE}/api/chat/ask`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({query: query, building_id: 'OFF-01'})
+            });
+            const data = await res.json();
+            document.getElementById('answer').innerText = data.answer;
+            console.log('sources:', data.sources);
+        }
+
+        async function checkHealth() {
+            const res = await fetch(`${API_BASE}/api/chat/health`);
+            const data = await res.json();
+            document.getElementById('health').innerText = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>

@@ -182,3 +182,98 @@ export const exportPDF = (params: ExportParams) => {
     responseType: 'blob'
   })
 }
+
+// ========== 新增告警管理接口 ==========
+
+// 告警类型字典响应
+export interface AlarmTypeDict {
+  code: string
+  name: string
+  description: string
+}
+
+// 告警级别字典响应
+export interface AlarmLevelDict {
+  level: number
+  name: string
+  color: string
+  description?: string
+}
+
+// 告警列表请求参数
+export interface AlarmListParams {
+  status?: string
+  building_id?: string
+  alarm_level?: number
+  page?: number
+  page_size?: number
+}
+
+// 告警列表响应数据
+export interface AlarmListResponse {
+  code: number
+  message: string
+  data: {
+    total: number
+    page: number
+    page_size: number
+    items: AlarmListItem[]
+  }
+}
+
+// 告警列表项
+export interface AlarmListItem {
+  id: number
+  building_id: string
+  meter_id?: string
+  alarm_type: string
+  alarm_level: number
+  description?: string
+  start_time: string
+  end_time?: string
+  status: string
+  value?: number
+  threshold?: number
+  solution?: string
+}
+
+// 批量操作请求
+export interface BatchOperationRequest {
+  alarm_ids: number[]
+}
+
+// 批量操作响应
+export interface BatchOperationResponse {
+  code: number
+  message: string
+  data: {
+    confirmed_count?: number
+    resolved_count?: number
+    failed_ids: number[]
+  }
+}
+
+// 获取告警类型字典
+export const getAlarmTypes = () => {
+  return http.get<{ code: number; message: string; data: AlarmTypeDict[] }>('/alarm/dict/alarm-types')
+}
+
+// 获取告警级别字典
+export const getAlarmLevels = () => {
+  return http.get<{ code: number; message: string; data: AlarmLevelDict[] }>('/alarm/dict/alarm-levels')
+}
+
+// 获取告警列表
+export const getAlarmList = (params?: AlarmListParams) => {
+  return http.get<AlarmListResponse>('/alarm/list', { params })
+}
+
+// 批量确认告警
+export const batchConfirmAlarms = (data: BatchOperationRequest) => {
+  return http.post<BatchOperationResponse>('/alarm/batch-confirm', data)
+}
+
+// 批量解决告警
+export const batchResolveAlarms = (data: BatchOperationRequest) => {
+  return http.post<BatchOperationResponse>('/alarm/batch-resolve', data)
+}

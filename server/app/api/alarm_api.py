@@ -56,7 +56,7 @@ class AlarmResponse(BaseModel):
                 "application/json": {
                     "example": {
                         "code": 400,
-                        "message": "告警ID列表不能为空",
+                        "message": "告警 ID 列表不能为空",
                         "data": None
                     }
                 }
@@ -85,12 +85,12 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
     if not request.alarm_ids:
         return {
             "code": 400,
-            "message": "告警ID列表不能为空",
+            "message": "告警 ID 列表不能为空",
             "data": None
         }
 
     try:
-        # 构建SQL，批量更新状态
+        # 构建 SQL，批量更新状态
         placeholders = ','.join(['%s'] * len(request.alarm_ids))
         sql = f"""
             UPDATE alarms 
@@ -98,21 +98,22 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
             WHERE id IN ({placeholders}) AND status = 'pending'
         """
 
-        async with Database.get_pool() as conn:
+        pool = await Database.get_pool()
+        async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(sql, request.alarm_ids)
                 affected_rows = cursor.rowcount
                 await conn.commit()
 
-        # 找出可能失败的ID（已经是confirmed/resolved状态的不会更新）
+        # 找出可能失败的 ID（已经是 confirmed/resolved 状态的不会更新）
         failed_ids = []
         if affected_rows < len(request.alarm_ids):
-            # 查询未更新的ID
+            # 查询未更新的 ID
             check_sql = f"""
                 SELECT id FROM alarms 
                 WHERE id IN ({placeholders}) AND status != 'pending'
             """
-            async with Database.get_pool() as conn:
+            async with pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await cursor.execute(check_sql, request.alarm_ids)
                     failed = await cursor.fetchall()
@@ -130,7 +131,7 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
     except Exception as e:
         return {
             "code": 500,
-            "message": f"数据库更新失败: {str(e)}",
+            "message": f"数据库更新失败：{str(e)}",
             "data": None
         }
 
@@ -190,7 +191,7 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
     if not request.alarm_ids:
         return {
             "code": 400,
-            "message": "告警ID列表不能为空",
+            "message": "告警 ID 列表不能为空",
             "data": None
         }
 
@@ -202,20 +203,21 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
             WHERE id IN ({placeholders}) AND status != 'resolved'
         """
 
-        async with Database.get_pool() as conn:
+        pool = await Database.get_pool()
+        async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(sql, request.alarm_ids)
                 affected_rows = cursor.rowcount
                 await conn.commit()
 
-        # 找出可能失败的ID
+        # 找出可能失败的 ID
         failed_ids = []
         if affected_rows < len(request.alarm_ids):
             check_sql = f"""
                 SELECT id FROM alarms 
                 WHERE id IN ({placeholders}) AND status = 'resolved'
             """
-            async with Database.get_pool() as conn:
+            async with pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await cursor.execute(check_sql, request.alarm_ids)
                     failed = await cursor.fetchall()
@@ -233,7 +235,7 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
     except Exception as e:
         return {
             "code": 500,
-            "message": f"数据库更新失败: {str(e)}",
+            "message": f"数据库更新失败：{str(e)}",
             "data": None
         }
 
@@ -276,8 +278,12 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
 async def get_alarm_types():
     """获取告警类型列表（供前端下拉框使用）"""
     try:
-        sql = "SELECT code, name, description FROM alarm_types ORDER BY sort_order"
-        data = await Database.fetch_all(sql)
+        # 返回固定的告警类型（无需数据库表）
+        data = [
+            {"code": "equipment", "name": "设备告警", "description": "设备运行异常"},
+            {"code": "energy", "name": "能耗告警", "description": "能耗数据异常"},
+            {"code": "environment", "name": "环境告警", "description": "环境参数异常"}
+        ]
 
         return {
             "code": 200,
@@ -287,7 +293,7 @@ async def get_alarm_types():
     except Exception as e:
         return {
             "code": 500,
-            "message": f"查询失败: {str(e)}",
+            "message": f"查询失败：{str(e)}",
             "data": None
         }
 
@@ -330,8 +336,12 @@ async def get_alarm_types():
 async def get_alarm_levels():
     """获取告警级别列表（供前端下拉框使用）"""
     try:
-        sql = "SELECT level, name, color, description FROM alarm_levels ORDER BY level"
-        data = await Database.fetch_all(sql)
+        # 返回固定的告警级别（无需数据库表）
+        data = [
+            {"level": 1, "name": "严重", "color": "red", "description": "需要立即处理的严重告警"},
+            {"level": 2, "name": "警告", "color": "orange", "description": "需要尽快处理的警告"},
+            {"level": 3, "name": "提示", "color": "blue", "description": "一般性提示告警"}
+        ]
 
         return {
             "code": 200,
@@ -341,7 +351,7 @@ async def get_alarm_levels():
     except Exception as e:
         return {
             "code": 500,
-            "message": f"查询失败: {str(e)}",
+            "message": f"查询失败：{str(e)}",
             "data": None
         }
 
@@ -364,11 +374,13 @@ async def get_alarm_levels():
                                 {
                                     "id": 1,
                                     "building_id": "B001",
-                                    "alarm_type": "equipment",
+                                    "meter_id": "M001",
+                                    "alarm_type": "energy",
                                     "alarm_level": 1,
-                                    "description": "冷水机组高压报警",
-                                    "start_time": "2025-03-13 14:30:00",
-                                    "status": "pending"
+                                    "description": "能耗异常：250.5 kWh",
+                                    "start_time": "2025-03-13T14:30:00",
+                                    "status": "pending",
+                                    "value": 250.5
                                 }
                             ]
                         }

@@ -534,12 +534,6 @@ const handleQuery = async () => {
       })
     ])
 
-    console.log('查询响应:', queryRes)
-    console.log('统计摘要响应:', summaryRes)
-    console.log('异常检测响应:', anomalyRes)
-    console.log('趋势图响应:', trendRes)
-    console.log('分布图响应:', distributionRes)
-
     // 填充表格数据
     const queryData = queryRes.data.data || []
     tableData.value = queryData.map((item: any) => ({

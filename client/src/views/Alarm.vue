@@ -67,7 +67,7 @@
               <!-- 操作按钮 -->
               <n-space justify="end" style="margin-top: 16px;">
                 <n-button @click="handleReset">重置</n-button>
-                <n-button type="primary" @click="handleQuery" :loading="queryLoading">
+                <n-button type="primary" @click="() => handleQuery(false)" :loading="queryLoading">
                   查询
                 </n-button>
               </n-space>
@@ -115,6 +115,8 @@
         @update="handleTableUpdate"
         @acknowledge="handleAcknowledge"
         @resolve="handleResolve"
+        @batch-acknowledge="handleBatchAcknowledge"
+        @batch-resolve="handleBatchResolve"
       />
     </div>
 
@@ -139,7 +141,7 @@ import AlarmTrend from '@/components/alarm/Trend.vue'
 import AlarmDistribution from '@/components/alarm/Distribution.vue'
 import AlarmList from '@/components/alarm/List.vue'
 import * as alarmApi from '@/api/alarm'
-import type { AlarmItem, AlarmQueryParams } from '@/api/alarm'
+import type { AlarmItem, AlarmQueryParams, AlarmListItem, AlarmTypeDict, AlarmLevelDict } from '@/api/alarm'
 
 const message = useMessage()
 
@@ -182,22 +184,11 @@ const queryRules = {
 // 建筑选项（从后端获取）
 const buildingOptions = ref<any[]>([])
 
-// 告警级别选项
-const severityOptions = [
-  { label: '紧急', value: 'critical', style: { color: '#f5222d' } },
-  { label: '重要', value: 'major', style: { color: '#fa8c16' } },
-  { label: '一般', value: 'minor', style: { color: '#1890ff' } },
-  { label: '提示', value: 'warning', style: { color: '#52c41a' } }
-]
+// 告警级别选项（从后端获取）
+const severityOptions = ref<any[]>([])
 
-// 告警类型选项
-const alarmTypeOptions = [
-  { label: '能耗异常', value: 'energy_anomaly' },
-  { label: '设备故障', value: 'device_fault' },
-  { label: '传感器异常', value: 'sensor_error' },
-  { label: '通信故障', value: 'communication_error' },
-  { label: '超限告警', value: 'threshold_exceeded' }
-]
+// 告警类型选项（从后端获取）
+const alarmTypeOptions = ref<any[]>([])
 
 // 表格数据
 const tableData = ref<any[]>([])
@@ -255,6 +246,49 @@ const loadBuildings = async () => {
   }
 }
 
+// 获取告警级别字典
+const loadAlarmLevels = async () => {
+  try {
+    const response = await alarmApi.getAlarmLevels()
+    const levels = response.data?.data || []
+    
+    severityOptions.value = levels.map((level: AlarmLevelDict) => ({
+      label: level.name,
+      value: level.level,
+      style: { color: level.color }
+    }))
+  } catch (error: any) {
+    console.error('获取告警级别失败:', error)
+    // 使用默认 Mock 数据
+    severityOptions.value = [
+      { label: '紧急', value: 1, style: { color: '#f5222d' } },
+      { label: '警告', value: 2, style: { color: '#fa8c16' } },
+      { label: '提示', value: 3, style: { color: '#1890ff' } }
+    ]
+  }
+}
+
+// 获取告警类型字典
+const loadAlarmTypes = async () => {
+  try {
+    const response = await alarmApi.getAlarmTypes()
+    const types = response.data?.data || []
+    
+    alarmTypeOptions.value = types.map((type: AlarmTypeDict) => ({
+      label: type.name,
+      value: type.code
+    }))
+  } catch (error: any) {
+    console.error('获取告警类型失败:', error)
+    // 使用默认 Mock 数据
+    alarmTypeOptions.value = [
+      { label: '能耗异常', value: 'energy' },
+      { label: '设备告警', value: 'equipment' },
+      { label: '环境告警', value: 'environment' }
+    ]
+  }
+}
+
 // 设置快捷时间
 const setQuickTime = (type: 'today' | 'week' | 'month') => {
   const now = new Date()
@@ -283,12 +317,14 @@ const setQuickTime = (type: 'today' | 'week' | 'month') => {
 }
 
 // 执行查询 - 对接真实接口
-const handleQuery = async () => {
-  try {
-    await queryFormRef.value?.validate()
-  } catch (error) {
-    message.warning('请填写完整的查询条件')
-    return
+const handleQuery = async (skipValidation: boolean = false) => {
+  if (!skipValidation) {
+    try {
+      await queryFormRef.value?.validate()
+    } catch (error) {
+      message.warning('请填写完整的查询条件')
+      return
+    }
   }
 
   queryLoading.value = true
@@ -304,12 +340,8 @@ const handleQuery = async () => {
     
     // 并行调用多个接口
     const [alarmRes, summaryRes, trendRes, distributionRes] = await Promise.all([
-      alarmApi.queryAlarms({ // 告警查询
-        building_ids: queryForm.buildings.length > 0 ? queryForm.buildings : [buildingId],
-        start_date: startDate,
-        end_date: endDate,
-        severity: queryForm.severity.length > 0 ? queryForm.severity : undefined,
-        alarm_type: queryForm.alarmType.length > 0 ? queryForm.alarmType : undefined,
+      alarmApi.getAlarmList({ // 使用新的告警列表接口
+        building_id: buildingId,
         page: pagination.page,
         page_size: pagination.pageSize
       }),
@@ -330,43 +362,36 @@ const handleQuery = async () => {
       })
     ])
 
-    console.log('告警查询响应:', alarmRes)
-    console.log('统计摘要响应:', summaryRes)
-    console.log('趋势图响应:', trendRes)
-    console.log('分布图响应:', distributionRes)
-
-    // 填充表格数据 - 后端返回的是数组格式
-    const alarms = Array.isArray(alarmRes.data.data) ? alarmRes.data.data : []
+    // 填充表格数据 - 新接口返回格式：{ total, page, page_size, items }
+    const alarmData = alarmRes.data?.data || {}
+    const alarms = Array.isArray(alarmData.items) ? alarmData.items : []
     
     tableData.value = alarms.map((item: any, index: number) => ({
       id: item.id || item.alarm_id || `alarm_${index}`,
-      timestamp: item.timestamp || item.time,
+      timestamp: item.start_time || item.timestamp || item.time,
       building_id: item.building_id,
-      building_name: item.building_name,
+      building_name: item.building_name || getBuildingName(item.building_id),
       alarm_type: item.alarm_type,
-      severity: item.severity,
-      status: item.status || 'unresolved',
+      severity: item.severity || String(item.alarm_level),
+      status: mapStatus(item.status),
       description: item.description,
-      buildingName: item.building_name || '未知建筑',
+      buildingName: item.building_name || getBuildingName(item.building_id),
       alarmTypeName: getAlarmTypeName(item.alarm_type),
-      severityName: getSeverityName(item.severity)
+      severityName: getSeverityName(item.severity || String(item.alarm_level))
     }))
 
     // 填充指标数据 - 使用确切路径 data.data.summary
     const summaryData = summaryRes.data.data?.summary || {}
     metrics.value = {
-      totalAlarms: summaryData?.total_alarm_count || alarms.length,
-      unresolvedCount: summaryData?.unresolved_count || alarms.filter(a => a.status === 'unresolved').length,
-      criticalCount: summaryData?.critical_count || alarms.filter(a => a.severity === 'critical').length,
-      acknowledgedCount: summaryData?.acknowledged_count || alarms.filter(a => a.status === 'acknowledged').length
+      totalAlarms: summaryData?.total_alarm_count || alarmData.total || alarms.length,
+      unresolvedCount: summaryData?.unresolved_count || alarms.filter(a => a.status === 'pending').length,
+      criticalCount: summaryData?.critical_count || alarms.filter(a => a.alarm_level === 1).length,
+      acknowledgedCount: summaryData?.acknowledged_count || alarms.filter(a => a.status === 'confirmed').length
     }
 
     // 图表数据 - 后端返回的是 { categories, series } 格式
     trendData.value = trendRes.data.data || { categories: [], series: [] }
     distributionData.value = distributionRes.data.data || { categories: [], series: [] }
-
-    console.log('趋势图数据:', trendData.value)
-    console.log('分布图数据:', distributionData.value)
 
     // 更新图表
     if (alarmTrendRef.value) {
@@ -428,7 +453,10 @@ const getAlarmTypeName = (type: string) => {
     'device_fault': '设备故障',
     'sensor_error': '传感器异常',
     'communication_error': '通信故障',
-    'threshold_exceeded': '超限告警'
+    'threshold_exceeded': '超限告警',
+    'equipment': '设备告警',
+    'energy': '能耗告警',
+    'environment': '环境告警'
   }
   return typeMap[type] || type
 }
@@ -439,20 +467,39 @@ const getSeverityName = (severity: string) => {
     'critical': '紧急',
     'major': '重要',
     'minor': '一般',
-    'warning': '提示'
+    'warning': '提示',
+    '1': '严重',
+    '2': '警告',
+    '3': '提示'
   }
   return severityMap[severity] || severity
+}
+
+// 获取建筑名称（辅助函数）
+const getBuildingName = (buildingId: string) => {
+  const building = buildingOptions.value.find(b => b.value === buildingId)
+  return building?.label || buildingId
+}
+
+// 映射后端状态到前端状态
+const mapStatus = (status: string) => {
+  const statusMap: Record<string, string> = {
+    'pending': 'unresolved',
+    'confirmed': 'acknowledged',
+    'resolved': 'resolved'
+  }
+  return statusMap[status] || status
 }
 
 // 确认告警 - 对接真实接口
 const handleAcknowledge = async (alarmId: string) => {
   try {
-    await alarmApi.acknowledgeAlarm({
-      alarm_id: alarmId,
-      operator: 'current_user' // 实际应从用户信息中获取
+    // 使用新接口的单个确认（通过批量接口实现）
+    await alarmApi.batchConfirmAlarms({
+      alarm_ids: [parseInt(alarmId) || 0]
     })
     message.success('告警已确认')
-    handleQuery() // 刷新列表
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     console.error('确认失败:', error)
     message.error('确认失败：' + (error.message || '未知错误'))
@@ -462,16 +509,81 @@ const handleAcknowledge = async (alarmId: string) => {
 // 解决告警 - 对接真实接口
 const handleResolve = async (alarmId: string) => {
   try {
-    await alarmApi.resolveAlarm({
-      alarm_id: alarmId,
-      operator: 'current_user',
-      resolution: '已处理'
+    // 使用新接口的单个解决（通过批量接口实现）
+    await alarmApi.batchResolveAlarms({
+      alarm_ids: [parseInt(alarmId) || 0]
     })
     message.success('告警已解决')
-    handleQuery() // 刷新列表
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     console.error('解决失败:', error)
     message.error('解决失败：' + (error.message || '未知错误'))
+  }
+}
+
+// 批量确认告警 - 新增
+const handleBatchAcknowledge = async (alarmIds: string[]) => {
+  try {
+    const ids = alarmIds.map(id => parseInt(id) || 0).filter(id => id !== 0)
+    
+    if (ids.length === 0) {
+      message.warning('没有有效的告警 ID')
+      return
+    }
+
+    const response = await alarmApi.batchConfirmAlarms({
+      alarm_ids: ids
+    })
+
+    const result = response.data?.data
+    const successCount = result?.confirmed_count || 0
+    const failedCount = result?.failed_ids?.length || 0
+
+    if (successCount > 0) {
+      message.success(`成功确认 ${successCount} 条告警`)
+    }
+    
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法确认（可能已处理）`)
+    }
+
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
+  } catch (error: any) {
+    console.error('批量确认失败:', error)
+    message.error('批量确认失败：' + (error.message || '未知错误'))
+  }
+}
+
+// 批量解决告警 - 新增
+const handleBatchResolve = async (alarmIds: string[]) => {
+  try {
+    const ids = alarmIds.map(id => parseInt(id) || 0).filter(id => id !== 0)
+    
+    if (ids.length === 0) {
+      message.warning('没有有效的告警 ID')
+      return
+    }
+
+    const response = await alarmApi.batchResolveAlarms({
+      alarm_ids: ids
+    })
+
+    const result = response.data?.data
+    const successCount = result?.resolved_count || 0
+    const failedCount = result?.failed_ids?.length || 0
+
+    if (successCount > 0) {
+      message.success(`成功解决 ${successCount} 条告警`)
+    }
+    
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法解决（可能已解决）`)
+    }
+
+    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
+  } catch (error: any) {
+    console.error('批量解决失败:', error)
+    message.error('批量解决失败：' + (error.message || '未知错误'))
   }
 }
 
@@ -512,8 +624,10 @@ const handleExport = async () => {
 }
 
 onMounted(() => {
-  // 初始化时执行一次查询
+  // 初始化时执行查询
   loadBuildings()
+  loadAlarmLevels()
+  loadAlarmTypes()
   handleQuery()
 })
 </script>

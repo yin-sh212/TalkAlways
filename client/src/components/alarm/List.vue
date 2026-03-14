@@ -25,8 +25,11 @@
 
 <script setup lang="ts">
 import { ref, h } from 'vue'
+import { useMessage } from 'naive-ui'
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui'
 import { NButton, NTag, NPopconfirm } from 'naive-ui'
+
+const message = useMessage()
 
 interface AlarmItem {
   id: string
@@ -50,6 +53,8 @@ const emit = defineEmits<{
   (e: 'update', page: number, pageSize: number): void
   (e: 'acknowledge', alarmId: string): void
   (e: 'resolve', alarmId: string): void
+  (e: 'batch-acknowledge', alarmIds: string[]): void
+  (e: 'batch-resolve', alarmIds: string[]): void
 }>()
 
 const checkedRowKeys = ref<DataTableRowKey[]>([])
@@ -165,27 +170,25 @@ const onChecked = (keys: DataTableRowKey[]) => {
 // 批量确认
 const handleBatchAcknowledge = () => {
   if (checkedRowKeys.value.length === 0) {
+    message.warning('请选择至少一条告警')
     return
   }
   
-  checkedRowKeys.value.forEach(id => {
-    emit('acknowledge', id as string)
-  })
-  
-  checkedRowKeys.value = []
+  // 发送批量确认事件到父组件
+  const ids = checkedRowKeys.value.map(id => id as string)
+  emit('batch-acknowledge', ids)
 }
 
 // 批量解决
 const handleBatchResolve = () => {
   if (checkedRowKeys.value.length === 0) {
+    message.warning('请选择至少一条告警')
     return
   }
   
-  checkedRowKeys.value.forEach(id => {
-    emit('resolve', id as string)
-  })
-  
-  checkedRowKeys.value = []
+  // 发送批量解决事件到父组件
+  const ids = checkedRowKeys.value.map(id => id as string)
+  emit('batch-resolve', ids)
 }
 
 defineExpose({

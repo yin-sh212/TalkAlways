@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, HTTPException,Body
+from fastapi import APIRouter, Query, HTTPException, Body
 from typing import Optional, List
 from datetime import datetime
 from app.database.db import Database
@@ -6,42 +6,35 @@ from app.database.db import Database
 router = APIRouter(prefix="/api/query", tags=["数据查询"])
 
 
+async def get_raw_data_example():
+    """动态生成原始数据的响应示例"""
+    sql = "SELECT * FROM energy_consumption ORDER BY timestamp DESC LIMIT 1"
+    data = await Database.fetch_all(sql)
+
+    if not data:
+        return {
+            "code": 200,
+            "data": [],
+            "pagination": {"total": 0, "limit": 5, "offset": 0, "has_more": False}
+        }
+
+    return {
+        "code": 200,
+        "data": data[:1],
+        "pagination": {"total": 1000, "limit": 5, "offset": 0, "has_more": True}
+    }
+
+
 # @router.get("/raw")
 @router.get(
     "/raw",
+    description="获取原始能耗数据，返回实际查询结果",
     responses={
-        200: {
-            "description": "成功返回数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "data": [
-                            {
-                                "id": 1,
-                                "building_id": "B001",
-                                "timestamp": "2025-01-01 08:00:00",
-                                "electricity": 156.32,
-                                "water": 12.5,
-                                "ambient_temp": 22.3,
-                                "is_anomaly": False
-                            }
-                        ],
-                        "pagination": {
-                            "total": 1240,
-                            "limit": 5,
-                            "offset": 0,
-                            "has_more": True
-                        }
-                    }
-                }
-            }
-        },
         400: {
             "description": "请求参数错误",
             "content": {
                 "application/json": {
-                    "example": {"detail": "日期格式错误，应为YYYY-MM-DD"}
+                    "example": {"detail": "日期格式错误，应为 YYYY-MM-DD"}
                 }
             }
         }
@@ -58,8 +51,8 @@ async def get_raw_data(
             None,
             description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31"
         ),
-        limit: int = Query(100, ge=1, le=1000, description="返回条数，默认100"),
-        offset: int = Query(0, ge=0, description="分页偏移，默认0")
+        limit: int = Query(100, ge=1, le=1000, description="返回条数，默认 100"),
+        offset: int = Query(0, ge=0, description="分页偏移，默认 0")
 ):
     """获取原始能耗数据（支持多条件查询）"""
     sql = "SELECT * FROM energy_consumption WHERE 1=1"
@@ -92,6 +85,18 @@ async def get_raw_data(
 
     data = await Database.fetch_all(sql, tuple(params))
 
+    # 动态生成响应示例
+    response_example = {
+        "code": 200,
+        "data": data[:5] if len(data) > 5 else data,  # 取前 5 条作为示例
+        "pagination": {
+            "total": total,
+            "limit": min(limit, 5),  # 示例中显示较小的 limit
+            "offset": offset,
+            "has_more": offset + min(limit, 5) < total
+        }
+    }
+
     return {
         "code": 200,
         "data": data,
@@ -100,7 +105,8 @@ async def get_raw_data(
             "limit": limit,
             "offset": offset,
             "has_more": offset + limit < total
-        }
+        },
+        "_example": response_example  # 添加动态生成的示例
     }
 
 

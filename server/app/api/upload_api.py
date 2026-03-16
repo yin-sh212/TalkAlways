@@ -1,5 +1,5 @@
 # app/api/upload_api.py
-from fastapi import APIRouter, UploadFile, File, HTTPException,Response
+from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Query
 import pandas as pd
 import json
 import xml.etree.ElementTree as ET
@@ -319,7 +319,11 @@ async def upload_file(file: UploadFile = File(..., description="支持多种格�
             "data": None
         }
     except Exception as e:
-        raise HTTPException(500, f"处理失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"处理失败: {str(e)}",
+            "data": None
+        }
 
 
 @router.get(
@@ -381,8 +385,9 @@ async def get_supported_formats():
     }
 )
 async def download_template():
-    """下载CSV模板"""
-    template = """building_id,timestamp,electricity,water,ambient_temp
+    """下载 CSV 模板"""
+    try:
+        template = """building_id,timestamp,electricity,water,ambient_temp
 B001,2025-03-01 08:00:00,156.3,12.5,22.5
 B001,2025-03-01 09:00:00,178.2,13.1,23.1
 B002,2025-03-01 08:00:00,89.7,8.2,22.3"""
@@ -395,6 +400,6 @@ B002,2025-03-01 08:00:00,89.7,8.2,22.3"""
     except Exception as e:
         return {
             "code": 500,
-            "message": f"生成模板失败: {str(e)}",
+            "message": f"生成模板失败：{str(e)}",
             "data": None
         }

@@ -7,46 +7,15 @@ from app.database.db import Database
 router = APIRouter(prefix="/api/charts", tags=["图表数据"])
 
 
-@router.get(
-    "/trend",
-    responses={
-        200: {
-            "description": "成功返回趋势图数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "data": {
-                            "categories": ["2025-01-01 08:00", "2025-01-01 09:00", "2025-01-01 10:00"],
-                            "series": [
-                                {
-                                    "name": "平均用电量",
-                                    "type": "line",
-                                    "data": [156.3, 178.2, 201.5],
-                                    "smooth": True
-                                },
-                                {
-                                    "name": "最大用电量",
-                                    "type": "line",
-                                    "data": [189.4, 210.3, 235.6],
-                                    "smooth": True,
-                                    "lineStyle": {"type": "dashed"}
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-    }
-)
+@router.get("/trend")
 async def get_trend_data(
-        building_id: str = Query(..., description="建筑编号，如：B001"),
+        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
         days: int = Query(7, ge=1, le=30, description="天数，默认7天")
 ):
-    """获取趋势图数据（ECharts格式）"""
+    """获取趋势图数据（ECharts格式）- 适配新数据"""
     try:
-        # 先用一个简单的查询获取数据
+        # 新数据是2016年的，不能用 NOW()，需要调整时间范围
+        # 这里改为查询最后N天的数据（从数据集的最后一天往前推）
         sql = """
             SELECT 
                 DATE(timestamp) as date,
@@ -56,12 +25,14 @@ async def get_trend_data(
                 MIN(electricity) as min_elec
             FROM energy_consumption
             WHERE building_id = %s 
-                AND timestamp >= DATE_SUB(NOW(), INTERVAL %s DAY)
             GROUP BY DATE(timestamp), HOUR(timestamp)
-            ORDER BY date, hour
+            ORDER BY date DESC, hour DESC
+            LIMIT %s
         """
+        # 注意：这里简化了，直接取N天的数据点
+        # 如果需要精确的N天，需要用子查询
 
-        data = await Database.fetch_all(sql, (building_id, days))
+        data = await Database.fetch_all(sql, (building_id, days * 24))  # 每天24小时
 
         if not data:
             return {
@@ -70,19 +41,20 @@ async def get_trend_data(
                     "categories": [],
                     "series": [
                         {"name": "平均用电量", "type": "line", "data": [], "smooth": True},
-                        {"name": "最大用电量", "type": "line", "data": [], "smooth": True,
-                         "lineStyle": {"type": "dashed"}}
+                        {"name": "最大用电量", "type": "line", "data": [], "smooth": True}
                     ]
                 }
             }
 
-        # 在Python中格式化时间字符串，而不是在SQL中
+        # 反转数据，让时间正序
+        data = list(reversed(data))
+
+        # 格式化时间
         categories = []
         avg_values = []
         max_values = []
 
         for item in data:
-            # 格式化成 "YYYY-MM-DD HH:00"
             hour_str = f"{item['date']} {item['hour']:02d}:00"
             categories.append(hour_str)
             avg_values.append(float(item['avg_elec']) if item['avg_elec'] is not None else 0)
@@ -122,61 +94,42 @@ async def get_trend_data(
             }
         }
 
-@router.get(
-    "/comparison",
-    responses={
-        200: {
-            "description": "成功返回对比图数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "data": {
-                            "categories": ["办公大楼A", "教学楼B", "医院C"],
-                            "series": [
-                                {
-                                    "name": "总用电量 (kWh)",
-                                    "type": "bar",
-                                    "data": [8719.2, 5234.5, 15678.3]
-                                },
-                                {
-                                    "name": "平均用电量 (kWh)",
-                                    "type": "bar",
-                                    "data": [155.7, 98.3, 234.5]
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-    }
-)
+
+@router.get("/comparison")
 async def get_comparison_data(
-        building_ids: str = Query(..., description="建筑编号，逗号分隔，如：B001,B002"),
-        start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
-        end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
+        building_ids: str = Query(...,
+                                  description="建筑编号，逗号分隔，如：Eagle_education_Cassie,Eagle_education_Wesley"),
+        start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
+        end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2016-07-31")
 ):
-    """获取多建筑对比数据（柱状图）"""
+    """获取多建筑对比数据（柱状图）- 适配新数据"""
     ids = building_ids.split(',')
 
     result = []
     for building_id in ids:
         building_id = building_id.strip()
 
+        # 查询能耗数据
         sql = """
             SELECT 
                 COALESCE(SUM(electricity), 0) as total_elec,
                 COALESCE(AVG(electricity), 0) as avg_elec,
-                COALESCE(MAX(electricity), 0) as peak_elec
+                COALESCE(MAX(electricity), 0) as peak_elec,
+                COALESCE(AVG(cooling_load), 0) as avg_cooling,
+                COALESCE(AVG(heating_load), 0) as avg_heating,
+                COALESCE(AVG(ambient_temp), 0) as avg_temp
             FROM energy_consumption
             WHERE building_id = %s 
                 AND DATE(timestamp) BETWEEN %s AND %s
         """
         data = await Database.fetch_one(sql, (building_id, start_date, end_date))
         if not data:
-            data = {"total_elec": 0, "avg_elec": 0, "peak_elec": 0}
+            data = {
+                "total_elec": 0, "avg_elec": 0, "peak_elec": 0,
+                "avg_cooling": 0, "avg_heating": 0, "avg_temp": 0
+            }
 
+        # 获取建筑名称（从 buildings 表）
         name_sql = "SELECT name FROM buildings WHERE id = %s"
         name_data = await Database.fetch_one(name_sql, (building_id,))
 
@@ -185,70 +138,72 @@ async def get_comparison_data(
             "building_name": name_data['name'] if name_data else building_id,
             "total_electricity": float(data['total_elec']),
             "avg_electricity": float(data['avg_elec']),
-            "peak_electricity": float(data['peak_elec'])
+            "peak_electricity": float(data['peak_elec']),
+            "avg_cooling_load": float(data['avg_cooling']),
+            "avg_heating_load": float(data['avg_heating']),
+            "avg_temperature": float(data['avg_temp'])
         })
+
+    # 基础对比（用电量）
+    base_series = [
+        {
+            "name": "总用电量 (kWh)",
+            "type": "bar",
+            "data": [item['total_electricity'] for item in result]
+        },
+        {
+            "name": "平均用电量 (kWh)",
+            "type": "bar",
+            "data": [item['avg_electricity'] for item in result]
+        }
+    ]
+
+    # 可选：冷热负荷对比（如果前端需要）
+    cooling_series = [
+        {
+            "name": "平均冷冻水冷量",
+            "type": "bar",
+            "data": [item['avg_cooling_load'] for item in result]
+        }
+    ]
+
+    heating_series = [
+        {
+            "name": "平均供热能耗",
+            "type": "bar",
+            "data": [item['avg_heating_load'] for item in result]
+        }
+    ]
 
     return {
         "code": 200,
         "data": {
             "categories": [item['building_name'] for item in result],
-            "series": [
-                {
-                    "name": "总用电量 (kWh)",
-                    "type": "bar",
-                    "data": [item['total_electricity'] for item in result]
-                },
-                {
-                    "name": "平均用电量 (kWh)",
-                    "type": "bar",
-                    "data": [item['avg_electricity'] for item in result]
-                }
-            ]
-        }
-    }
-
-
-@router.get(
-    "/distribution",
-    responses={
-        200: {
-            "description": "成功返回分布图数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "data": {
-                            "categories": ["00:00", "01:00", "02:00", "03:00", "04:00", "05:00",
-                                           "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
-                                           "12:00", "13:00", "14:00", "15:00", "16:00", "17:00",
-                                           "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"],
-                            "series": [
-                                {
-                                    "name": "用电量 (kWh)",
-                                    "type": "line",
-                                    "data": [45.2, 42.1, 38.5, 35.2, 34.8, 36.2,
-                                             42.5, 78.3, 156.2, 178.3, 201.5, 189.4,
-                                             165.3, 158.2, 145.6, 142.3, 148.5, 156.7,
-                                             168.2, 145.3, 123.4, 98.5, 67.3, 52.1],
-                                    "areaStyle": {}
-                                }
-                            ]
-                        }
-                    }
-                }
+            "series": base_series,
+            # 如果需要更多对比，可以添加：
+            "extra_series": {
+                "cooling": cooling_series,
+                "heating": heating_series,
+                "temperature": [item['avg_temperature'] for item in result]
             }
         }
     }
-)
+
+
+@router.get("/distribution")
 async def get_distribution_data(
-        building_id: str = Query(..., description="建筑编号，如：B001"),
-        date: str = Query(..., description="日期，格式：YYYY-MM-DD，例如：2025-01-15")
+        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        date: str = Query(..., description="日期，格式：YYYY-MM-DD，例如：2016-07-15")
 ):
-    """获取某天的小时分布数据（折线图）"""
+    """获取某天的小时分布数据（折线图）- 适配新数据"""
+    # 查询当天的小时分布
     sql = """
         SELECT 
             HOUR(timestamp) as hour,
-            AVG(electricity) as electricity
+            AVG(electricity) as electricity,
+            AVG(cooling_load) as cooling_load,
+            AVG(heating_load) as heating_load,
+            AVG(ambient_temp) as ambient_temp
         FROM energy_consumption
         WHERE building_id = %s 
             AND DATE(timestamp) = %s
@@ -260,23 +215,57 @@ async def get_distribution_data(
 
     # 补全24小时
     hours = list(range(24))
-    values = [0] * 24
+    elec_values = [0] * 24
+    cooling_values = [0] * 24
+    heating_values = [0] * 24
+    temp_values = [0] * 24
 
     for item in data:
         hour = item['hour']
-        values[hour] = float(item['electricity']) if item['electricity'] else 0
+        elec_values[hour] = float(item['electricity']) if item['electricity'] else 0
+        cooling_values[hour] = float(item['cooling_load']) if item['cooling_load'] else 0
+        heating_values[hour] = float(item['heating_load']) if item['heating_load'] else 0
+        temp_values[hour] = float(item['ambient_temp']) if item['ambient_temp'] else 0
+
+    # 默认返回用电量分布
+    series = [
+        {
+            "name": "用电量 (kWh)",
+            "type": "line",
+            "data": elec_values,
+            "areaStyle": {}
+        }
+    ]
+
+    # 如果前端需要多系列，可以增加
+    multi_series = [
+        {
+            "name": "用电量 (kWh)",
+            "type": "line",
+            "data": elec_values,
+            "areaStyle": {}
+        },
+        {
+            "name": "冷冻水冷量",
+            "type": "line",
+            "data": cooling_values,
+            "lineStyle": {"type": "dashed"}
+        },
+        {
+            "name": "供热能耗",
+            "type": "line",
+            "data": heating_values,
+            "lineStyle": {"type": "dotted"}
+        }
+    ]
 
     return {
         "code": 200,
         "data": {
             "categories": [f"{h:02d}:00" for h in hours],
-            "series": [
-                {
-                    "name": "用电量 (kWh)",
-                    "type": "line",
-                    "data": values,
-                    "areaStyle": {}
-                }
-            ]
+            "series": series,  # 默认单系列
+            "multi_series": multi_series,  # 可选多系列
+            "temperature": temp_values  # 温度数据
         }
     }
+

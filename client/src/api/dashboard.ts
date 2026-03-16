@@ -3,17 +3,45 @@ import type { KPIData, ChartData, AnomalyItem, DashboardResponse, SummaryRespons
 import { getSummary, detectAnomaly } from './statistics'
 import { getDistributionData, getTrendData as getTrendDataFromCharts } from './charts'
 import { getDeviceStatus } from './query'
+import { useBuildingStore } from '@/store/building'
+
+// 有效数据时间范围常量
+export const VALID_DATE_START = '2016-07-01'
+export const VALID_DATE_END = '2016-08-31'
+// 使用有效范围内的一个固定日期作为"今天"
+export const MOCK_TODAY = '2016-07-15'
+
+// 获取当前建筑 ID
+const getBuildingId = () => {
+  const buildingStore = useBuildingStore()
+  const buildingId = buildingStore.currentBuildingId || ''
+  console.log('[Dashboard API] 获取到的建筑 ID:', buildingId)
+  return buildingId
+}
 
 // 获取 KPI 数据 - 对接真实接口
 export const getKPIData = async () => {
   // 后端接口：GET /api/statistics/summary?building_id=xxx&start_date=xxx&end_date=xxx&time_unit=day
-  const today = new Date().toISOString().split('T')[0]
+  const buildingId = getBuildingId()
+  
+  if (!buildingId) {
+    console.warn('未设置建筑 ID，返回默认数据')
+    return {
+      totalEnergy: 0,
+      energyChange: 0,
+      dayChange: 0,
+      weekChange: 0,
+      deviceOnlineRate: 100,
+      abnormalDeviceCount: 0,
+      co2Reduction: 0
+    }
+  }
   
   try {
     const response = await getSummary({
-      building_id: 'B001',  // 默认建筑
-      start_date: today,
-      end_date: today,
+      building_id: buildingId,
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
       time_unit: 'day'
     })
     
@@ -63,12 +91,20 @@ export const getKPIData = async () => {
 // 获取图表数据 - 对接真实接口
 export const getChartData = async () => {
   // 后端接口：GET /api/charts/distribution?building_id=xxx&date=xxx
-  const today = new Date().toISOString().split('T')[0]
+  const buildingId = getBuildingId()
+  
+  if (!buildingId) {
+    console.warn('未设置建筑 ID，返回默认数据')
+    return {
+      categories: [],
+      series: []
+    }
+  }
   
   try {
     const response = await getDistributionData({
-      building_id: 'B001',
-      date: today
+      building_id: buildingId,
+      date: MOCK_TODAY
     })
     
     const distributionData = response.data.data
@@ -91,9 +127,24 @@ export const getChartData = async () => {
 // 获取趋势数据 - 对接真实接口
 export const getTrendData = async () => {
   // 后端接口：GET /api/charts/trend?building_id=xxx&days=7
+  const buildingId = getBuildingId()
+  
+  if (!buildingId) {
+    console.warn('未设置建筑 ID，返回默认数据')
+    return {
+      data: {
+        code: 200,
+        data: {
+          categories: [],
+          series: []
+        }
+      }
+    }
+  }
+  
   try {
     const response = await getTrendDataFromCharts({
-      building_id: 'B001',
+      building_id: buildingId,
       days: 7
     })
     
@@ -116,13 +167,30 @@ export const getTrendData = async () => {
 // 获取异常列表 - 对接真实接口
 export const getAnomalyList = async (limit = 5) => {
   // 后端接口：GET /api/statistics/anomaly?building_id=xxx&start_date=xxx&end_date=xxx
-  const today = new Date().toISOString().split('T')[0]
+  const buildingId = getBuildingId()
+  
+  if (!buildingId) {
+    console.warn('未设置建筑 ID，返回默认数据')
+    return {
+      data: {
+        code: 200,
+        message: '成功',
+        data: {
+          building_id: '',
+          period: `${MOCK_TODAY} 至 ${MOCK_TODAY}`,
+          total_points: 0,
+          anomaly_count: 0,
+          anomalies: []
+        }
+      }
+    }
+  }
   
   try {
     const response = await detectAnomaly({
-      building_id: 'B001',
-      start_date: today,
-      end_date: today,
+      building_id: buildingId,
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
       threshold: 2.0
     })
     
@@ -135,8 +203,8 @@ export const getAnomalyList = async (limit = 5) => {
         code: 200,
         message: '成功',
         data: {
-          building_id: 'B001',
-          period: `${today} 至 ${today}`,
+          building_id: '',
+          period: `${MOCK_TODAY} 至 ${MOCK_TODAY}`,
           total_points: 0,
           anomaly_count: 0,
           anomalies: []

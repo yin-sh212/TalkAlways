@@ -1,24 +1,5 @@
 <template>
   <div class="overview-container">
-    <!-- 头部工具栏 -->
-    <!-- <div class="header">
-      <h2>能耗监控仪表盘</h2>
-      <div class="toolbar">
-        <span class="last-update">最后更新：{{ lastUpdateTime }}</span>
-        <n-button 
-          type="primary" 
-          size="small"
-          :loading="loading"
-          @click="handleRefresh"
-        >
-          <template #icon>
-            <n-icon :component="Refresh" />
-          </template>
-          刷新数据
-        </n-button>
-      </div>
-    </div> -->
-
     <!-- 主内容区 -->
     <div class="content">
       <!-- KPI 卡片区 -->
@@ -52,11 +33,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
-import { Refresh } from '@vicons/ionicons5'
+import { useBuildingStore } from '@/store/building'
 import { getKPIData, getChartData, getAnomalyList } from '@/api/dashboard'
 import { getSummary, detectAnomaly } from '@/api/statistics'
 import { getBuildings, getDeviceStatus } from '@/api/query'
@@ -76,9 +57,14 @@ const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const userStore = useUserStore()
+const buildingStore = useBuildingStore()
 
-// 当前建筑 ID - 初始为空，等待获取
-const currentBuildingId = ref<string>('')
+// 当前建筑 ID - 从 buildingStore 获取
+const currentBuildingId = computed(() => {
+  const id = buildingStore.currentBuildingId
+  console.log('[Overview] 当前建筑 ID:', id)
+  return id
+})
 
 // 主题状态 - 从全局获取（跟随浏览器）
 const isDark = ref(window.isDark?.value || false)
@@ -119,6 +105,12 @@ const deviceStats = ref({
 })
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
+
+// 有效数据时间范围常量
+const VALID_DATE_START = '2016-07-01'
+const VALID_DATE_END = '2016-08-31'
+// 使用有效范围内的一个固定日期作为"今天"
+const MOCK_TODAY = '2016-07-15'
 
 // 生成能耗排名数据
 const generateRankingData = (buildingEnergy: any[]) => {
@@ -180,36 +172,34 @@ const updateDeviceStats = async () => {
 // 更新今日 CO₂减排
 const updateCO2Reduction = async () => {
   try {
-    // 获取今日总能耗
-    const today = new Date().toISOString().split('T')[0]
+    // 获取今日总能耗（使用有效数据范围内的日期）
     const summaryResponse = await getSummary({
       building_id: currentBuildingId.value,
-      start_date: today,
-      end_date: today,
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
       time_unit: 'day'
     })
     
     const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
     
-    // 更新KPI数据中的CO₂减排量
-    kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每MWh减排0.5吨CO₂
+    // 更新 KPI 数据中的 CO₂减排量
+    kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
   } catch (error) {
-    console.error('更新CO₂减排失败:', error)
+    console.error('更新 CO₂减排失败:', error)
   }
 }
 
 // 更新异常设备数量
 const updateAbnormalDeviceCount = async () => {
   try {
-    const today = new Date().toISOString().split('T')[0]
     const anomalyResponse = await detectAnomaly({
       building_id: currentBuildingId.value,
-      start_date: today,
-      end_date: today,
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
       threshold: 2.0
     })
     
-    // 更新KPI数据中的异常设备数量
+    // 更新 KPI 数据中的异常设备数量
     kpiData.value.abnormalDeviceCount = anomalyResponse.data.data.anomaly_count || 0
   } catch (error) {
     console.error('更新异常设备数量失败:', error)
@@ -219,18 +209,17 @@ const updateAbnormalDeviceCount = async () => {
 // 更新日环比和周同比
 const updateDayAndWeekChange = async () => {
   try {
-    // 获取今日数据
-    const today = new Date().toISOString().split('T')[0]
+    // 获取今日数据（使用有效数据范围内的日期）
     const todayResponse = await getSummary({
       building_id: currentBuildingId.value,
-      start_date: today,
-      end_date: today,
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
       time_unit: 'day'
     })
     const todayEnergy = (todayResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
     
     // 获取昨日数据
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const yesterday = '2016-07-14'
     const yesterdayResponse = await getSummary({
       building_id: currentBuildingId.value,
       start_date: yesterday,
@@ -240,7 +229,7 @@ const updateDayAndWeekChange = async () => {
     const yesterdayEnergy = (yesterdayResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
     
     // 获取上周同期数据
-    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const lastWeek = '2016-07-08'
     const lastWeekResponse = await getSummary({
       building_id: currentBuildingId.value,
       start_date: lastWeek,
@@ -271,11 +260,11 @@ const updateBuildingEnergyData = async () => {
       
       return (async () => {
         try {
-          const today = new Date().toISOString().split('T')[0]
+          // 使用有效数据范围内的日期
           const response = await getSummary({
-            building_id: buildingId,
-            start_date: today,
-            end_date: today,
+            building_id: buildingId, // 传递字符串 ID
+            start_date: MOCK_TODAY,
+            end_date: MOCK_TODAY,
             time_unit: 'day'
           })
           
@@ -328,37 +317,32 @@ const updateLastUpdateTime = () => {
 // 获取当前建筑 ID
 const fetchCurrentBuildingId = async () => {
   try {
-    // 如果 store 中已有建筑 ID，直接使用
-    if (userStore.buildingId) {
-      currentBuildingId.value = userStore.buildingId
+    // 如果 buildingStore 中已有建筑 ID，直接使用
+    if (buildingStore.currentBuildingId) {
+      console.log('[Overview] 使用已缓存的建筑 ID:', buildingStore.currentBuildingId)
       return
     }
     
     // 否则从接口获取建筑列表
-    const buildingsResponse = await getBuildings()
-    const buildings = buildingsResponse.data.data || []
+    console.log('[Overview] 开始获取建筑列表...')
+    await buildingStore.fetchBuildings()
     
-    if (buildings && buildings.length > 0) {
-      // 提取第一个建筑 ID
-      const firstBuilding = buildings[0]
-      const buildingId = typeof firstBuilding === 'string' 
-        ? firstBuilding 
-        : (firstBuilding.id || firstBuilding.building_id)
-      
-      currentBuildingId.value = buildingId
-      
-      // 同步到 userStore
-      userStore.setBuildingId(buildingId)
-    } else {
+    console.log('[Overview] 获取到的建筑列表:', buildingStore.buildings)
+    
+    if (!buildingStore.currentBuildingId && buildingStore.buildings.length > 0) {
+      // 使用第一个建筑的 ID（已经是字符串）
+      const firstBuildingId = buildingStore.buildings[0].id
+      console.log('[Overview] 设置第一个建筑 ID 为当前建筑:', firstBuildingId)
+      buildingStore.setCurrentBuildingId(firstBuildingId)
+    } else if (!buildingStore.currentBuildingId) {
       // 如果没有建筑列表，使用默认值
-      currentBuildingId.value = 'B001'
-      userStore.setBuildingId('B001')
+      console.warn('[Overview] 未获取到建筑列表，使用默认值 B001')
+      buildingStore.setCurrentBuildingId('B001')
     }
   } catch (error) {
     console.error('获取建筑 ID 失败:', error)
     // 使用默认值
-    currentBuildingId.value = 'B001'
-    userStore.setBuildingId('B001')
+    buildingStore.setCurrentBuildingId('B001')
   }
 }
 
@@ -368,6 +352,8 @@ const loadData = async () => {
   if (!currentBuildingId.value) {
     await fetchCurrentBuildingId()
   }
+  
+  console.log('[Overview] 开始加载数据，当前建筑 ID:', currentBuildingId.value)
   
   loading.value = true
   try {

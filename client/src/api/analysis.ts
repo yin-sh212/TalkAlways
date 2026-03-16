@@ -117,9 +117,14 @@ export interface ExportParams {
 }
 
 export const exportCSV = (params: ExportParams) => {
+  // 确保使用从后端获取的真实建筑 ID
+  if (!params.buildings || params.buildings.length === 0) {
+    throw new Error('必须指定建筑 ID')
+  }
+  
   return http.get('/export/csv', {
     params: {
-      building_id: params.buildings[0] || 'B001',
+      building_id: params.buildings[0],
       start_date: new Date(params.startTime).toISOString().split('T')[0],
       end_date: new Date(params.endTime).toISOString().split('T')[0]
     },
@@ -128,9 +133,14 @@ export const exportCSV = (params: ExportParams) => {
 }
 
 export const exportExcel = (params: ExportParams) => {
+  // 确保使用从后端获取的真实建筑 ID
+  if (!params.buildings || params.buildings.length === 0) {
+    throw new Error('必须指定建筑 ID')
+  }
+  
   return http.get('/export/excel', {
     params: {
-      building_id: params.buildings[0] || 'B001',
+      building_id: params.buildings[0],
       start_date: new Date(params.startTime).toISOString().split('T')[0],
       end_date: new Date(params.endTime).toISOString().split('T')[0]
     },
@@ -139,9 +149,14 @@ export const exportExcel = (params: ExportParams) => {
 }
 
 export const exportPDF = (params: ExportParams) => {
+  // 确保使用从后端获取的真实建筑 ID
+  if (!params.buildings || params.buildings.length === 0) {
+    throw new Error('必须指定建筑 ID')
+  }
+  
   return http.get('/export/pdf', {
     params: {
-      building_id: params.buildings[0] || 'B001',
+      building_id: params.buildings[0],
       start_date: new Date(params.startTime).toISOString().split('T')[0],
       end_date: new Date(params.endTime).toISOString().split('T')[0]
     },

@@ -327,6 +327,12 @@ const handleQuery = async (skipValidation: boolean = false) => {
     }
   }
 
+  // 确保选择了建筑
+  if (!queryForm.buildings || queryForm.buildings.length === 0) {
+    message.warning('请选择建筑')
+    return
+  }
+
   queryLoading.value = true
   tableLoading.value = true
   metricsLoading.value = true
@@ -336,7 +342,30 @@ const handleQuery = async (skipValidation: boolean = false) => {
     // 准备查询参数
     const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
     const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const buildingId = queryForm.buildings[0] || 'B001'
+    
+    // 验证时间范围（2016-07-01 至 2016-08-31）
+    const validStartDate = '2016-07-01'
+    const validEndDate = '2016-08-31'
+    
+    if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
+      message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
+      queryLoading.value = false
+      tableLoading.value = false
+      metricsLoading.value = false
+      chartLoading.value = false
+      return
+    }
+    
+    // 使用用户选择的第一个建筑 ID（必须是从后端获取的真实 ID）
+    const buildingId = queryForm.buildings[0]
+    console.log('[Alarm] 使用的建筑 ID:', buildingId)
+    console.log('[Alarm] 查询参数:', {
+      buildingId,
+      startDate,
+      endDate,
+      page: pagination.page,
+      pageSize: pagination.pageSize
+    })
     
     // 并行调用多个接口
     const [alarmRes, summaryRes, trendRes, distributionRes] = await Promise.all([
@@ -596,8 +625,25 @@ const handleExport = async () => {
     const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
     const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
     
+    // 验证时间范围（2016-07-01 至 2016-08-31）
+    const validStartDate = '2016-07-01'
+    const validEndDate = '2016-08-31'
+    
+    if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
+      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
+      exportLoading.value = false
+      return
+    }
+    
+    // 确保使用从后端获取的真实建筑 ID
+    if (!queryForm.buildings || queryForm.buildings.length === 0) {
+      message.warning('请选择建筑')
+      exportLoading.value = false
+      return
+    }
+    
     const exportParams = {
-      building_ids: queryForm.buildings.length > 0 ? queryForm.buildings : ['B001'],
+      building_ids: queryForm.buildings,
       startTime: startDate,
       endTime: endDate,
       format: 'excel' as const
@@ -608,7 +654,7 @@ const handleExport = async () => {
     const url = window.URL.createObjectURL(response.data as Blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `告警报表_${new Date().toLocaleDateString()}_${Date.now()}.xlsx`
+    link.download = `告警报表_${startDate}_${endDate}_${Date.now()}.xlsx`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

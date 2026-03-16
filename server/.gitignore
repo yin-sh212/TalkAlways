@@ -43,6 +43,13 @@ env/
 .coverage
 htmlcov/
 
+# SSL 证书文件（安全敏感）
+*.pem
+*.crt
+*.key
+certs/
+ssl_certs/
+
 # Java
 *.class
 *.jar

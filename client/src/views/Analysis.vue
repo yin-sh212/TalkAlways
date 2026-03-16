@@ -493,15 +493,39 @@ const handleQuery = async () => {
     return
   }
 
+  // 确保选择了建筑
+  if (!queryForm.buildings || queryForm.buildings.length === 0) {
+    message.warning('请选择建筑')
+    return
+  }
+
+  // 验证时间范围
+  const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+  const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+  
+  // 检查时间是否在有效范围内（2016-07-01 至 2016-08-31）
+  const validStartDate = '2016-07-01'
+  const validEndDate = '2016-08-31'
+  
+  if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
+    message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
+    return
+  }
+  
+  // 使用用户选择的第一个建筑 ID（必须是从后端获取的真实 ID）
+  const buildingId = queryForm.buildings[0]
+  console.log('[Analysis] 使用的建筑 ID:', buildingId)
+  console.log('[Analysis] 查询参数:', {
+    buildingId,
+    parameter: queryForm.parameter,
+    startDate,
+    endDate
+  })
+
   tableLoading.value = true
   queryLoading.value = false
 
   try {
-    // 准备查询参数
-    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const buildingId = queryForm.buildings[0] || 'B001'
-    
     // 并行调用多个接口获取数据
     const [queryRes, summaryRes, anomalyRes, trendRes, distributionRes] = await Promise.all([
       analysisApi.queryData({ // 核心查询接口

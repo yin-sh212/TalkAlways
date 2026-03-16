@@ -1,58 +1,27 @@
-from fastapi import APIRouter, HTTPException,Query
-from typing import Optional
+# app/api/statistics_api.py
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional, List
 from datetime import datetime
 from app.database.db import Database
 from app.services.anomaly_detector import detect_anomalies_3sigma
+import numpy as np
 
 router = APIRouter(prefix="/api/statistics", tags=["统计分析"])
 
 
-# @router.get("/summary")
-@router.get(
-    "/summary",
-    responses={
-        200: {
-            "description": "成功返回汇总数据",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "building_id": "B001",
-                        "period": "2025-01-01 至 2025-01-07",
-                        "time_unit": "day",
-                        "details": [
-                            {
-                                "period": "2025-01-01",
-                                "total_elec": 1245.6,
-                                "avg_elec": 155.7,
-                                "max_elec": 234.5,
-                                "min_elec": 89.2,
-                                "data_points": 8
-                            }
-                        ],
-                        "summary": {
-                            "total_elec": 8719.2,
-                            "avg_elec": 155.7,
-                            "total_water": 87.5
-                        }
-                    }
-                }
-            }
-        }
-    }
-)
+@router.get("/summary")
 async def get_summary(
-    building_id: str,
-    start_date: str,
-    end_date: str,
-    time_unit: str = Query("day", pattern="^(hour|day|week|month)$")  # 新参数名
+        building_id: str,
+        start_date: str,
+        end_date: str,
+        time_unit: str = Query("day", pattern="^(hour|day|week|month)$"),
+        include_fields: Optional[str] = Query("all", description="包含的字段：all/electricity/cooling/heating/env")
 ):
-    """时段汇总 - 支持 time_unit 参数"""
-    # 兼容旧的 group_by 参数（如果前端还用旧的）
+    """时段汇总统计 - 支持多种能耗指标"""
     group_by = time_unit
-    """时段汇总统计"""
+
     # 根据group_by确定SQL
     if group_by == "day":
-        time_format = "%Y-%m-%d"
         group_sql = "DATE(timestamp) as period"
     elif group_by == "week":
         group_sql = "DATE_FORMAT(timestamp, '%Y-%u') as period"
@@ -61,16 +30,50 @@ async def get_summary(
     else:
         group_sql = "DATE(timestamp) as period"
 
+    # 根据include_fields决定查询哪些字段
+    select_fields = [group_sql]
+
+    # 总是包含计数
+    select_fields.append("COUNT(*) as data_points")
+
+    if include_fields in ["all", "electricity"]:
+        select_fields.extend([
+            "SUM(electricity) as total_elec",
+            "AVG(electricity) as avg_elec",
+            "MAX(electricity) as max_elec",
+            "MIN(electricity) as min_elec",
+            "STDDEV(electricity) as std_elec"
+        ])
+
+    if include_fields in ["all", "cooling"]:
+        select_fields.extend([
+            "SUM(cooling_load) as total_cooling",
+            "AVG(cooling_load) as avg_cooling",
+            "MAX(cooling_load) as max_cooling",
+            "MIN(cooling_load) as min_cooling"
+        ])
+
+    if include_fields in ["all", "heating"]:
+        select_fields.extend([
+            "SUM(heating_load) as total_heating",
+            "AVG(heating_load) as avg_heating",
+            "MAX(heating_load) as max_heating",
+            "MIN(heating_load) as min_heating"
+        ])
+
+    if include_fields in ["all", "env"]:
+        select_fields.extend([
+            "AVG(ambient_temp) as avg_temp",
+            "MAX(ambient_temp) as max_temp",
+            "MIN(ambient_temp) as min_temp",
+            "AVG(pressure) as avg_pressure"
+        ])
+
+    select_clause = ", ".join(select_fields)
+
     sql = f"""
         SELECT 
-            {group_sql},
-            SUM(electricity) as total_elec,
-            AVG(electricity) as avg_elec,
-            MAX(electricity) as max_elec,
-            MIN(electricity) as min_elec,
-            STDDEV(electricity) as std_elec,
-            SUM(water) as total_water,
-            COUNT(*) as data_points
+            {select_clause}
         FROM energy_consumption
         WHERE building_id = %s 
             AND DATE(timestamp) BETWEEN %s AND %s
@@ -81,11 +84,33 @@ async def get_summary(
     data = await Database.fetch_all(sql, (building_id, start_date, end_date))
 
     # 计算总计
-    total_sql = """
+    total_select = ["COUNT(*) as total_points"]
+
+    if include_fields in ["all", "electricity"]:
+        total_select.extend([
+            "SUM(electricity) as total_elec",
+            "AVG(electricity) as avg_elec"
+        ])
+    if include_fields in ["all", "cooling"]:
+        total_select.extend([
+            "SUM(cooling_load) as total_cooling",
+            "AVG(cooling_load) as avg_cooling"
+        ])
+    if include_fields in ["all", "heating"]:
+        total_select.extend([
+            "SUM(heating_load) as total_heating",
+            "AVG(heating_load) as avg_heating"
+        ])
+    if include_fields in ["all", "env"]:
+        total_select.extend([
+            "AVG(ambient_temp) as avg_temp",
+            "AVG(pressure) as avg_pressure"
+        ])
+
+    total_clause = ", ".join(total_select)
+    total_sql = f"""
         SELECT 
-            SUM(electricity) as total_elec,
-            AVG(electricity) as avg_elec,
-            SUM(water) as total_water
+            {total_clause}
         FROM energy_consumption
         WHERE building_id = %s 
             AND DATE(timestamp) BETWEEN %s AND %s
@@ -93,138 +118,129 @@ async def get_summary(
     total = await Database.fetch_one(total_sql, (building_id, start_date, end_date))
 
     return {
-        "building_id": building_id,
-        "period": f"{start_date} 至 {end_date}",
-        "group_by": group_by,
-        "details": data,
-        "summary": total
-    }
-
-
-# @router.get("/cop")
-@router.get(
-    "/cop",
-    responses={
-        200: {
-            "description": "成功返回能效比(COP)计算结果",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "building_id": "B001",
-                        "period": "2025-01-01 至 2025-01-31",
-                        "avg_cop": 3.45,
-                        "data": [
-                            {
-                                "timestamp": "2025-01-01 08:00:00",
-                                "electricity": 156.32,
-                                "supply_temp": 8.5,
-                                "return_temp": 15.2,
-                                "cop": 4.2
-                            },
-                            {
-                                "timestamp": "2025-01-01 09:00:00",
-                                "electricity": 178.21,
-                                "supply_temp": 8.7,
-                                "return_temp": 15.5,
-                                "cop": 3.8
-                            }
-                        ]
-                    }
-                }
-            }
+        "code": 200,
+        "message": "成功",
+        "data": {
+            "building_id": building_id,
+            "period": f"{start_date} 至 {end_date}",
+            "time_unit": time_unit,
+            "include_fields": include_fields,
+            "details": data,
+            "summary": total
         }
     }
-)
+
+
+@router.get("/cop")
 async def calculate_cop(
-        building_id: str = Query(..., description="建筑编号，如：B001"),
-        start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
-        end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31")
+        building_id: str = Query(..., description="建筑编号"),
+        start_date: str = Query(..., description="开始日期"),
+        end_date: str = Query(..., description="结束日期"),
+        cop_type: str = Query("cooling", pattern="^(cooling|heating|both)$", description="COP类型：制冷/供热/两者")
 ):
-    """计算能效比(COP)"""
-    sql = """
+    """计算能效比(COP) - 使用新数据集的实际数据"""
+
+    # 基础SQL
+    base_sql = """
         SELECT 
             timestamp,
             electricity,
-            supply_temp,
-            return_temp,
-            -- 简化COP计算：制冷量 ≈ 4.2 * 流量 * (回水-出水) / 耗电量
-            -- 假设流量为常数1
-            CASE 
-                WHEN electricity > 0 
-                THEN (return_temp - supply_temp) * 4.2 * 1 / electricity
-                ELSE 0
-            END as cop
+            cooling_load,
+            heating_load,
+            ambient_temp
         FROM energy_consumption
         WHERE building_id = %s 
             AND DATE(timestamp) BETWEEN %s AND %s
             AND electricity > 0
-            AND supply_temp IS NOT NULL
-            AND return_temp IS NOT NULL
         ORDER BY timestamp
     """
 
-    data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+    data = await Database.fetch_all(base_sql, (building_id, start_date, end_date))
 
-    # 计算平均COP
-    if data:
-        avg_cop = sum(item['cop'] for item in data) / len(data)
-    else:
-        avg_cop = 0
-
-    return {
-        "building_id": building_id,
-        "period": f"{start_date} 至 {end_date}",
-        "avg_cop": round(avg_cop, 2),
-        "data": data
-    }
-
-
-@router.get(
-    "/anomaly",
-    responses={
-        200: {
-            "description": "成功返回异常检测结果",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "building_id": "B001",
-                        "period": "2025-01-01 至 2025-01-31",
-                        "method": "moving_average",
-                        "threshold": "2.0倍标准差",
-                        "total_points": 744,
-                        "anomaly_count": 3,
-                        "mean": 156.3,
-                        "std": 42.5,
-                        "anomalies": [
-                            {
-                                "index": 128,
-                                "timestamp": "2025-01-15 14:00:00",
-                                "value": 345.2,
-                                "mean": 168.5,
-                                "z_score": 4.2,
-                                "deviation": "+105%"
-                            }
-                        ]
-                    }
-                }
+    if not data:
+        return {
+            "code": 200,
+            "data": {
+                "building_id": building_id,
+                "period": f"{start_date} 至 {end_date}",
+                "avg_cop_cooling": None,
+                "avg_cop_heating": None,
+                "details": []
             }
         }
+
+    # 计算COP
+    result = []
+    cooling_cops = []
+    heating_cops = []
+
+    for row in data:
+        item = {
+            "timestamp": row['timestamp'],
+            "electricity": row['electricity'],
+            "ambient_temp": row['ambient_temp']
+        }
+
+        # 制冷COP = 冷冻水冷量 / 耗电量
+        if cop_type in ["cooling", "both"] and row['cooling_load'] and row['cooling_load'] > 0:
+            cop_cooling = row['cooling_load'] / row['electricity']
+            item['cop_cooling'] = round(cop_cooling, 2)
+            cooling_cops.append(cop_cooling)
+
+        # 供热COP = 供热能耗 / 耗电量
+        if cop_type in ["heating", "both"] and row['heating_load'] and row['heating_load'] > 0:
+            cop_heating = row['heating_load'] / row['electricity']
+            item['cop_heating'] = round(cop_heating, 2)
+            heating_cops.append(cop_heating)
+
+        result.append(item)
+
+    # 计算平均值
+    avg_cooling = sum(cooling_cops) / len(cooling_cops) if cooling_cops else None
+    avg_heating = sum(heating_cops) / len(heating_cops) if heating_cops else None
+
+    return {
+        "code": 200,
+        "message": "成功",
+        "data": {
+            "building_id": building_id,
+            "period": f"{start_date} 至 {end_date}",
+            "cop_type": cop_type,
+            "avg_cop_cooling": round(avg_cooling, 2) if avg_cooling else None,
+            "avg_cop_heating": round(avg_heating, 2) if avg_heating else None,
+            "details": result
+        }
     }
-)
+
+
+@router.get("/anomaly")
 async def detect_anomaly(
-    building_id: str = Query(..., description="建筑编号，如：B001"),
-    start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2025-01-01"),
-    end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2025-01-31"),
-    method: str = Query("moving_average", pattern="^(3sigma|moving_average)$", description="检测方法：3sigma/moving_average"),
-    threshold: float = Query(2.0, description="异常阈值（标准差倍数）")
+        building_id: str = Query(..., description="建筑编号"),
+        start_date: str = Query(..., description="开始日期"),
+        end_date: str = Query(..., description="结束日期"),
+        metric: str = Query("electricity", pattern="^(electricity|cooling_load|heating_load|all)$",
+                            description="检测指标：电量/冷量/热量/全部"),
+        method: str = Query("dataset", pattern="^(3sigma|moving_average|dataset)$", description="检测方法"),
+        threshold: float = Query(2.0, description="异常阈值")
 ):
-    """能耗异常检测"""
-    sql = """
+    """能耗异常检测 - 支持多种指标"""
+
+    # 确定要查询的字段
+    if metric == "all":
+        fields = ["electricity", "cooling_load", "heating_load"]
+    else:
+        fields = [metric]
+
+    # 构建SQL
+    select_fields = ["timestamp"] + fields
+    if "is_anomaly" in await get_table_columns():  # 检查是否有is_anomaly字段
+        select_fields.append("is_anomaly")
+
+    select_clause = ", ".join(select_fields)
+
+    sql = f"""
         SELECT 
-            timestamp,
-            electricity,
-            ambient_temp,
-            humidity
+            {select_clause}
         FROM energy_consumption
         WHERE building_id = %s 
             AND DATE(timestamp) BETWEEN %s AND %s
@@ -235,25 +251,96 @@ async def detect_anomaly(
 
     if not data:
         return {
-            "building_id": building_id,
-            "period": f"{start_date} 至 {end_date}",
-            "total_points": 0,
-            "anomaly_count": 0,
-            "anomalies": []
+            "code": 200,
+            "data": {
+                "building_id": building_id,
+                "period": f"{start_date} 至 {end_date}",
+                "total_points": 0,
+                "anomalies": {}
+            }
         }
 
-    # 提取用电量列表
-    values = [item['electricity'] for item in data]
-    timestamps = [item['timestamp'] for item in data]
+    result = {}
 
-    # 调用异常检测服务
-    anomalies = detect_anomalies_3sigma(values, timestamps, threshold)
+    for field in fields:
+        values = [d[field] for d in data if d[field] is not None]
+        timestamps = [d['timestamp'] for d in data if d[field] is not None]
+
+        if method == "dataset" and 'is_anomaly' in data[0]:
+            # 使用数据集标记
+            anomalies = [d for d in data if d['is_anomaly']]
+            result[field] = {
+                "method": "dataset_marked",
+                "total": len(values),
+                "anomaly_count": len(anomalies),
+                "anomalies": [
+                    {
+                        "timestamp": d['timestamp'],
+                        "value": d[field],
+                        "is_anomaly": d['is_anomaly']
+                    } for d in anomalies if d[field] is not None
+                ]
+            }
+        else:
+            # 使用算法检测
+            if len(values) < 5:
+                result[field] = {
+                    "method": method,
+                    "total": len(values),
+                    "anomaly_count": 0,
+                    "anomalies": []
+                }
+                continue
+
+            if method == "3sigma":
+                anomalies = detect_anomalies_3sigma(values, timestamps, threshold)
+            else:
+                anomalies = detect_anomalies_moving_average(values, timestamps, threshold)
+
+            result[field] = {
+                "method": method,
+                "threshold": f"{threshold}倍标准差",
+                "total": len(values),
+                "anomaly_count": len(anomalies),
+                "anomalies": anomalies
+            }
 
     return {
-        "building_id": building_id,
-        "period": f"{start_date} 至 {end_date}",
-        "threshold": f"{threshold}倍标准差",
-        "total_points": len(values),
-        "anomaly_count": len(anomalies),
-        "anomalies": anomalies
+        "code": 200,
+        "message": "成功",
+        "data": {
+            "building_id": building_id,
+            "period": f"{start_date} 至 {end_date}",
+            "metric": metric,
+            "results": result if metric == "all" else result[metric]
+        }
     }
+
+
+# 辅助函数
+def detect_anomalies_moving_average(values, timestamps, window=3, threshold=3):
+    """移动平均法异常检测"""
+    anomalies = []
+    for i in range(len(values)):
+        start = max(0, i - window)
+        end = min(len(values), i + window + 1)
+        window_values = values[start:end]
+        mean = sum(window_values) / len(window_values)
+        std = (sum((x - mean) ** 2 for x in window_values) / len(window_values)) ** 0.5
+        if std > 0 and abs(values[i] - mean) > threshold * std:
+            anomalies.append({
+                "index": i,
+                "timestamp": timestamps[i],
+                "value": float(values[i]),
+                "mean": float(mean),
+                "z_score": float(abs(values[i] - mean) / std),
+                "deviation": f"{((values[i] - mean) / mean * 100):.1f}%" if mean > 0 else "N/A"
+            })
+    return anomalies
+
+
+async def get_table_columns():
+    """获取表的所有列名（缓存）"""
+    sql = "SHOW COLUMNS FROM energy_consumption"
+    data = await Database.fetch_all(sql)
+    return [row['Field'] for row in data]

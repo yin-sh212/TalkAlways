@@ -1,5 +1,5 @@
 # app/api/upload_api.py
-from fastapi import APIRouter, UploadFile, File, HTTPException,Response
+from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Query
 import pandas as pd
 import json
 import xml.etree.ElementTree as ET
@@ -319,7 +319,11 @@ async def upload_file(file: UploadFile = File(..., description="支持多种格�
             "data": None
         }
     except Exception as e:
-        raise HTTPException(500, f"处理失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"处理失败: {str(e)}",
+            "data": None
+        }
 
 
 @router.get(

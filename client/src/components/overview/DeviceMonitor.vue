@@ -106,6 +106,12 @@ let deviceChart: echarts.ECharts | null = null
 const initDeviceChart = async () => {
   if (!deviceChartRef.value) return
   
+  // 如果已有图表实例，先销毁
+  if (deviceChart) {
+    deviceChart.dispose()
+    deviceChart = null
+  }
+  
   // 获取监测点数据并聚合为设备类型分布
   const meterData = await getMeterTypeDistribution()
   

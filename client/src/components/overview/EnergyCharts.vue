@@ -82,6 +82,12 @@ const message = useMessage()
 const initCharts = () => {
   // 1. 环形图 - 各建筑能耗占比
   if (pieChartRef.value && props.buildingEnergy.length > 0) {
+    // 如果已有图表实例，先销毁
+    if (pieChart) {
+      pieChart.dispose()
+      pieChart = null
+    }
+    
     pieChart = echarts.init(pieChartRef.value)
     
     // 创建按建筑名称索引的映射
@@ -143,6 +149,11 @@ const initCharts = () => {
     })
   } else if (pieChartRef.value) {
     // 没有数据时显示空状态
+    if (pieChart) {
+      pieChart.dispose()
+      pieChart = null
+    }
+    
     pieChart = echarts.init(pieChartRef.value)
     const emptyOption: EChartsOption = {
       title: {
@@ -160,6 +171,12 @@ const initCharts = () => {
 
   // 2. 折线图 - 24 小时能耗分布（使用 distribution 数据）
   if (distributionChartRef.value && props.distributionData) {
+    // 如果已有图表实例，先销毁
+    if (distributionChart) {
+      distributionChart.dispose()
+      distributionChart = null
+    }
+    
     distributionChart = echarts.init(distributionChartRef.value)
     const distData = props.distributionData
     
@@ -201,6 +218,11 @@ const initCharts = () => {
     distributionChart.setOption(distOption)
   } else if (distributionChartRef.value) {
     // 没有数据时显示空状态
+    if (distributionChart) {
+      distributionChart.dispose()
+      distributionChart = null
+    }
+    
     distributionChart = echarts.init(distributionChartRef.value)
     const emptyOption: EChartsOption = {
       tooltip: {
@@ -220,6 +242,12 @@ const initCharts = () => {
 
   // 3. 折线图 - 近 7 日总能耗趋势（使用 trend 数据）
   if (trendChartRef.value && props.trendData.length > 0) {
+    // 如果已有图表实例，先销毁
+    if (trendChart) {
+      trendChart.dispose()
+      trendChart = null
+    }
+    
     trendChart = echarts.init(trendChartRef.value)
     const trendOption: EChartsOption = {
       tooltip: {
@@ -262,6 +290,11 @@ const initCharts = () => {
     trendChart.setOption(trendOption)
   } else if (trendChartRef.value) {
     // 没有数据时显示空状态
+    if (trendChart) {
+      trendChart.dispose()
+      trendChart = null
+    }
+    
     trendChart = echarts.init(trendChartRef.value)
     const emptyOption: EChartsOption = {
       tooltip: {

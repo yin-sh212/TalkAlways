@@ -77,16 +77,11 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  const setBuildingId = (buildingId: string) => {
-    buildingId.value = buildingId
-  }
-
   return {
     token,
     userInfo,
     loginAction,
     registerAction,
-    logoutAction,
-    setBuildingId
+    logoutAction
   }
 })

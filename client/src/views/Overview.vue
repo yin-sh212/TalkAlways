@@ -1,24 +1,5 @@
 <template>
   <div class="overview-container">
-    <!-- 头部工具栏 -->
-    <!-- <div class="header">
-      <h2>能耗监控仪表盘</h2>
-      <div class="toolbar">
-        <span class="last-update">最后更新：{{ lastUpdateTime }}</span>
-        <n-button 
-          type="primary" 
-          size="small"
-          :loading="loading"
-          @click="handleRefresh"
-        >
-          <template #icon>
-            <n-icon :component="Refresh" />
-          </template>
-          刷新数据
-        </n-button>
-      </div>
-    </div> -->
-
     <!-- 主内容区 -->
     <div class="content">
       <!-- KPI 卡片区 -->
@@ -52,11 +33,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
-import { Refresh } from '@vicons/ionicons5'
+import { useBuildingStore } from '@/store/building'
 import { getKPIData, getChartData, getAnomalyList } from '@/api/dashboard'
 import { getSummary, detectAnomaly } from '@/api/statistics'
 import { getBuildings, getDeviceStatus } from '@/api/query'
@@ -76,9 +57,10 @@ const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const userStore = useUserStore()
+const buildingStore = useBuildingStore()
 
-// 当前建筑 ID - 初始为空，等待获取
-const currentBuildingId = ref<string>('')
+// 当前建筑 ID - 从 buildingStore 获取
+const currentBuildingId = computed(() => buildingStore.currentBuildingId)
 
 // 主题状态 - 从全局获取（跟随浏览器）
 const isDark = ref(window.isDark?.value || false)
@@ -191,10 +173,10 @@ const updateCO2Reduction = async () => {
     
     const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
     
-    // 更新KPI数据中的CO₂减排量
-    kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每MWh减排0.5吨CO₂
+    // 更新 KPI 数据中的 CO₂减排量
+    kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
   } catch (error) {
-    console.error('更新CO₂减排失败:', error)
+    console.error('更新 CO₂减排失败:', error)
   }
 }
 
@@ -209,7 +191,7 @@ const updateAbnormalDeviceCount = async () => {
       threshold: 2.0
     })
     
-    // 更新KPI数据中的异常设备数量
+    // 更新 KPI 数据中的异常设备数量
     kpiData.value.abnormalDeviceCount = anomalyResponse.data.data.anomaly_count || 0
   } catch (error) {
     console.error('更新异常设备数量失败:', error)
@@ -273,7 +255,7 @@ const updateBuildingEnergyData = async () => {
         try {
           const today = new Date().toISOString().split('T')[0]
           const response = await getSummary({
-            building_id: buildingId,
+            building_id: buildingId, // 传递字符串 ID
             start_date: today,
             end_date: today,
             time_unit: 'day'
@@ -328,37 +310,25 @@ const updateLastUpdateTime = () => {
 // 获取当前建筑 ID
 const fetchCurrentBuildingId = async () => {
   try {
-    // 如果 store 中已有建筑 ID，直接使用
-    if (userStore.buildingId) {
-      currentBuildingId.value = userStore.buildingId
+    // 如果 buildingStore 中已有建筑 ID，直接使用
+    if (buildingStore.currentBuildingId) {
       return
     }
     
     // 否则从接口获取建筑列表
-    const buildingsResponse = await getBuildings()
-    const buildings = buildingsResponse.data.data || []
+    await buildingStore.fetchBuildings()
     
-    if (buildings && buildings.length > 0) {
-      // 提取第一个建筑 ID
-      const firstBuilding = buildings[0]
-      const buildingId = typeof firstBuilding === 'string' 
-        ? firstBuilding 
-        : (firstBuilding.id || firstBuilding.building_id)
-      
-      currentBuildingId.value = buildingId
-      
-      // 同步到 userStore
-      userStore.setBuildingId(buildingId)
-    } else {
+    if (!buildingStore.currentBuildingId && buildingStore.buildings.length > 0) {
+      // 使用第一个建筑的 ID（已经是字符串）
+      buildingStore.setCurrentBuildingId(buildingStore.buildings[0].id)
+    } else if (!buildingStore.currentBuildingId) {
       // 如果没有建筑列表，使用默认值
-      currentBuildingId.value = 'B001'
-      userStore.setBuildingId('B001')
+      buildingStore.setCurrentBuildingId('B001')
     }
   } catch (error) {
     console.error('获取建筑 ID 失败:', error)
     // 使用默认值
-    currentBuildingId.value = 'B001'
-    userStore.setBuildingId('B001')
+    buildingStore.setCurrentBuildingId('B001')
   }
 }
 

@@ -1,0 +1,37 @@
+-- MySQL dump 10.13  Distrib 8.0.39, for Win64 (x86_64)
+--
+-- Host: localhost    Database: energy_management
+-- ------------------------------------------------------
+-- Server version	8.0.39
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Dumping data for table `buildings_new`
+--
+
+LOCK TABLES `buildings_new` WRITE;
+/*!40000 ALTER TABLE `buildings_new` DISABLE KEYS */;
+INSERT INTO `buildings_new` VALUES ('Eagle_education_Cassie','Eagle_education_Cassie','教学楼','Eagle',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Eagle_education_Wesley','Eagle_education_Wesley','教学楼','Eagle',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Eagle_office_Francis','Eagle_office_Francis','办公楼','Eagle',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Eagle_office_Henriette','Eagle_office_Henriette','办公楼','Eagle',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Eagle_office_Nereida','Eagle_office_Nereida','办公楼','Eagle',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Fox_assembly_Adrianne','Fox_assembly_Adrianne','公共娱乐场所','Fox',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Fox_assembly_Renna','Fox_assembly_Renna','公共娱乐场所','Fox',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Fox_education_Jacqueline','Fox_education_Jacqueline','教学楼','Fox',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Fox_lodging_Helen','Fox_lodging_Helen','住宅区','Fox',0,'2026-03-14 07:51:48','2026-03-14 07:51:48'),('Fox_lodging_Wallace','Fox_lodging_Wallace','住宅区','Fox',0,'2026-03-14 07:51:48','2026-03-14 07:51:48');
+/*!40000 ALTER TABLE `buildings_new` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2026-03-16 21:25:48

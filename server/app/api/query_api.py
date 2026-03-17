@@ -98,9 +98,7 @@ async def get_buildings():
         sql = """
             SELECT 
                 id,
-                name,
-                type,
-                area
+                type
             FROM buildings 
             ORDER BY id
         """
@@ -143,13 +141,13 @@ async def get_device_status(
         meter_id: Optional[str] = Query(None, description="设备ID"),
         status: Optional[str] = Query(None, description="状态：normal/abnormal")
 ):
-    """获取设备运行状态"""
+    """获取设备运行状态 - 修复 GROUP BY 问题"""
     sql = """
         SELECT 
             m.id as meter_id,
             m.building_id,
-            m.type,
-            m.status,
+            ANY_VALUE(m.type) as type,
+            ANY_VALUE(m.status) as status,
             COUNT(e.id) as data_count,
             MAX(e.timestamp) as last_update,
             AVG(e.electricity) as avg_power,

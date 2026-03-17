@@ -1,18 +1,58 @@
+            # 判断是否使用SSL
+            ssl_enabled = os.getenv('DB_SSL', 'false').lower() == 'true'
+            ssl_ca = os.getenv('DB_SSL_CA')
+            
+            connect_args = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': int(os.getenv('DB_PORT', 3306)),
+                'user': os.getenv('DB_USER', 'root'),
+                'password': os.getenv('DB_PASSWORD', ''),
+                'db': os.getenv('DB_NAME', 'energy_management'),
+                'minsize': 5,
+                'maxsize': 20,
+                'autocommit': True,
+                'charset': 'utf8mb4'
+            }
+            
+            # 如果启用SSL，添加SSL参数
+            if ssl_enabled and ssl_ca:
+                connect_args['ssl'] = {'ca': ssl_ca}
+                print(f"🔒 使用SSL连接云端数据库: {connect_args['host']}")
+            else:
+                print(f"📁 连接本地数据库: {connect_args['host']}")
+            
+            cls._pool = await aiomysql.create_pool(**connect_args)
+            
+>>>>>>> 3f01664a (更新 query_api.py 和 db.py 文件)
+        return cls._pool
+    # ... 其他方法保持不变
+
+    @classmethod
+    async def close_pool(cls):
+        """关闭连接池"""
+        if cls._pool:
+            cls._pool.close()
+            await cls._pool.wait_closed()
+            cls._pool = None
+# app/database/db.py
+import os
 import aiomysql
+from dotenv import load_dotenv
 from app.config import config
+
+load_dotenv()
 
 class Database:
     _pool = None
 
     @classmethod
     async def get_pool(cls):
-        """获取数据库连接池单例"""
+        """获取数据库连接池单例（支持云端SSL）"""
         if cls._pool is None:
             # 准备 SSL 配置（TiDB Cloud 需要）
             ssl_ctx = None
             
             # 检查是否配置了 SSL
-            import os
             ssl_ca = os.getenv("SSL_CA")
             ssl_cert = os.getenv("SSL_CERT")
             ssl_key = os.getenv("SSL_KEY")
@@ -60,39 +100,31 @@ class Database:
             cls._pool.close()
             await cls._pool.wait_closed()
             cls._pool = None
-
-    @classmethod
-    async def execute(cls, sql: str, params: tuple = None):
-        """执行 SQL（增删改）"""
-        pool = await cls.get_pool()
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(sql, params or ())
-                return cursor.lastrowid
-
-    @classmethod
-    async def fetch_all(cls, sql: str, params: tuple = None):
-        """查询多条数据"""
-        pool = await cls.get_pool()
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(sql, params or ())
-                rows = await cursor.fetchall()
-                # 获取列名
-                columns = [desc[0] for desc in cursor.description]
-                # 转为字典列表
-                result = []
-                for row in rows:
-                    item = dict(zip(columns, row))
-                    # 处理 datetime 类型
-                    for key, value in item.items():
-                        if hasattr(value, 'isoformat'):
-                            item[key] = value.isoformat()
-                    result.append(item)
-                return result
-
-    @classmethod
-    async def fetch_one(cls, sql: str, params: tuple = None):
-        """查询单条数据"""
-        results = await cls.fetch_all(sql, params)
-        return results[0] if results else None
+=======
+            # 判断是否使用SSL
+            ssl_enabled = os.getenv('DB_SSL', 'false').lower() == 'true'
+            ssl_ca = os.getenv('DB_SSL_CA')
+            
+            connect_args = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': int(os.getenv('DB_PORT', 3306)),
+                'user': os.getenv('DB_USER', 'root'),
+                'password': os.getenv('DB_PASSWORD', ''),
+                'db': os.getenv('DB_NAME', 'energy_management'),
+                'minsize': 5,
+                'maxsize': 20,
+                'autocommit': True,
+                'charset': 'utf8mb4'
+            }
+            
+            # 如果启用SSL，添加SSL参数
+            if ssl_enabled and ssl_ca:
+                connect_args['ssl'] = {'ca': ssl_ca}
+                print(f"🔒 使用SSL连接云端数据库: {connect_args['host']}")
+            else:
+                print(f"📁 连接本地数据库: {connect_args['host']}")
+            
+            cls._pool = await aiomysql.create_pool(**connect_args)
+            
+>>>>>>> 3f01664a (更新 query_api.py 和 db.py 文件)
+        return cls._pool

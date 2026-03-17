@@ -16,6 +16,7 @@ import type { EChartsOption } from 'echarts'
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
+let resizeObserver: ResizeObserver | null = null
 
 interface AlarmDataItem {
   time: string
@@ -134,6 +135,13 @@ const getColorByName = (name: string): string => {
   return colorMap[name] || '#1890ff'
 }
 
+// 处理 resize
+const handleResize = () => {
+  if (chart && !chart.isDisposed()) {
+    chart.resize()
+  }
+}
+
 // 清空图表
 const clearChart = () => {
   chart?.clear()
@@ -141,9 +149,21 @@ const clearChart = () => {
 
 onMounted(() => {
   initChart()
+  
+  // 添加 ResizeObserver 监听容器大小变化
+  if (chartRef.value) {
+    resizeObserver = new ResizeObserver(handleResize)
+    resizeObserver.observe(chartRef.value)
+  }
 })
 
 onUnmounted(() => {
+  // 清理 ResizeObserver
+  if (resizeObserver && chartRef.value) {
+    resizeObserver.unobserve(chartRef.value)
+    resizeObserver.disconnect()
+  }
+  
   chart?.dispose()
 })
 

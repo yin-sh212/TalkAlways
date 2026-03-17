@@ -3,7 +3,7 @@
     <!-- 顶部查询条件栏 -->
     <div class="query-section">
       <n-card :bordered="false" content-style="padding: 20px;">
-        <n-collapse :default-expanded-keys="['query-form']" arrow-placement="right">
+        <n-collapse :expanded-keys="['query-form']" arrow-placement="right">
           <n-collapse-item title="查询条件" name="query-form">
             <n-form :model="queryForm" :rules="queryRules" ref="queryFormRef" label-placement="top">
               <n-grid :cols="4" :x-gap="16" :y-gap="16">
@@ -120,6 +120,20 @@
       />
     </div>
 
+    <!-- 能耗详情表格 -->
+    <div class="detail-section">
+      <AlarmDetailTable
+        ref="alarmDetailTableRef"
+        :tableData="energyDetailData"
+        :summaryData="energySummaryData"
+        :loading="tableLoading"
+        :building-id="queryForm.buildings[0]"
+        :period="energyDetailPeriod"
+        @refresh="() => handleQuery(true)"
+        @export="handleExportEnergyDetail"
+      />
+    </div>
+
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
       <n-button type="primary" @click="handleExport" :loading="exportLoading">
@@ -140,8 +154,11 @@ import AlarmKpiCards from '@/components/alarm/KpiCards.vue'
 import AlarmTrend from '@/components/alarm/Trend.vue'
 import AlarmDistribution from '@/components/alarm/Distribution.vue'
 import AlarmList from '@/components/alarm/List.vue'
+import AlarmDetailTable from '@/components/alarm/DetailTable.vue'
 import * as alarmApi from '@/api/alarm'
 import type { AlarmItem, AlarmQueryParams, AlarmListItem, AlarmTypeDict, AlarmLevelDict } from '@/api/alarm'
+import type { BuildingEnergyDetailResponse, BuildingEnergyDetail, EnergySummary } from '@/types/analysis'
+import { MOCK_TODAY } from '@/api/dashboard'
 
 const message = useMessage()
 
@@ -218,10 +235,16 @@ const metrics = ref({
 const trendData = ref<any[]>([])
 const distributionData = ref<any[]>([])
 
+// 能耗详情数据
+const energyDetailData = ref<BuildingEnergyDetail[]>([])
+const energySummaryData = ref<EnergySummary | undefined>(undefined)
+const energyDetailPeriod = ref<string>('')
+
 // 组件引用
 const alarmTrendRef = ref<InstanceType<typeof AlarmTrend> | null>(null)
 const alarmDistributionRef = ref<InstanceType<typeof AlarmDistribution> | null>(null)
 const alarmListRef = ref<InstanceType<typeof AlarmList> | null>(null)
+const alarmDetailTableRef = ref<InstanceType<typeof AlarmDetailTable> | null>(null)
 
 // 获取建筑列表
 const loadBuildings = async () => {
@@ -235,14 +258,6 @@ const loadBuildings = async () => {
     }))
   } catch (error: any) {
     console.error('获取建筑列表失败:', error)
-    // 使用默认 Mock 数据
-    buildingOptions.value = [
-      { label: '行政楼', value: 'building-001' },
-      { label: '教学楼 A', value: 'building-002' },
-      { label: '教学楼 B', value: 'building-003' },
-      { label: '图书馆', value: 'building-004' },
-      { label: '实验楼', value: 'building-005' }
-    ]
   }
 }
 
@@ -259,12 +274,6 @@ const loadAlarmLevels = async () => {
     }))
   } catch (error: any) {
     console.error('获取告警级别失败:', error)
-    // 使用默认 Mock 数据
-    severityOptions.value = [
-      { label: '紧急', value: 1, style: { color: '#f5222d' } },
-      { label: '警告', value: 2, style: { color: '#fa8c16' } },
-      { label: '提示', value: 3, style: { color: '#1890ff' } }
-    ]
   }
 }
 
@@ -280,40 +289,50 @@ const loadAlarmTypes = async () => {
     }))
   } catch (error: any) {
     console.error('获取告警类型失败:', error)
-    // 使用默认 Mock 数据
-    alarmTypeOptions.value = [
-      { label: '能耗异常', value: 'energy' },
-      { label: '设备告警', value: 'equipment' },
-      { label: '环境告警', value: 'environment' }
-    ]
-  }
+    }
 }
 
-// 设置快捷时间
+// 设置快捷时间 - 基于 MOCK_TODAY 动态计算
 const setQuickTime = (type: 'today' | 'week' | 'month') => {
-  const now = new Date()
+  // 使用 MOCK_TODAY 作为基准日期
+  const mockDate = new Date(MOCK_TODAY)
   let start: Date
   let end: Date
 
   switch (type) {
     case 'today':
-      start = new Date(now.setHours(0, 0, 0, 0))
-      end = new Date(now.setHours(23, 59, 59, 999))
+      // 今日：MOCK_TODAY 的 00:00:00 至 23:59:59
+      start = new Date(mockDate.setHours(0, 0, 0, 0))
+      end = new Date(mockDate.setHours(23, 59, 59, 999))
       break
     case 'week':
-      const dayOfWeek = now.getDay()
-      start = new Date(now.setDate(now.getDate() - dayOfWeek))
-      start.setHours(0, 0, 0, 0)
-      end = new Date(now.setDate(now.getDate() + (6 - dayOfWeek)))
-      end.setHours(23, 59, 59, 999)
+      // 本周：根据 MOCK_TODAY 所在周的周一和周日确定
+      const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
+      const monday = new Date(mockDate)
+      monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
+      monday.setHours(0, 0, 0, 0)
+      
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      sunday.setHours(23, 59, 59, 999)
+      
+      start = monday
+      end = sunday
       break
     case 'month':
-      start = new Date(now.getFullYear(), now.getMonth(), 1)
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+      // 本月：MOCK_TODAY 所在月的第一天和最后一天
+      start = new Date(mockDate.getFullYear(), mockDate.getMonth(), 1)
+      start.setHours(0, 0, 0, 0)
+      end = new Date(mockDate.getFullYear(), mockDate.getMonth() + 1, 0, 23, 59, 59, 999)
       break
   }
 
   queryForm.timeRange = [start.getTime(), end.getTime()]
+  
+  // 清除验证错误
+  if (queryFormRef.value) {
+    queryFormRef.value.clearValidationStatus('timeRange')
+  }
 }
 
 // 执行查询 - 对接真实接口
@@ -368,7 +387,7 @@ const handleQuery = async (skipValidation: boolean = false) => {
     })
     
     // 并行调用多个接口
-    const [alarmRes, summaryRes, trendRes, distributionRes] = await Promise.all([
+    const [alarmRes, summaryRes, trendRes, distributionRes, detailRes] = await Promise.all([
       alarmApi.getAlarmList({ // 使用新的告警列表接口
         building_id: buildingId,
         page: pagination.page,
@@ -388,7 +407,14 @@ const handleQuery = async (skipValidation: boolean = false) => {
       alarmApi.getAlarmDistribution({ // 分布图数据
         building_id: buildingId,
         date: endDate
-      })
+      }),
+      // 获取能耗详情数据 - 使用 statistics API
+      import('@/api/statistics').then(mod => mod.getSummary({
+        building_id: buildingId,
+        start_date: startDate,
+        end_date: endDate,
+        time_unit: 'day'
+      }))
     ])
 
     // 填充表格数据 - 新接口返回格式：{ total, page, page_size, items }
@@ -421,6 +447,18 @@ const handleQuery = async (skipValidation: boolean = false) => {
     // 图表数据 - 后端返回的是 { categories, series } 格式
     trendData.value = trendRes.data.data || { categories: [], series: [] }
     distributionData.value = distributionRes.data.data || { categories: [], series: [] }
+
+    // 填充能耗详情数据
+    if (detailRes && detailRes.data?.data) {
+      const detailData = detailRes.data.data
+      energyDetailData.value = detailData.details || []
+      energySummaryData.value = detailData.summary || undefined
+      energyDetailPeriod.value = detailData.period || `${startDate} 至 ${endDate}`
+    } else {
+      energyDetailData.value = []
+      energySummaryData.value = undefined
+      energyDetailPeriod.value = ''
+    }
 
     // 更新图表
     if (alarmTrendRef.value) {
@@ -669,12 +707,69 @@ const handleExport = async () => {
   }
 }
 
-onMounted(() => {
+// 导出能耗详情数据
+const handleExportEnergyDetail = async () => {
+  exportLoading.value = true
+  message.info('正在导出能耗详情数据...')
+  
+  try {
+    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    
+    // 验证时间范围（2016-07-01 至 2016-08-31）
+    const validStartDate = '2016-07-01'
+    const validEndDate = '2016-08-31'
+    
+    if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
+      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
+      exportLoading.value = false
+      return
+    }
+    
+    // 确保使用从后端获取的真实建筑 ID
+    if (!queryForm.buildings || queryForm.buildings.length === 0) {
+      message.warning('请选择建筑')
+      exportLoading.value = false
+      return
+    }
+    
+    const exportParams = {
+      building_ids: queryForm.buildings,
+      startTime: startDate,
+      endTime: endDate,
+      format: 'excel' as const
+    }
+
+    const response = await alarmApi.exportExcel(exportParams)
+    
+    const url = window.URL.createObjectURL(response.data as Blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `能耗详情_${startDate}_${endDate}_${Date.now()}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    message.success('能耗详情数据已下载')
+  } catch (error: any) {
+    console.error('导出失败:', error)
+    message.error('导出失败：' + (error.message || '未知错误'))
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+onMounted(async () => {
   // 初始化时执行查询
-  loadBuildings()
+  await loadBuildings()
   loadAlarmLevels()
   loadAlarmTypes()
-  handleQuery()
+  if (buildingOptions.value.length > 0) {
+    queryForm.buildings = [buildingOptions.value[0].value];
+    setQuickTime('today'); // 默认查询今天
+    handleQuery();
+  }
 })
 </script>
 
@@ -698,6 +793,10 @@ onMounted(() => {
 }
 
 .list-section {
+  margin-bottom: 16px;
+}
+
+.detail-section {
   margin-bottom: 16px;
 }
 

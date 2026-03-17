@@ -35,7 +35,7 @@ const routes: RouteRecordRaw[] = [
    path: '/alarm',
    name: 'Alarm',
    component: () => import('@/views/Alarm.vue'),
-   meta: { requiresAuth: true }
+   meta: { requiresAuth: true, keepAlive: true }
   },
   {
    path: '/workspace',

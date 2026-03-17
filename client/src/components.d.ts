@@ -9,6 +9,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AiAssistantPlaceholder: typeof import('./components/workspace/AiAssistantPlaceholder.vue')['default']
     AnomalyList: typeof import('./components/overview/AnomalyList.vue')['default']
+    DetailTable: typeof import('./components/alarm/DetailTable.vue')['default']
     DeviceManagement: typeof import('./components/workspace/DeviceManagement.vue')['default']
     DeviceMonitor: typeof import('./components/overview/DeviceMonitor.vue')['default']
     Distribution: typeof import('./components/alarm/Distribution.vue')['default']

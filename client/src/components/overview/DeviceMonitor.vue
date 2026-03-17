@@ -18,7 +18,7 @@
               <div class="stat-value success">{{ deviceStats.normalCount }}</div>
               <n-progress
                 :percentage="Math.round(deviceStats.normalCount / deviceStats.totalCount * 100)"
-                :color="'\#52c41a'"
+                :color="'#52c41a'"
                 :show-indicator="false"
               />
             </div>
@@ -31,7 +31,7 @@
               <div class="stat-value danger">{{ deviceStats.abnormalCount }}</div>
               <n-progress
                 :percentage="Math.round(deviceStats.abnormalCount / deviceStats.totalCount * 100)"
-                :color="'\#f5222d'"
+                :color="'#f5222d'"
                 :show-indicator="false"
               />
             </div>
@@ -44,7 +44,7 @@
               <div class="stat-value warning">{{ deviceStats.offlineCount }}</div>
               <n-progress
                 :percentage="Math.round(deviceStats.offlineCount / deviceStats.totalCount * 100)"
-                :color="'\#faad14'"
+                :color="'#faad14'"
                 :show-indicator="false"
               />
             </div>
@@ -73,16 +73,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
-import { 
-  CheckmarkCircleOutline as CheckCircle,
-  AlertOutline as Alert,
-  WarningOutline as Warning,
-  LayersOutline as Layers
-} from '@vicons/ionicons5'
+import { getBasePieChartConfig } from '@/utils/echarts-config'
 import { getMeters } from '@/api/query'
+import { CheckmarkCircleOutline as CheckCircle } from '@vicons/ionicons5'
+import { AlertOutline as Alert } from '@vicons/ionicons5'
+import { WarningOutline as Warning } from '@vicons/ionicons5'
+import { LayersOutline as Layers } from '@vicons/ionicons5'
 
 interface DeviceStats {
   totalCount: number
@@ -101,60 +99,42 @@ const props = defineProps<Props>()
 
 const deviceChartRef = ref<HTMLElement | null>(null)
 let deviceChart: echarts.ECharts | null = null
+let resizeObserver: ResizeObserver | null = null
 
-// 初始化设备图表
+// 初始化设备类型分布图
 const initDeviceChart = async () => {
-  if (!deviceChartRef.value) return
-  
-  // 如果已有图表实例，先销毁
-  if (deviceChart) {
-    deviceChart.dispose()
-    deviceChart = null
+  try {
+    if (!deviceChartRef.value) return
+    
+    // 销毁旧实例
+    if (deviceChart) {
+      deviceChart.dispose()
+      deviceChart = null
+    }
+    
+    // 获取数据
+    const meterData = await getMeterTypeDistribution()
+    
+    // 使用公共配置创建图表
+    deviceChart = echarts.init(deviceChartRef.value)
+    const option = getBasePieChartConfig(
+      Array.from(meterData.entries()).map(([name, value]) => ({
+        name,
+        value
+      }))
+    )
+    
+    deviceChart.setOption(option)
+  } catch (error) {
+    console.error('[DeviceMonitor] 初始化图表失败:', error)
   }
-  
-  // 获取监测点数据并聚合为设备类型分布
-  const meterData = await getMeterTypeDistribution()
-  
-  deviceChart = echarts.init(deviceChartRef.value)
-  
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c}台 ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      left: 'left',
-      data: Array.from(meterData.keys())
-    },
-    series: [
-      {
-        name: '设备类型',
-        type: 'pie',
-        radius: '60%',
-        data: Array.from(meterData.entries()).map(([name, value]) => ({
-          value: value,
-          name: name
-        })),
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }
-      }
-    ]
-  }
-  
-  deviceChart.setOption(option)
 }
 
 // 获取监测点数据并按设备类型聚合
 const getMeterTypeDistribution = async (): Promise<Map<string, number>> => {
   try {
     const response = await getMeters()
-    const meters = response.data.data || []
+    const meters = response.data?.data || []
     
     // 按设备类型聚合
     const typeMap = new Map<string, number>()
@@ -165,7 +145,7 @@ const getMeterTypeDistribution = async (): Promise<Map<string, number>> => {
     
     return typeMap
   } catch (error) {
-    console.error('获取监测点数据失败:', error)
+    console.error('[DeviceMonitor] 获取监测点数据失败:', error)
     // 返回默认数据
     return new Map([
       ['空调机组', 45],
@@ -177,26 +157,33 @@ const getMeterTypeDistribution = async (): Promise<Map<string, number>> => {
   }
 }
 
-// 窗口大小变化时重新渲染图表
-const handleResize = () => {
-  deviceChart?.resize()
-}
-
+// 监听 loading 变化
 watch(() => props.loading, (newLoading) => {
   if (!newLoading) {
-    setTimeout(() => {
+    nextTick(() => {
       initDeviceChart()
-    }, 100)
+    })
   }
-}, { immediate: true })
+})
 
 onMounted(() => {
-  window.addEventListener('resize', handleResize)
+  // 如果组件挂载时已经不在 loading 状态，延迟初始化
+  if (!props.loading) {
+    setTimeout(() => {
+      initDeviceChart()
+    }, 50)
+  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  deviceChart?.dispose()
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+  if (deviceChart) {
+    deviceChart.dispose()
+    deviceChart = null
+  }
 })
 </script>
 

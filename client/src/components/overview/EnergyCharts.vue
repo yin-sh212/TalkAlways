@@ -1,11 +1,19 @@
 <template>
   <n-grid :cols="2" :x-gap="16" :y-gap="16" class="chart-grid">
     <n-grid-item>
-      <n-card title="各建筑能耗占比" :bordered="false" content-style="padding: 20px;">
+      <n-card
+        title="各建筑能耗占比"
+        :bordered="false"
+        content-style="padding: 20px;"
+      >
         <template #header-extra>
           <n-tooltip>
             <template #trigger>
-              <n-icon size="18" style="cursor: pointer; color: #18a058;" :component="LinkIcon" />
+              <n-icon
+                size="18"
+                style="cursor: pointer; color: #18a058"
+                :component="LinkIcon"
+              />
             </template>
             点击环形图的某个建筑，其他图表将联动显示该建筑数据
           </n-tooltip>
@@ -16,14 +24,22 @@
     </n-grid-item>
 
     <n-grid-item>
-      <n-card title="24 小时能耗分布" :bordered="false" content-style="padding: 20px;">
+      <n-card
+        title="24 小时能耗分布"
+        :bordered="false"
+        content-style="padding: 20px;"
+      >
         <n-skeleton v-if="loading" :rows="3" />
         <div v-else ref="distributionChartRef" class="chart-container"></div>
       </n-card>
     </n-grid-item>
 
     <n-grid-item>
-      <n-card title="近 7 日总能耗趋势" :bordered="false" content-style="padding: 20px;">
+      <n-card
+        title="近 7 日总能耗趋势"
+        :bordered="false"
+        content-style="padding: 20px;"
+      >
         <n-skeleton v-if="loading" :rows="3" />
         <div v-else ref="trendChartRef" class="chart-container"></div>
       </n-card>
@@ -32,377 +48,287 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
-import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
-import { LinkOutline as LinkIcon } from '@vicons/ionicons5'
-import { useMessage } from 'naive-ui'
-import { getSummary } from '@/api/statistics'
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  getCurrentInstance,
+} from "vue";
+import * as echarts from "echarts";
+import type { EChartsOption } from "echarts";
+import { LinkOutline as LinkIcon } from "@vicons/ionicons5";
+import { useMessage } from "naive-ui";
+import { getSummary } from "@/api/statistics";
+import {
+  getDonutChartConfig,
+  getLineChartConfig,
+  CHART_COLORS,
+} from "@/utils/echarts-config";
 
 interface TrendDataItem {
-  date: string
-  energy: number
+  date: string;
+  energy: number;
 }
 
 interface Props {
-  loading: boolean
-  buildingEnergy: any[]
-  trendData: TrendDataItem[]
+  loading: boolean;
+  buildingEnergy: any[];
+  trendData: TrendDataItem[];
   distributionData?: {
-    categories: string[]
+    categories: string[];
     series: Array<{
-      name: string
-      type: string
-      data: number[]
-      areaStyle?: any
-      lineStyle?: any
-    }>
-  }
+      name: string;
+      type: string;
+      data: number[];
+      areaStyle?: any;
+      lineStyle?: any;
+    }>;
+  };
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
 // 定义事件
 const emit = defineEmits<{
-  (e: 'buildingClick', buildingName: string): void
-}>()
+  (e: "buildingClick", buildingName: string): void;
+}>();
 
-// 图表引用
-const pieChartRef = ref<HTMLElement | null>(null)
-const distributionChartRef = ref<HTMLElement | null>(null)
-const trendChartRef = ref<HTMLElement | null>(null)
+const message = useMessage();
+const instance = getCurrentInstance();
 
-let pieChart: echarts.ECharts | null = null
-let distributionChart: echarts.ECharts | null = null
-let trendChart: echarts.ECharts | null = null
+// 重试配置
+const MAX_RETRY_COUNT = 5;
+const RETRY_DELAY = 300;
 
-const message = useMessage()
+// 图表引用和实例管理
+const pieChartRef = ref<HTMLElement | null>(null);
+const distributionChartRef = ref<HTMLElement | null>(null);
+const trendChartRef = ref<HTMLElement | null>(null);
 
-// 初始化图表
-const initCharts = () => {
-  // 1. 环形图 - 各建筑能耗占比
-  if (pieChartRef.value && props.buildingEnergy.length > 0) {
-    // 如果已有图表实例，先销毁
-    if (pieChart) {
-      pieChart.dispose()
-      pieChart = null
-    }
-    
-    pieChart = echarts.init(pieChartRef.value)
-    
-    // 创建按建筑名称索引的映射
-    const buildingMap = new Map(props.buildingEnergy.map(item => [item.name, item]))
-    
-    const pieOption: EChartsOption = {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} MWh ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'middle'
-      },
-      series: [
-        {
-          name: '能耗占比',
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 10,
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: {
-            show: false,
-            position: 'center'
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: 14,
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: props.buildingEnergy.map(item => ({
-            value: item.value,
-            name: item.name
-          })),
-          // 添加点击事件
-          selectedMode: 'single',
-          selectedOffset: 10
-        }
-      ]
-    }
-    
-    pieChart.setOption(pieOption)
-    
-    // 添加点击事件监听
-    pieChart.on('click', async (params: any) => {
-      if (params.data?.name) {
-        emit('buildingClick', params.data.name)
-      }
-    })
-  } else if (pieChartRef.value) {
-    // 没有数据时显示空状态
-    if (pieChart) {
-      pieChart.dispose()
-      pieChart = null
-    }
-    
-    pieChart = echarts.init(pieChartRef.value)
-    const emptyOption: EChartsOption = {
-      title: {
-        text: '暂无数据',
-        left: 'center',
-        top: 'center',
-        textStyle: {
-          fontSize: 16,
-          color: '#999'
-        }
-      }
-    }
-    pieChart.setOption(emptyOption)
+// 使用 Map 统一管理所有图表实例，便于批量管理
+const chartInstances = new Map<
+  "pie" | "distribution" | "trend",
+  echarts.ECharts | null
+>();
+chartInstances.set("pie", null);
+chartInstances.set("distribution", null);
+chartInstances.set("trend", null);
+
+// 重试计数器
+const retryCounts = {
+  pie: 0,
+  distribution: 0,
+  trend: 0,
+};
+
+// 安全的图表初始化函数 - 带重试机制和尺寸检查
+const safeInitChart = async (
+  chartType: "pie" | "distribution" | "trend",
+  containerRef: typeof pieChartRef,
+  initFn: () => void,
+): Promise<boolean> => {
+  // 检查组件是否仍活跃
+  if (!instance || !instance.isMounted) {
+    console.warn(`[EnergyCharts] 组件未挂载，跳过 ${chartType} 初始化`);
+    return false;
   }
 
-  // 2. 折线图 - 24 小时能耗分布（使用 distribution 数据）
-  if (distributionChartRef.value && props.distributionData) {
-    // 如果已有图表实例，先销毁
-    if (distributionChart) {
-      distributionChart.dispose()
-      distributionChart = null
+  const container = containerRef.value;
+
+  // 容器不存在时的兜底逻辑
+  if (!container) {
+    console.warn(`[EnergyCharts] ${chartType} 容器不存在，等待 DOM 创建`);
+    retryCounts[chartType]++;
+
+    if (retryCounts[chartType] >= MAX_RETRY_COUNT) {
+      console.error(
+        `[EnergyCharts] ${chartType} 重试次数已达上限 (${MAX_RETRY_COUNT})，停止重试`,
+      );
+      return false;
     }
-    
-    distributionChart = echarts.init(distributionChartRef.value)
-    const distData = props.distributionData
-    
-    const distOption: EChartsOption = {
-      tooltip: {
-        trigger: 'axis',
-        formatter: '{b}: {c} kWh'
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: distData.categories
-      },
-      yAxis: {
-        type: 'value',
-        name: '能耗 (kWh)',
-        axisLabel: {
-          formatter: '{value}'
-        }
-      },
-      series: distData.series.map(s => ({
-        name: s.name,
-        type: 'line' as const,
-        smooth: true,
-        data: s.data,
-        areaStyle: s.areaStyle || { opacity: 0.3 },
-        itemStyle: {
-          color: '#18a058'
-        },
-        lineStyle: s.lineStyle
-      }))
-    }
-    distributionChart.setOption(distOption)
-  } else if (distributionChartRef.value) {
-    // 没有数据时显示空状态
-    if (distributionChart) {
-      distributionChart.dispose()
-      distributionChart = null
-    }
-    
-    distributionChart = echarts.init(distributionChartRef.value)
-    const emptyOption: EChartsOption = {
-      tooltip: {
-        trigger: 'axis'
-      },
-      xAxis: {
-        type: 'category',
-        data: []
-      },
-      yAxis: {
-        type: 'value'
-      },
-      series: []
-    }
-    distributionChart.setOption(emptyOption)
+
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+    return safeInitChart(chartType, containerRef, initFn);
   }
 
-  // 3. 折线图 - 近 7 日总能耗趋势（使用 trend 数据）
-  if (trendChartRef.value && props.trendData.length > 0) {
-    // 如果已有图表实例，先销毁
-    if (trendChart) {
-      trendChart.dispose()
-      trendChart = null
-    }
-    
-    trendChart = echarts.init(trendChartRef.value)
-    const trendOption: EChartsOption = {
-      tooltip: {
-        trigger: 'axis',
-        formatter: '{b}: {c} MWh'
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: props.trendData.map(item => item.date)
-      },
-      yAxis: {
-        type: 'value',
-        name: '能耗 (MWh)',
-        axisLabel: {
-          formatter: '{value}'
-        }
-      },
-      series: [
-        {
-          name: '总能耗',
-          type: 'line',
-          smooth: true,
-          data: props.trendData.map(item => item.energy),
-          areaStyle: {
-            opacity: 0.3
-          },
-          itemStyle: {
-            color: '#18a058'
-          }
-        }
-      ]
-    }
-    trendChart.setOption(trendOption)
-  } else if (trendChartRef.value) {
-    // 没有数据时显示空状态
-    if (trendChart) {
-      trendChart.dispose()
-      trendChart = null
-    }
-    
-    trendChart = echarts.init(trendChartRef.value)
-    const emptyOption: EChartsOption = {
-      tooltip: {
-        trigger: 'axis'
-      },
-      xAxis: {
-        type: 'category',
-        data: []
-      },
-      yAxis: {
-        type: 'value'
-      },
-      series: []
-    }
-    trendChart.setOption(emptyOption)
-  }
-}
+  // 检查容器尺寸 - 等待下一帧确保布局完成
+  await nextTick();
+  await new Promise(resolve => setTimeout(resolve, 100)); // 额外等待 100ms 让布局完成
+  
+  if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+    console.warn(
+      `[EnergyCharts] ${chartType} 容器尺寸为 0 (${container.offsetWidth}x${container.offsetHeight})，等待布局完成`,
+    );
+    retryCounts[chartType]++;
 
-// 根据选中的建筑更新图表（联动功能）
-const updateChartsWithBuilding = async (buildingName: string) => {
+    if (retryCounts[chartType] >= MAX_RETRY_COUNT) {
+      console.error(
+        `[EnergyCharts] ${chartType} 重试次数已达上限 (${MAX_RETRY_COUNT})，停止重试`,
+      );
+      return false;
+    }
+
+    // 等待布局完成后重试
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY * 2));
+    return safeInitChart(chartType, containerRef, initFn);
+  }
+
+  // 重置重试计数器
+  retryCounts[chartType] = 0;
+
+  // 销毁旧实例（如果存在）
+  const oldChart = chartInstances.get(chartType);
+  if (oldChart && !oldChart.isDisposed()) {
+    oldChart.dispose();
+    chartInstances.set(chartType, null);
+  }
+
   try {
-    // 获取该建筑的7日趋势数据
-    const today = new Date().toISOString().split('T')[0]
-    const sevenDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    
-    const response = await getSummary({
-      building_id: buildingName,
-      start_date: sevenDaysAgo,
-      end_date: today,
-      time_unit: 'day'
-    })
-    
-    const summaryData = response.data.data.summary
-    const totalEnergy = (summaryData.total_elec || 0) / 1000 // kWh to MWh
-    
-    // 更新折线图
-    if (trendChart) {
-      const newOption: EChartsOption = {
-        title: {
-          text: `${buildingName} - 近 7 日能耗趋势`,
-          left: 'center'
-        },
-        series: [{
-          data: props.trendData.map(item => item.energy * (totalEnergy / kpiData.value.totalEnergy))
-        }]
-      }
-      
-      trendChart?.setOption(newOption)
-    }
-    
-    message.info(`已选择：${buildingName}，图表已联动`)
+    // 初始化新实例
+    initFn();
+    return true;
   } catch (error) {
-    console.error('更新图表失败:', error)
-    message.error('更新图表失败')
+    console.error(`[EnergyCharts] ${chartType} 初始化失败:`, error);
+    return false;
   }
-}
+};
 
-// 暴露方法给父组件
-defineExpose({
-  updateChartsWithBuilding
-})
+// 统一的图表初始化入口
+const initAllCharts = async () => {
+  // 并行初始化所有图表，提高性能
+  await Promise.all([
+    // 1. 环形图 - 各建筑能耗占比
+    safeInitChart("pie", pieChartRef, () => {
+      const hasData = props.buildingEnergy && props.buildingEnergy.length > 0;
 
-// 窗口大小变化时重新渲染图表
-const handleResize = () => {
-  pieChart?.resize()
-  distributionChart?.resize()
-  trendChart?.resize()
-}
+      const chart = echarts.init(pieChartRef.value!);
+      chartInstances.set("pie", chart);
 
-// 监听数据变化重新渲染图表
-watch(() => props.distributionData, () => {
-  if (!props.loading) {
-    initCharts()
-  }
-}, { deep: true })
+      const donutConfig = getDonutChartConfig(
+        hasData
+          ? props.buildingEnergy.map((item) => ({
+              value: item.value,
+              name: item.name,
+            }))
+          : [],
+        { title: "能耗占比" },
+      );
 
-watch(() => props.trendData, () => {
-  if (!props.loading) {
-    initCharts()
-  }
-}, { deep: true })
+      chart.setOption(donutConfig);
 
-watch(() => props.buildingEnergy, () => {
-  if (!props.loading) {
-    initCharts()
-  }
-}, { deep: true })
+      // 添加点击事件监听
+      chart.on("click", (params: any) => {
+        if (params.data?.name) {
+          emit("buildingClick", params.data.name);
+        }
+      });
+    }),
+
+    // 2. 折线图 - 24 小时能耗分布
+    safeInitChart("distribution", distributionChartRef, () => {
+      const chart = echarts.init(distributionChartRef.value!);
+      chartInstances.set("distribution", chart);
+
+      const distData = props.distributionData;
+
+      const seriesData = (distData?.series || []).map((s) => ({
+        name: s.name,
+        data: s.data,
+        areaStyle: !!s.areaStyle,
+        smooth: true,
+        color: CHART_COLORS.primary,
+      }));
+
+      const distConfig = getLineChartConfig(
+        distData?.categories || [],
+        seriesData,
+        {
+          yAxisName: "能耗 (kWh)",
+          tooltipFormatter: "{b}: {c} kWh",
+        },
+      );
+
+      chart.setOption(distConfig);
+    }),
+
+    // 3. 折线图 - 近 7 日总能耗趋势
+    safeInitChart("trend", trendChartRef, () => {
+      const chart = echarts.init(trendChartRef.value!);
+      chartInstances.set("trend", chart);
+
+      const hasData = props.trendData && props.trendData.length > 0;
+
+      const trendConfig = getLineChartConfig(
+        hasData ? props.trendData.map((item) => item.date) : [],
+        [
+          {
+            name: "总能耗",
+            data: hasData ? props.trendData.map((item) => item.energy) : [],
+            areaStyle: true,
+            smooth: true,
+            color: CHART_COLORS.primary,
+          },
+        ],
+        {
+          yAxisName: "能耗 (MWh)",
+          tooltipFormatter: "{b}: {c} MWh",
+        },
+      );
+
+      chart.setOption(trendConfig);
+    }),
+  ]);
+};
+
+// 监听 props 变化，重新初始化图表
+watch(
+  () => [props.loading, props.buildingEnergy, props.distributionData, props.trendData],
+  async ([loading, buildingEnergy, distributionData, trendData]) => {
+    if (loading) {
+      return;
+    }
+
+    await initAllCharts();
+  },
+  { immediate: true },
+);
+
+// 监听窗口大小变化，重新调整图表尺寸
+const resizeObserver = new ResizeObserver(() => {
+  chartInstances.forEach((chart) => {
+    if (chart) {
+      chart.resize();
+    }
+  });
+});
 
 onMounted(() => {
-  if (!props.loading) {
-    initCharts()
-  }
-  window.addEventListener('resize', handleResize)
-})
+  resizeObserver.observe(document.body);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  pieChart?.dispose()
-  distributionChart?.dispose()
-  trendChart?.dispose()
-})
+  resizeObserver.disconnect();
+  chartInstances.forEach((chart) => {
+    if (chart) {
+      chart.dispose();
+    }
+  });
+});
+
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .chart-grid {
-  .chart-container {
-    height: 300px;
-    width: 100%;
-  }
+  width: 100%;
+  height: 100%;
 }
+
+.chart-container {
+  width: 100%;
+  min-height: 300px; /* 最小高度确保图表能正常显示 */
+  height: 400px; /* 固定高度避免布局问题 */
+}
+
 </style>

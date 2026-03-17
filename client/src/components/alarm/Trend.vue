@@ -12,7 +12,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
+import { getLineChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
@@ -24,39 +24,31 @@ interface AlarmDataItem {
   status: string
 }
 
+// 根据系列名称获取默认颜色
+const getColorByName = (name: string): string => {
+  const colorMap: Record<string, string> = {
+    '紧急': '#f5222d',
+    '重要': '#fa8c16',
+    '一般': '#1890ff',
+    '提示': '#52c41a',
+    '平均用电量': '#1890ff',
+    '最大用电量': '#fa8c16',
+    '用电量 (kWh)': '#1890ff',
+    '告警数量': '#1890ff'
+  }
+  return colorMap[name] || CHART_COLORS.primary
+}
+
 // 初始化图表
 const initChart = () => {
   if (!chartRef.value) return
   
   chart = echarts.init(chartRef.value)
   
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    legend: {
-      data: ['紧急', '重要', '一般', '提示']
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: []
-    },
-    yAxis: {
-      type: 'value',
-      name: '告警数量'
-    },
-    series: []
-  }
+  // 使用空数据初始化
+  const option = getLineChartConfig([], [], {
+    yAxisName: '告警数量'
+  })
   
   chart.setOption(option)
 }
@@ -79,60 +71,20 @@ const updateChart = (data: any) => {
   const series = data.series || []
   
   // 映射系列配置
-  const mappedSeries = series.map((s: any) => ({
+  const seriesData = series.map((s: any) => ({
     name: s.name,
-    type: (s.type || 'line') as 'line' | 'bar',
-    smooth: s.smooth !== undefined ? s.smooth : true,
     data: s.data || [],
-    itemStyle: { 
-      color: s.color || getColorByName(s.name) 
-    },
-    areaStyle: s.areaStyle ? { opacity: 0.1 } : undefined,
-    lineStyle: s.lineStyle || {}
+    areaStyle: !!s.areaStyle,
+    smooth: s.smooth !== undefined ? s.smooth : true,
+    color: s.color || getColorByName(s.name)
   }))
   
-  chart?.setOption({
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'cross'
-      }
-    },
-    legend: {
-      data: series.map((s: any) => s.name)
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: categories
-    },
-    yAxis: {
-      type: 'value',
-      name: '告警数量'
-    },
-    series: mappedSeries
+  const option = getLineChartConfig(categories, seriesData, {
+    yAxisName: '告警数量',
+    tooltipFormatter: '{b}: {c}'
   })
-}
-
-// 根据系列名称获取默认颜色
-const getColorByName = (name: string): string => {
-  const colorMap: Record<string, string> = {
-    '紧急': '#f5222d',
-    '重要': '#fa8c16',
-    '一般': '#1890ff',
-    '提示': '#52c41a',
-    '平均用电量': '#1890ff',
-    '最大用电量': '#fa8c16',
-    '用电量 (kWh)': '#1890ff',
-    '告警数量': '#1890ff'
-  }
-  return colorMap[name] || '#1890ff'
+  
+  chart.setOption(option)
 }
 
 // 处理 resize

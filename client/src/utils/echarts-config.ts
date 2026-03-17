@@ -27,11 +27,11 @@ export const CHART_COLORS = {
 };
 
 /**
- * 通用网格配置
+ * 通用网格配置（带右侧图例空间）
  */
 export const DEFAULT_GRID = {
   left: '3%',
-  right: '4%',
+  right: '15%',
   bottom: '3%',
   containLabel: true,
 };
@@ -43,6 +43,20 @@ export const DEFAULT_TOOLTIP = {
   trigger: 'axis' as const,
   axisPointer: {
     type: 'shadow',
+  },
+};
+
+/**
+ * 标准图例配置（避免与图表重合）
+ */
+export const DEFAULT_LEGEND = {
+  orient: 'vertical' as const,
+  right: '8%',
+  top: 'center',
+  itemWidth: 12,
+  itemHeight: 12,
+  textStyle: {
+    fontSize: 12,
   },
 };
 
@@ -223,8 +237,13 @@ export function getPieChartConfig(
     legend: showLegend
       ? {
           orient: 'vertical' as const,
-          right: 10,
-          top: 'middle',
+          right: '8%',
+          top: 'center',
+          itemWidth: 12,
+          itemHeight: 12,
+          textStyle: {
+            fontSize: 12,
+          },
         }
       : undefined,
     series: [
@@ -232,8 +251,8 @@ export function getPieChartConfig(
         name: title || '数据分布',
         type: 'pie' as const,
         radius,
-        center,
-        avoidLabelOverlap: false,
+        center: ['45%', '50%'],
+        avoidLabelOverlap: true,
         itemStyle: {
           borderRadius: 10,
           borderColor: '#fff',
@@ -285,17 +304,14 @@ export function getDonutChartConfig(
       trigger: 'item' as const,
       formatter: '{b}: {c} ({d}%)',
     },
-    legend: {
-      orient: 'vertical' as const,
-      right: 10,
-      top: 'middle',
-    },
+    legend: DEFAULT_LEGEND,
     series: [
       {
         name: title || '占比',
         type: 'pie' as const,
         radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
+        center: ['33%', '50%'],
+        avoidLabelOverlap: true,
         itemStyle: {
           borderRadius: 10,
           borderColor: '#fff',
@@ -322,6 +338,83 @@ export function getDonutChartConfig(
         data,
         selectedMode: 'single',
         selectedOffset: 10,
+      },
+    ],
+  };
+}
+
+/**
+ * 基础饼图配置（通用版本，支持左右图例）
+ * @param data - 饼图数据
+ * @param options - 可选配置项
+ */
+export function getBasePieChartConfig(
+  data: Array<{
+    name: string;
+    value: number;
+  }>,
+  options: {
+    title?: string;
+    radius?: string[];
+    center?: string[];
+    tooltipFormatter?: string;
+    showLegend?: boolean;
+    legendPosition?: 'left' | 'right';
+  } = {},
+): EChartsOption {
+  const {
+    title = '',
+    radius = ['40%', '70%'],
+    center = ['45%', '50%'],
+    tooltipFormatter = '{b}: {c} ({d}%)',
+    showLegend = true,
+    legendPosition = 'right',
+  } = options;
+
+  return {
+    title: title ? { text: title, left: 'center' } : undefined,
+    tooltip: {
+      trigger: 'item' as const,
+      formatter: tooltipFormatter,
+    },
+    legend: showLegend
+      ? {
+          ...DEFAULT_LEGEND,
+          right: legendPosition === 'right' ? '8%' : 'auto',
+          left: legendPosition === 'left' ? '8%' : 'auto',
+        }
+      : undefined,
+    series: [
+      {
+        name: title || '数据分布',
+        type: 'pie' as const,
+        radius,
+        center,
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2,
+          color: (params: any) => {
+            const colors = CHART_COLORS.palette;
+            return colors[params.dataIndex % colors.length];
+          },
+        },
+        label: {
+          show: false,
+          position: 'center',
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 14,
+            fontWeight: 'bold',
+          },
+        },
+        labelLine: {
+          show: false,
+        },
+        data,
       },
     ],
   };

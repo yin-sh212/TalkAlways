@@ -73,16 +73,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
-import { 
-  CheckmarkCircleOutline as CheckCircle,
-  AlertOutline as Alert,
-  WarningOutline as Warning,
-  LayersOutline as Layers
-} from '@vicons/ionicons5'
+import { getBasePieChartConfig } from '@/utils/echarts-config'
 import { getMeters } from '@/api/query'
+import { CheckmarkCircleOutline as CheckCircle } from '@vicons/ionicons5'
+import { AlertOutline as Alert } from '@vicons/ionicons5'
+import { WarningOutline as Warning } from '@vicons/ionicons5'
+import { LayersOutline as Layers } from '@vicons/ionicons5'
 
 interface DeviceStats {
   totalCount: number
@@ -101,70 +99,30 @@ const props = defineProps<Props>()
 
 const deviceChartRef = ref<HTMLElement | null>(null)
 let deviceChart: echarts.ECharts | null = null
+let resizeObserver: ResizeObserver | null = null
 
-// 初始化设备图表
+// 初始化设备类型分布图
 const initDeviceChart = async () => {
   try {
-    // 先获取数据
-    const meterData = await getMeterTypeDistribution()
+    if (!deviceChartRef.value) return
     
-    // 等待 DOM 渲染完成
-    await nextTick()
-    
-    // 额外等待一段时间确保布局完成
-    await new Promise(resolve => setTimeout(resolve, 150))
-    
-    // 检查 DOM 元素是否存在
-    if (!deviceChartRef.value) {
-      console.error('[DeviceMonitor] 图表容器 DOM 元素不存在')
-      return
-    }
-    
-    // 检查容器尺寸
-    const container = deviceChartRef.value
-    if (container.offsetWidth === 0 || container.offsetHeight === 0) {
-      console.warn(`[DeviceMonitor] 图表容器尺寸为 0 (${container.offsetWidth}x${container.offsetHeight})`)
-      return
-    }
-    
-    // 如果已有图表实例，先销毁
+    // 销毁旧实例
     if (deviceChart) {
       deviceChart.dispose()
       deviceChart = null
     }
     
-    // 初始化图表
-    deviceChart = echarts.init(deviceChartRef.value)
+    // 获取数据
+    const meterData = await getMeterTypeDistribution()
     
-    const option: EChartsOption = {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c}台 ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        left: 'left',
-        data: Array.from(meterData.keys())
-      },
-      series: [
-        {
-          name: '设备类型',
-          type: 'pie',
-          radius: '60%',
-          data: Array.from(meterData.entries()).map(([name, value]) => ({
-            value: value,
-            name: name
-          })),
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
-          }
-        }
-      ]
-    }
+    // 使用公共配置创建图表
+    deviceChart = echarts.init(deviceChartRef.value)
+    const option = getBasePieChartConfig(
+      Array.from(meterData.entries()).map(([name, value]) => ({
+        name,
+        value
+      }))
+    )
     
     deviceChart.setOption(option)
   } catch (error) {
@@ -199,13 +157,6 @@ const getMeterTypeDistribution = async (): Promise<Map<string, number>> => {
   }
 }
 
-// 窗口大小变化时重新渲染图表
-const handleResize = () => {
-  if (deviceChart) {
-    deviceChart.resize()
-  }
-}
-
 // 监听 loading 变化
 watch(() => props.loading, (newLoading) => {
   if (!newLoading) {
@@ -216,18 +167,19 @@ watch(() => props.loading, (newLoading) => {
 })
 
 onMounted(() => {
-  window.addEventListener('resize', handleResize)
-  
   // 如果组件挂载时已经不在 loading 状态，延迟初始化
   if (!props.loading) {
     setTimeout(() => {
       initDeviceChart()
-    }, 50)  // 使用小延迟确保 DOM 已完全渲染
+    }, 50)
   }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   if (deviceChart) {
     deviceChart.dispose()
     deviceChart = null

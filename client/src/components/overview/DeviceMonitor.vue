@@ -111,18 +111,19 @@ const initDeviceChart = async () => {
     // 等待 DOM 渲染完成
     await nextTick()
     
+    // 额外等待一段时间确保布局完成
+    await new Promise(resolve => setTimeout(resolve, 150))
+    
     // 检查 DOM 元素是否存在
     if (!deviceChartRef.value) {
-      console.error('[DeviceMonitor] 图表容器 DOM 元素不存在，将重试...')
-      setTimeout(() => initDeviceChart(), 300)
+      console.error('[DeviceMonitor] 图表容器 DOM 元素不存在')
       return
     }
     
     // 检查容器尺寸
     const container = deviceChartRef.value
     if (container.offsetWidth === 0 || container.offsetHeight === 0) {
-      console.warn('[DeviceMonitor] 图表容器尺寸为 0，稍后重试...')
-      setTimeout(() => initDeviceChart(), 300)
+      console.warn(`[DeviceMonitor] 图表容器尺寸为 0 (${container.offsetWidth}x${container.offsetHeight})`)
       return
     }
     

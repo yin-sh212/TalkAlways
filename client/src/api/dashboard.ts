@@ -15,7 +15,6 @@ export const MOCK_TODAY = '2016-07-15'
 const getBuildingId = () => {
   const buildingStore = useBuildingStore()
   const buildingId = buildingStore.currentBuildingId || ''
-  console.log('[Dashboard API] 获取到的建筑 ID:', buildingId)
   return buildingId
 }
 

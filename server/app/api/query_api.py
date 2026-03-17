@@ -98,7 +98,9 @@ async def get_buildings():
         sql = """
             SELECT 
                 id,
-                type
+                name,
+                type,
+                area
             FROM buildings 
             ORDER BY id
         """

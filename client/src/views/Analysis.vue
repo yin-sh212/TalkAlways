@@ -3,7 +3,7 @@
     <!-- 顶部查询条件栏 -->
     <div class="query-section">
       <n-card :bordered="false" content-style="padding: 20px;">
-        <n-collapse :default-expanded-keys="['query-form']" arrow-placement="right">
+        <n-collapse :expanded-keys="['query-form']" arrow-placement="right">
           <n-collapse-item title="查询条件" name="query-form">
             <n-form :model="queryForm" :rules="queryRules" ref="queryFormRef" label-placement="top">
               <n-grid :cols="4" :x-gap="16" :y-gap="16">
@@ -222,7 +222,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, h, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { 
   Search, 
@@ -237,9 +237,9 @@ import type { EChartsOption } from 'echarts'
 import type { DataTableColumns } from 'naive-ui'
 import * as analysisApi from '@/api/analysis'
 import type { QueryDataItem } from '@/types/analysis'
+import { MOCK_TODAY } from '@/api/dashboard'
 
 const message = useMessage()
-const router = useRouter()
 const route = useRoute()
 
 // 状态
@@ -410,33 +410,44 @@ const loadBuildings = async () => {
 
 // 设置快捷时间
 const setQuickTime = (type: 'today' | 'week' | 'month') => {
-  const now = new Date()
+  // 使用 MOCK_TODAY 作为基准日期
+  const mockDate = new Date(MOCK_TODAY)
   let start: Date
   let end: Date
 
   switch (type) {
     case 'today':
-      start = new Date(now.setHours(0, 0, 0, 0))
-      end = new Date(now.setHours(23, 59, 59, 999))
+      // 今日：MOCK_TODAY 的 00:00:00 至 23:59:59
+      start = new Date(mockDate.setHours(0, 0, 0, 0))
+      end = new Date(mockDate.setHours(23, 59, 59, 999))
       break
     case 'week':
-      const dayOfWeek = now.getDay()
-      start = new Date(now.setDate(now.getDate() - dayOfWeek))
-      start.setHours(0, 0, 0, 0)
-      end = new Date(now.setDate(now.getDate() + (6 - dayOfWeek)))
-      end.setHours(23, 59, 59, 999)
+      // 本周：根据 MOCK_TODAY 所在周的周一和周日确定
+      const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
+      const monday = new Date(mockDate)
+      monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
+      monday.setHours(0, 0, 0, 0)
+      
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      sunday.setHours(23, 59, 59, 999)
+      
+      start = monday
+      end = sunday
       break
     case 'month':
-      start = new Date(now.getFullYear(), now.getMonth(), 1)
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+      // 本月：MOCK_TODAY 所在月的第一天和最后一天
+      start = new Date(mockDate.getFullYear(), mockDate.getMonth(), 1)
+      start.setHours(0, 0, 0, 0)
+      end = new Date(mockDate.getFullYear(), mockDate.getMonth() + 1, 0, 23, 59, 59, 999)
       break
   }
 
   queryForm.timeRange = [start.getTime(), end.getTime()]
   
-  // 触发验证，清除错误提示
+  // 清除验证错误
   if (queryFormRef.value) {
-    queryFormRef.value.validate('timeRange').catch(() => {})
+    queryFormRef.value.clearValidationStatus('timeRange')
   }
 }
 

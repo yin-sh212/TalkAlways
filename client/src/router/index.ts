@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
     path: '/analysis',
     name: 'Analysis',
     component: () => import('@/views/Analysis.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, keepAlive: true }
   },
   {
    path: '/alarm',

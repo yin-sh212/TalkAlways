@@ -139,11 +139,11 @@ async def get_meters(building_id: Optional[str] = Query(None, description="建�
 
 @router.get("/device-status")
 async def get_device_status(
-        building_id: Optional[str] = Query(None, description="建筑编号，如：Eagle_education_Cassie"),
+        building_id: Optional[str] = Query(None, description="建筑编号"),
         meter_id: Optional[str] = Query(None, description="设备ID"),
-        status: Optional[str] = Query(None, description="状态：normal/abnormal")
+        status: Optional[str] = Query(None, description="状态")
 ):
-    """获取设备运行状态"""
+    """获取设备运行状态 - 修复版"""
     sql = """
         SELECT 
             m.id as meter_id,
@@ -170,18 +170,18 @@ async def get_device_status(
         sql += " AND m.status = %s"
         params.append(status)
 
-    sql += " GROUP BY m.id"
+    # 修改：GROUP BY 包含所有非聚合字段
+    sql += " GROUP BY m.id, m.building_id, m.type, m.status"
 
     data = await Database.fetch_all(sql, tuple(params) if params else None)
 
-    # 计算健康度
+    # 计算健康度（代码不变）
     for item in data:
         total = item['data_count'] or 1
         anomaly = item['anomaly_count'] or 0
         health_score = max(0, 100 - (anomaly / total * 100))
         item['health_score'] = round(health_score, 2)
 
-        # 状态判断
         if item['status'] == 'abnormal':
             item['status_desc'] = '异常'
         elif health_score < 80:
@@ -190,7 +190,6 @@ async def get_device_status(
             item['status_desc'] = '正常'
 
     return {"code": 200, "data": data}
-
 
 @router.post("/query")
 async def query_data(

@@ -29,13 +29,13 @@ const routes: RouteRecordRaw[] = [
     path: '/analysis',
     name: 'Analysis',
     component: () => import('@/views/Analysis.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, keepAlive: true }
   },
   {
    path: '/alarm',
    name: 'Alarm',
    component: () => import('@/views/Alarm.vue'),
-   meta: { requiresAuth: true }
+   meta: { requiresAuth: true, keepAlive: true }
   },
   {
    path: '/workspace',

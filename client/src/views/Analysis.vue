@@ -3,7 +3,7 @@
     <!-- 顶部查询条件栏 -->
     <div class="query-section">
       <n-card :bordered="false" content-style="padding: 20px;">
-        <n-collapse :default-expanded-keys="['query-form']" arrow-placement="right">
+        <n-collapse :expanded-keys="['query-form']" arrow-placement="right">
           <n-collapse-item title="查询条件" name="query-form">
             <n-form :model="queryForm" :rules="queryRules" ref="queryFormRef" label-placement="top">
               <n-grid :cols="4" :x-gap="16" :y-gap="16">
@@ -222,7 +222,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, h, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { 
   Search, 
@@ -236,10 +236,12 @@ import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import type { DataTableColumns } from 'naive-ui'
 import * as analysisApi from '@/api/analysis'
+import { getLineChartConfig, getBarChartConfig } from '@/utils/echarts-config'
+
 import type { QueryDataItem } from '@/types/analysis'
+import { MOCK_TODAY } from '@/api/dashboard'
 
 const message = useMessage()
-const router = useRouter()
 const route = useRoute()
 
 // 状态
@@ -410,33 +412,44 @@ const loadBuildings = async () => {
 
 // 设置快捷时间
 const setQuickTime = (type: 'today' | 'week' | 'month') => {
-  const now = new Date()
+  // 使用 MOCK_TODAY 作为基准日期
+  const mockDate = new Date(MOCK_TODAY)
   let start: Date
   let end: Date
 
   switch (type) {
     case 'today':
-      start = new Date(now.setHours(0, 0, 0, 0))
-      end = new Date(now.setHours(23, 59, 59, 999))
+      // 今日：MOCK_TODAY 的 00:00:00 至 23:59:59
+      start = new Date(mockDate.setHours(0, 0, 0, 0))
+      end = new Date(mockDate.setHours(23, 59, 59, 999))
       break
     case 'week':
-      const dayOfWeek = now.getDay()
-      start = new Date(now.setDate(now.getDate() - dayOfWeek))
-      start.setHours(0, 0, 0, 0)
-      end = new Date(now.setDate(now.getDate() + (6 - dayOfWeek)))
-      end.setHours(23, 59, 59, 999)
+      // 本周：根据 MOCK_TODAY 所在周的周一和周日确定
+      const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
+      const monday = new Date(mockDate)
+      monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
+      monday.setHours(0, 0, 0, 0)
+      
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      sunday.setHours(23, 59, 59, 999)
+      
+      start = monday
+      end = sunday
       break
     case 'month':
-      start = new Date(now.getFullYear(), now.getMonth(), 1)
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+      // 本月：MOCK_TODAY 所在月的第一天和最后一天
+      start = new Date(mockDate.getFullYear(), mockDate.getMonth(), 1)
+      start.setHours(0, 0, 0, 0)
+      end = new Date(mockDate.getFullYear(), mockDate.getMonth() + 1, 0, 23, 59, 59, 999)
       break
   }
 
   queryForm.timeRange = [start.getTime(), end.getTime()]
   
-  // 触发验证，清除错误提示
+  // 清除验证错误
   if (queryFormRef.value) {
-    queryFormRef.value.validate('timeRange').catch(() => {})
+    queryFormRef.value.clearValidationStatus('timeRange')
   }
 }
 
@@ -697,7 +710,18 @@ const getChart1Option = (trendData: any): EChartsOption => {
   const categories = trendData.categories || []
   const series = trendData.series || []
   
+  const seriesData = series.map((s: any) => ({
+    name: s.name,
+    data: s.data,
+    areaStyle: !!s.areaStyle,
+    smooth: true,
+    color: s.color || '#1890ff'
+  }))
+  
   return {
+    ...getLineChartConfig(categories, seriesData, {
+      yAxisName: '能耗 (MWh)',
+    }),
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
@@ -712,24 +736,6 @@ const getChart1Option = (trendData: any): EChartsOption => {
         })
         return html
       }
-    },
-    legend: {
-      data: series.map((s: any) => s.name)
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: categories
-    },
-    yAxis: {
-      type: 'value',
-      name: '能耗 (MWh)'
     },
     series: series.map((s: any) => ({
       name: s.name,
@@ -767,7 +773,16 @@ const getChart2Option = (distributionData: any): EChartsOption => {
   const categories = distributionData.categories || []
   const series = distributionData.series || []
   
+  const seriesData = series.map((s: any) => ({
+    name: s.name,
+    data: s.data,
+    color: s.color || '#1890ff'
+  }))
+  
   return {
+    ...getBarChartConfig(categories, seriesData, {
+      yAxisName: '能耗 (MWh)',
+    }),
     tooltip: {
       trigger: 'axis',
       axisPointer: {
@@ -778,32 +793,7 @@ const getChart2Option = (distributionData: any): EChartsOption => {
         return `<div style="font-weight: bold;">${point.name}</div>
                 <div>${point.marker} 能耗：${point.value} MWh</div>`
       }
-    },
-    legend: {
-      data: series.map((s: any) => s.name)
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: categories
-    },
-    yAxis: {
-      type: 'value',
-      name: '能耗 (MWh)'
-    },
-    series: series.map((s: any) => ({
-      name: s.name,
-      type: 'bar',
-      data: s.data,
-      itemStyle: {
-        color: s.color || '#1890ff'
-      }
-    }))
+    }
   }
 }
 
@@ -834,7 +824,7 @@ const initCompareChart = async () => {
     const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
     
     const response = await analysisApi.getComparisonData({
-      building_ids: queryForm.buildings, // 传递多个建筑 ID
+      building_ids: queryForm.buildings,
       start_date: startDate,
       end_date: endDate
     })
@@ -843,39 +833,15 @@ const initCompareChart = async () => {
     const categories = comparisonData.categories || []
     const series = comparisonData.series || []
     
-    const option: EChartsOption = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'shadow'
-        }
-      },
-      legend: {
-        data: series.map((s: any) => s.name)
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        data: categories
-      },
-      yAxis: {
-        type: 'value',
-        name: '能耗 (MWh)'
-      },
-      series: series.map((s: any) => ({
-        name: s.name,
-        type: 'bar' as const,
-        data: s.data,
-        emphasis: {
-          focus: 'series'
-        }
-      }))
-    }
+    const seriesData = series.map((s: any) => ({
+      name: s.name,
+      data: s.data,
+      color: s.color || '#1890ff'
+    }))
+    
+    const option = getBarChartConfig(categories, seriesData, {
+      yAxisName: '能耗 (MWh)'
+    })
     
     compareChart?.setOption(option)
   } catch (error: any) {
@@ -914,74 +880,13 @@ const generateComparisonChartFromTable = () => {
     })
   }]
   
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    legend: {
-      data: ['能耗']
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: categories
-    },
-    yAxis: {
-      type: 'value',
-      name: '能耗 (MWh)'
-    },
-    series
-  }
+  const option = getBarChartConfig(categories, series, {
+    yAxisName: '能耗 (MWh)'
+  })
   
   compareChart?.setOption(option)
 }
 
-// 生成 Mock 数据
-const generateMockData = () => {
-  const tableData: any[] = []
-  const dates = ['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05', '2024-01-06', '2024-01-07']
-  const buildings = ['行政楼', '教学楼 A', '教学楼 B', '图书馆', '实验楼']
-  
-  let totalEnergy = 0
-  let anomalyCount = 0
-
-  dates.forEach((date, index) => {
-    buildings.forEach((building, buildingIndex) => {
-      const value = Math.random() * 50 + 20
-      const isAnomaly = Math.random() < 0.1 // 10% 概率异常
-      
-      if (isAnomaly) anomalyCount++
-      totalEnergy += value
-
-      tableData.push({
-        id: `${index}-${buildingIndex}`,
-        time: date,
-        buildingName: building,
-        parameterName: '电力能耗',
-        value: value.toFixed(2),
-        unit: 'MWh',
-        isAnomaly
-      })
-    })
-  })
-
-  return {
-    tableData,
-    metrics: {
-      totalEnergy: totalEnergy,
-      avgEnergy: totalEnergy / tableData.length,
-      anomalyCount
-    }
-  }
-}
 
 // 窗口大小变化时重新渲染图表
 const handleResize = () => {

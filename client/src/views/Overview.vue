@@ -62,7 +62,6 @@ const buildingStore = useBuildingStore()
 // 当前建筑 ID - 从 buildingStore 获取
 const currentBuildingId = computed(() => {
   const id = buildingStore.currentBuildingId
-  console.log('[Overview] 当前建筑 ID:', id)
   return id
 })
 
@@ -319,24 +318,18 @@ const fetchCurrentBuildingId = async () => {
   try {
     // 如果 buildingStore 中已有建筑 ID，直接使用
     if (buildingStore.currentBuildingId) {
-      console.log('[Overview] 使用已缓存的建筑 ID:', buildingStore.currentBuildingId)
       return
     }
     
     // 否则从接口获取建筑列表
-    console.log('[Overview] 开始获取建筑列表...')
     await buildingStore.fetchBuildings()
-    
-    console.log('[Overview] 获取到的建筑列表:', buildingStore.buildings)
     
     if (!buildingStore.currentBuildingId && buildingStore.buildings.length > 0) {
       // 使用第一个建筑的 ID（已经是字符串）
       const firstBuildingId = buildingStore.buildings[0].id
-      console.log('[Overview] 设置第一个建筑 ID 为当前建筑:', firstBuildingId)
       buildingStore.setCurrentBuildingId(firstBuildingId)
     } else if (!buildingStore.currentBuildingId) {
       // 如果没有建筑列表，使用默认值
-      console.warn('[Overview] 未获取到建筑列表，使用默认值 B001')
       buildingStore.setCurrentBuildingId('B001')
     }
   } catch (error) {
@@ -353,17 +346,13 @@ const loadData = async () => {
     await fetchCurrentBuildingId()
   }
   
-  console.log('[Overview] 开始加载数据，当前建筑 ID:', currentBuildingId.value)
-  
   loading.value = true
   try {
-    // 并行调用：KPI 数据 + 分布图数据 + 异常列表 + 建筑能耗数据 + 设备状态
+    // 并行调用：KPI 数据 + 分布图数据 + 异常列表
     const [kpiRes, distributionRes, anomalyRes] = await Promise.all([
       getKPIData(),
       getChartData(),
-      getAnomalyList(5),
-      updateBuildingEnergyData(),
-      updateDeviceStats()
+      getAnomalyList(5)
     ])
 
     // 填充 KPI 数据
@@ -401,8 +390,12 @@ const loadData = async () => {
           start: anomalyRes.data.data.period.split(' 至 ')[0],
           end: anomalyRes.data.data.period.split(' 至 ')[1]
         }
-      })).slice(0, 5) // 只取前5条
+      })).slice(0, 5) // 只取前 5 条
     }
+    
+    // 等待建筑能耗数据和设备统计数据更新完成
+    await updateBuildingEnergyData()
+    await updateDeviceStats()
     
     // 并行调用其他更新函数
     await Promise.all([
@@ -456,24 +449,10 @@ const handleLogout = () => {
   })
 }
 
-// 切换主题 - 现在只是切换按钮状态，实际跟随浏览器
-const toggleTheme = () => {
-  // 点击按钮时切换主题（用于测试或临时切换）
-  const newIsDark = !isDark.value
-  window.setTheme(newIsDark)
-  
-  if (newIsDark) {
-    message.success('已切换到深色模式')
-  } else {
-    message.success('已切换到浅色模式')
-  }
-}
 
 onMounted(() => {
   // 先获取建筑 ID，再加载数据
-  fetchCurrentBuildingId().then(() => {
-    loadData()
-  })
+  fetchCurrentBuildingId().then(loadData)
 })
 
 onUnmounted(() => {

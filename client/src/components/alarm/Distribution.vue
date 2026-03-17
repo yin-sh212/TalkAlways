@@ -13,9 +13,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
+import { getBasePieChartConfig, getLineChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
+let resizeObserver: ResizeObserver | null = null
 
 interface AlarmDataItem {
   alarmType: string
@@ -28,32 +30,10 @@ const initChart = () => {
   
   chart = echarts.init(chartRef.value)
   
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      left: 'left',
-      top: 'middle'
-    },
-    series: [
-      {
-        name: '告警类型',
-        type: 'pie',
-        radius: '60%',
-        data: [],
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }
-      }
-    ]
-  }
+  // 使用默认空数据初始化
+  const option = getBasePieChartConfig([], {
+    showLegend: true
+  })
   
   chart.setOption(option)
 }
@@ -67,81 +47,43 @@ const updateChart = (data: any) => {
     const categories = data.categories
     const series = data.series || []
     
-    chart?.setOption({
-      xAxis: {
-        type: 'category',
-        data: categories,
-        boundaryGap: false
-      },
-      yAxis: {
-        type: 'value',
-        name: '告警数量'
-      },
-      tooltip: {
-        trigger: 'axis'
-      },
-      legend: {
-        data: series.map((s: any) => s.name)
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      series: series.map((s: any) => ({
-        name: s.name,
-        type: s.type || 'line',
-        data: s.data || [],
-        smooth: s.smooth !== undefined ? s.smooth : true,
-        areaStyle: s.areaStyle ? { opacity: 0.3 } : undefined,
-        itemStyle: { color: s.color || '#1890ff' },
-        lineStyle: s.lineStyle || {}
-      }))
+    const seriesData = series.map((s: any) => ({
+      name: s.name,
+      data: s.data || [],
+      areaStyle: !!s.areaStyle,
+      smooth: s.smooth !== undefined ? s.smooth : true,
+      color: s.color || CHART_COLORS.primary
+    }))
+    
+    const option = getLineChartConfig(categories, seriesData, {
+      yAxisName: '告警数量',
+      tooltipFormatter: '{b}: {c}'
     })
+    
+    chart.setOption(option)
     return
   }
   
-  // 情况 2：后端返回数组 - 分类统计数据（饼图）
+  // 情况 2：后端返回数组 - 分类统计数据（饼图）TODO?
   if (Array.isArray(data) && data.length > 0) {
     const pieData = data.map(item => ({
       name: item.name || item.type || item.category || item.alarm_type,
       value: item.value || item.count || 0
     }))
     
-    chart?.setOption({
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        left: 'left',
-        top: 'middle'
-      },
-      series: [
-        {
-          name: '告警分布',
-          type: 'pie',
-          radius: '60%',
-          data: pieData,
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
-          }
-        }
-      ]
+    const option = getBasePieChartConfig(pieData, {
+      showLegend: true
     })
+    
+    chart.setOption(option)
     return
   }
   
-  // 空数据或格式不对，清空图表
-  chart?.setOption({
-    xAxis: { data: [] },
-    series: []
+  // 空数据情况
+  chart.setOption({
+    series: [{
+      data: []
+    }]
   })
 }
 
@@ -150,22 +92,8 @@ const clearChart = () => {
   chart?.clear()
 }
 
-onMounted(() => {
-  initChart()
-})
-
-onUnmounted(() => {
-  chart?.dispose()
-})
-
 defineExpose({
   updateChart,
   clearChart
 })
 </script>
-
-<style scoped>
-.chart-container {
-  width: 100%;
-}
-</style>

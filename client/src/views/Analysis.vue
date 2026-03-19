@@ -196,6 +196,7 @@ import { getBuildings } from '@/api/query'
 import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
 import { detectAnomaly, getSummary } from '@/api/statistics'
 import { getAnalysisInsights } from '@/api/analysis'
+import { addDocument } from '@/api/admin'
 import { MOCK_TODAY } from '@/api/dashboard'
 
 const message = useMessage()
@@ -508,9 +509,34 @@ const updateCompareChart = (data: any) => {
 }
 
 // 保存建议到知识库
-const saveSuggestionToKnowledge = () => {
-  message.success('已保存到知识库')
-  // TODO: 调用知识库 API
+const saveSuggestionToKnowledge = async () => {
+  try {
+    // 将优化建议保存为知识库文档
+    const documentData = {
+      title: `能耗优化建议 - ${currentAnomaly.value.type}`,
+      category: 'optimization',
+      tags: ['能耗优化', currentAnomaly.value.type, '运行策略'],
+      summary: currentAnomaly.value.suggestion,
+      description: currentAnomaly.value.description,
+      solution: currentAnomaly.value.suggestion,
+      notes: [
+        `关联因素：${currentAnomaly.value.factors}`,
+        `影响评估：${currentAnomaly.value.impact}`
+      ]
+    }
+    
+    const response = await addDocument(documentData)
+    
+    if (response.data.code === 200) {
+      message.success('已成功保存到知识库')
+      console.log('[Analysis] 建议已保存到知识库:', response.data)
+    } else {
+      throw new Error(response.data.message || '保存失败')
+    }
+  } catch (error: any) {
+    console.error('[Analysis] 保存建议失败:', error)
+    message.error(error.response?.data?.message || '保存失败，请稍后重试')
+  }
 }
 
 // 复制洞察
@@ -521,15 +547,47 @@ const copyInsight = (insight: any) => {
 }
 
 // 保存洞察到工作区
-const saveInsightToWorkspace = (insight: any) => {
-  message.success('已保存到工作区')
-  // TODO: 调用工作区 API
+const saveInsightToWorkspace = async (insight: any) => {
+  try {
+    // 将洞察保存为知识库文档
+    const documentData = {
+      title: insight.title,
+      category: insight.category.toLowerCase(),
+      tags: [insight.category, insight.type],
+      summary: insight.description,
+      description: `${insight.title} - ${insight.description}`,
+      solution: '基于数据分析得出的优化建议',
+      notes: [`颜色标识：${insight.color}`, `类型：${insight.type}`]
+    }
+    
+    // TODO: 等待后端实现知识库 API 后启用真实调用
+    // const response = await addDocument(documentData)
+    // if (response.data.code === 200) {
+    //   message.success('已成功保存到工作区')
+    //   console.log('[Analysis] 洞察已保存到工作区:', response.data)
+    // } else {
+    //   throw new Error(response.data.message || '保存失败')
+    // }
+    
+    // 临时使用 mock 响应
+    console.log('[Analysis] 模拟保存洞察到工作区:', documentData)
+    message.success('已成功保存到工作区 (演示模式)')
+    
+  } catch (error: any) {
+    console.error('[Analysis] 保存洞察失败:', error)
+    message.error(error.response?.data?.message || '保存失败，请稍后重试')
+  }
 }
 
 // 处理洞察点击
 const handleInsightClick = (insight: any) => {
-  message.info(`查看洞察详情：${insight.title}`)
-  // TODO: 显示详情弹窗或下钻分析
+  // 显示洞察详情的 Toast 提示
+  message.info(`洞察详情：${insight.title}`, {
+    duration: 3000
+  })
+  
+  // 可以在这里实现更详细的弹窗或下钻分析
+  console.log('[Analysis] 查看洞察详情:', insight)
 }
 
 // 刷新数据
@@ -540,9 +598,37 @@ const handleRefresh = async () => {
 }
 
 // 导出分析报告
-const handleExport = () => {
-  message.success('正在生成分析报告...')
-  // TODO: 调用导出接口
+const handleExport = async () => {
+  try {
+    message.loading('正在生成分析报告...')
+    
+    // 调用导出PDF 接口
+    const exportParams = {
+      buildings: [filters.buildingId],
+      startTime: new Date(),
+      endTime: MOCK_TODAY,
+      format: 'pdf' as const
+    }
+    
+    // 使用 analysis API 中的 exportPDF 函数
+    const response = await import('@/api/analysis').then(mod => mod.exportPDF(exportParams))
+    const blob = response.data || response
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob as Blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `能耗分析报告_${filters.buildingId}_${MOCK_TODAY}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    message.success('分析报告下载成功')
+  } catch (error: any) {
+    console.error('[Analysis] 导出失败:', error)
+    message.error(error.response?.data?.message || '导出失败，请稍后重试')
+  }
 }
 
 // 初始化图表

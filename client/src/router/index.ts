@@ -17,31 +17,31 @@ const routes: RouteRecordRaw[] = [
     path: '/home',
     name: 'Home',
     component: () => import('@/views/Home.vue'),
-    meta: { requiresAuth: true }
+    // meta: { requiresAuth: true }
   },
   {
     path:'/Overview',
     name: 'Overview',
     component: () => import('@/views/Overview.vue'),
-    meta: { requiresAuth: true }
+    // meta: { requiresAuth: true }
   },
   {
     path: '/analysis',
     name: 'Analysis',
     component: () => import('@/views/Analysis.vue'),
-    meta: { requiresAuth: true, keepAlive: true }
+    // meta: { requiresAuth: true, keepAlive: true }
   },
   {
    path: '/alarm',
    name: 'Alarm',
    component: () => import('@/views/Alarm.vue'),
-   meta: { requiresAuth: true, keepAlive: true }
+  //  meta: { requiresAuth: true, keepAlive: true }
   },
   {
    path: '/workspace',
    name: 'Workspace',
    component: () => import('@/views/Workspace.vue'),
-   meta: { requiresAuth: true }
+  //  meta: { requiresAuth: true }
   }
 ]
 

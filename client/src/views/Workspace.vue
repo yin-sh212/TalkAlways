@@ -2,19 +2,20 @@
   <div class="workspace-container">
     <!-- 顶部标签页切换 -->
     <n-tabs v-model:value="activeTab" type="line" animated @update:value="handleTabChange">
-      <!-- Tab 1: 设备信息 -->
-      <n-tab-pane name="devices" tab="设备管理">
-        <DeviceManagement />
+       <!-- Tab 1: AI 助手 -->
+      <n-tab-pane name="assistant" tab="AI 助手">
+        <AiAssistantPlaceholder />
       </n-tab-pane>
+     
 
       <!-- Tab 2: 运维知识库 -->
       <n-tab-pane name="knowledge" tab="运维知识库">
         <KnowledgeBase />
       </n-tab-pane>
 
-      <!-- Tab 3: AI 助手（预留） -->
-      <n-tab-pane name="assistant" tab="AI 助手">
-        <AiAssistantPlaceholder />
+      <!-- Tab 3: 设备信息 -->
+      <n-tab-pane name="devices" tab="设备管理">
+        <DeviceManagement />
       </n-tab-pane>
     </n-tabs>
   </div>
@@ -26,7 +27,7 @@ import DeviceManagement from '@/components/workspace/DeviceManagement.vue'
 import KnowledgeBase from '@/components/workspace/KnowledgeBase.vue'
 import AiAssistantPlaceholder from '@/components/workspace/AiAssistantPlaceholder.vue'
 
-const activeTab = ref('devices')
+const activeTab = ref('assistant')
 
 // 处理标签页切换
 const handleTabChange = (tab: string) => {
@@ -59,7 +60,6 @@ onMounted(() => {
   
   .n-tabs-pane-wrapper {
    background: var(--card-bg);
-   padding: 24px;
     border-radius: 0 0 8px 8px;
   }
 }

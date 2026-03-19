@@ -147,9 +147,6 @@ app.include_router(upload_api.router)
 app.include_router(auth_api.router)
 app.include_router(alarm_api.router)  # 新增：注册告警管理路由
 
-# 挂载静态文件
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 
 @app.get("/")
 async def root():

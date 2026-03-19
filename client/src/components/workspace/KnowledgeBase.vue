@@ -30,6 +30,7 @@
             @error="handleUploadError"
             accept=".pdf,.txt,.doc,.docx"
             :trigger="uploadTrigger"
+            action="/api/admin/upload"
           >
             <n-upload-dragger>
               <div style="margin-bottom: 12px">

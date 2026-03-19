@@ -9,7 +9,7 @@ import { useBuildingStore } from '@/store/building'
 export const VALID_DATE_START = '2016-07-01'
 export const VALID_DATE_END = '2016-08-31'
 // 使用有效范围内的一个固定日期作为"今天"
-export const MOCK_TODAY = '2016-07-15'
+export const MOCK_TODAY = '2016-08-15'
 
 // 获取当前建筑 ID
 const getBuildingId = () => {

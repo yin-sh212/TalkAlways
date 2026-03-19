@@ -38,8 +38,8 @@ import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { useBuildingStore } from '@/store/building'
-import { getKPIData, getChartData, getAnomalyList, getTrendData } from '@/api/dashboard'
-import { getSummary, detectAnomaly } from '@/api/statistics'
+import { getKPIData, getChartData, getAnomalyList, getTrendData, MOCK_TODAY } from '@/api/dashboard'
+import { getSummary, detectAnomaly, getBuildingsSummary, getDailyComparison } from '@/api/statistics'
 import { getBuildings, getDeviceStatus } from '@/api/query'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
@@ -105,11 +105,8 @@ const deviceStats = ref({
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
 
-// 有效数据时间范围常量
-const VALID_DATE_START = '2016-07-01'
-const VALID_DATE_END = '2016-08-31'
-// 使用有效范围内的一个固定日期作为"今天"
-const MOCK_TODAY = '2016-07-15'
+// 有效数据时间范围常量（已从 dashboard.ts 导入）
+// MOCK_TODAY 已在 dashboard.ts 中定义并导入
 
 // 生成能耗排名数据
 const generateRankingData = (buildingEnergy: any[]) => {
@@ -205,37 +202,42 @@ const updateAbnormalDeviceCount = async () => {
   }
 }
 
-// 更新日环比和周同比
+// 更新日环比和周同比 - 使用批量接口
 const updateDayAndWeekChange = async () => {
   try {
-    // 获取今日数据（使用有效数据范围内的日期）
-    const todayResponse = await getSummary({
-      building_id: currentBuildingId.value,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
-      time_unit: 'day'
-    })
-    const todayEnergy = (todayResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    // 基于 MOCK_TODAY 动态计算昨日和上周同期
+    const mockDate = new Date(MOCK_TODAY)
+    const yesterday = new Date(mockDate)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const lastWeek = new Date(mockDate)
+    lastWeek.setDate(lastWeek.getDate() - 7)
     
-    // 获取昨日数据
-    const yesterday = '2016-07-14'
-    const yesterdayResponse = await getSummary({
-      building_id: currentBuildingId.value,
-      start_date: yesterday,
-      end_date: yesterday,
-      time_unit: 'day'
-    })
-    const yesterdayEnergy = (yesterdayResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    // 格式化为 YYYY-MM-DD
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
     
-    // 获取上周同期数据
-    const lastWeek = '2016-07-08'
-    const lastWeekResponse = await getSummary({
+    const dates = [MOCK_TODAY, formatDate(yesterday), formatDate(lastWeek)]
+    const response = await getDailyComparison({
       building_id: currentBuildingId.value,
-      start_date: lastWeek,
-      end_date: lastWeek,
-      time_unit: 'day'
+      dates: dates
     })
-    const lastWeekEnergy = (lastWeekResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    
+    const dailyData = response.data.data.daily_data || []
+    
+    // 按日期映射数据
+    const dataMap = new Map()
+    dailyData.forEach((item: any) => {
+      dataMap.set(item.date, item.total_elec || 0)
+    })
+    
+    // 获取各日期的数据（如果没有数据则为 0）
+    const todayEnergy = (dataMap.get(MOCK_TODAY) || 0) / 1000
+    const yesterdayEnergy = (dataMap.get(formatDate(yesterday)) || 0) / 1000
+    const lastWeekEnergy = (dataMap.get(formatDate(lastWeek)) || 0) / 1000
     
     // 更新日环比和周同比
     kpiData.value.dayChange = yesterdayEnergy > 0 ? ((todayEnergy - yesterdayEnergy) / yesterdayEnergy) * 100 : 0
@@ -245,46 +247,40 @@ const updateDayAndWeekChange = async () => {
   }
 }
 
-// 更新建筑能耗占比数据
+// 更新建筑能耗占比数据 - 使用批量接口
 const updateBuildingEnergyData = async () => {
   try {
     // 获取建筑列表
     const buildingsResponse = await getBuildings()
     const buildings = buildingsResponse.data.data || []
     
-    // 为每个建筑获取汇总数据
-    const buildingEnergyPromises = buildings.map((building: any) => {
-      // 提取 building_id，可能是字符串或对象
-      const buildingId = typeof building === 'string' ? building : (building.id || building.building_id)
-      
-      return (async () => {
-        try {
-          // 使用有效数据范围内的日期
-          const response = await getSummary({
-            building_id: buildingId, // 传递字符串 ID
-            start_date: MOCK_TODAY,
-            end_date: MOCK_TODAY,
-            time_unit: 'day'
-          })
-          
-          // 获取建筑名称
-          const buildingName = typeof building === 'string' ? building : (building.name || `建筑${buildingId}`)
-          
-          return {
-            name: buildingName,
-            value: (response.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
-          }
-        } catch (error) {
-          console.error(`获取建筑 ${buildingId} 数据失败:`, error)
-          return {
-            name: typeof building === 'string' ? building : (building.name || `建筑${buildingId}`),
-            value: 0
-          }
-        }
-      })()
+    // 提取所有建筑 ID
+    const buildingIds = buildings.map((building: any) => 
+      typeof building === 'string' ? building : (building.id || building.building_id)
+    )
+    
+    // 批量获取所有建筑的能耗数据
+    const response = await getBuildingsSummary({
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
+      time_unit: 'day',
+      building_ids: buildingIds
     })
     
-    const buildingEnergyResults = await Promise.all(buildingEnergyPromises)
+    const buildingsData = response.data.data.buildings || []
+    
+    // 按建筑 ID 汇总
+    const buildingEnergyMap = new Map()
+    buildingsData.forEach((item: any) => {
+      const buildingId = item.building_id
+      const energy = (item.total_elec || 0) / 1000
+      const current = buildingEnergyMap.get(buildingId) || { name: item.building_name || `建筑${buildingId}`, value: 0 }
+      current.value += energy
+      buildingEnergyMap.set(buildingId, current)
+    })
+    
+    // 转换为数组并排序
+    const buildingEnergyResults = Array.from(buildingEnergyMap.values())
     
     // 过滤掉值为 0 的建筑，并按能量值排序
     const filteredBuildingEnergy = buildingEnergyResults

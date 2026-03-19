@@ -1,4 +1,39 @@
 import http from './http'
+import type { ApiResponse } from '@/types/user'
+
+// 洞察项类型
+export interface InsightItem {
+  title: string
+  description: string
+  category: string
+  type: 'warning' | 'info' | 'success' | 'default' | 'error' | 'primary'
+  color: string
+}
+
+// 异常摘要类型
+export interface AnomalySummary {
+  type: string
+  description: string
+  factors: string
+  impact: string
+  suggestion: string
+}
+
+// 分析响应类型
+export interface AnalysisResponse {
+  insights: InsightItem[]
+  anomaly: AnomalySummary
+}
+
+// 获取能耗分析洞察
+export const getAnalysisInsights = (params: { 
+  building_id: string
+  days: number
+  end_date?: string
+}) => {
+  return http.get<ApiResponse<AnalysisResponse>>('/analysis/insights', { params })
+}
+
 import type { 
   QueryParams, 
   NL2QueryParams, 

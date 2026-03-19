@@ -10,29 +10,42 @@ router = APIRouter(prefix="/api/charts", tags=["图表数据"])
 @router.get("/trend")
 async def get_trend_data(
         building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
-        days: int = Query(7, ge=1, le=30, description="天数，默认7天")
+        days: int = Query(7, ge=1, le=30, description="天数，默认 7 天"),
+        end_date: str = Query(default="2016-08-15", description="截止日期，格式：YYYY-MM-DD，例如：2016-08-15")
 ):
-    """获取趋势图数据（ECharts格式）- 适配新数据"""
+    """获取趋势图数据（ECharts 格式）- 根据时间范围动态调整粒度"""
     try:
-        # 新数据是2016年的，不能用 NOW()，需要调整时间范围
-        # 这里改为查询最后N天的数据（从数据集的最后一天往前推）
-        sql = """
+        # 计算开始日期
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        start_dt = end_dt - timedelta(days=days-1)
+        start_date = start_dt.strftime("%Y-%m-%d")
+        
+        # 根据天数决定时间粒度
+        if days == 1:
+            # 今日：按小时展示
+            group_by = "DATE(timestamp), HOUR(timestamp)"
+            select_time = "DATE(timestamp) as date, HOUR(timestamp) as hour"
+            format_time = lambda item: f"{item['date']} {item['hour']:02d}:00"
+        else:
+            # 7 天/30 天：按天展示
+            group_by = "DATE(timestamp)"
+            select_time = "DATE(timestamp) as date"
+            format_time = lambda item: str(item['date'])
+        
+        sql = f"""
             SELECT 
-                DATE(timestamp) as date,
-                HOUR(timestamp) as hour,
+                {select_time},
                 AVG(electricity) as avg_elec,
                 MAX(electricity) as max_elec,
                 MIN(electricity) as min_elec
             FROM energy_consumption
             WHERE building_id = %s 
-            GROUP BY DATE(timestamp), HOUR(timestamp)
-            ORDER BY date DESC, hour DESC
-            LIMIT %s
+                AND DATE(timestamp) BETWEEN %s AND %s
+            GROUP BY {group_by}
+            ORDER BY date ASC
         """
-        # 注意：这里简化了，直接取N天的数据点
-        # 如果需要精确的N天，需要用子查询
 
-        data = await Database.fetch_all(sql, (building_id, days * 24))  # 每天24小时
+        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
 
         if not data:
             return {
@@ -46,17 +59,13 @@ async def get_trend_data(
                 }
             }
 
-        # 反转数据，让时间正序
-        data = list(reversed(data))
-
         # 格式化时间
         categories = []
         avg_values = []
         max_values = []
 
         for item in data:
-            hour_str = f"{item['date']} {item['hour']:02d}:00"
-            categories.append(hour_str)
+            categories.append(format_time(item))
             avg_values.append(float(item['avg_elec']) if item['avg_elec'] is not None else 0)
             max_values.append(float(item['max_elec']) if item['max_elec'] is not None else 0)
 
@@ -84,10 +93,9 @@ async def get_trend_data(
             }
         }
     except Exception as e:
-        print(f"趋势图错误: {e}")
         return {
             "code": 500,
-            "message": str(e),
+            "message": f"获取趋势数据失败：{str(e)}",
             "data": {
                 "categories": [],
                 "series": []

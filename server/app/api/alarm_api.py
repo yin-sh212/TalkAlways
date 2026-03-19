@@ -1,7 +1,7 @@
 # app/api/alarm_api.py
 from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict,Any
 from app.database.db import Database
 from datetime import datetime
 
@@ -147,65 +147,6 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
         }
 
 # ========== 批量解决告警 ==========
-
-@router.post("/batch-resolve")
-async def batch_resolve_alarms(request: AlarmBatchRequest):
-    """
-    批量解决告警
-    将选中的多条告警状态更新为 "已解决" (resolved)，并记录解决时间
-    """
-    if not request.alarm_ids:
-        return {
-            "code": 400,
-            "message": "告警ID列表不能为空",
-            "data": None
-        }
-
-    try:
-        placeholders = ','.join(['%s'] * len(request.alarm_ids))
-        sql = f"""
-            UPDATE alarms 
-            SET status = 'resolved', end_time = NOW(), updated_at = NOW()
-            WHERE id IN ({placeholders}) AND status != 'resolved'
-        """
-
-        pool = await Database.get_pool()  # 修复：先 await
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(sql, request.alarm_ids)
-                affected_rows = cursor.rowcount
-                await conn.commit()
-
-        # 找出可能失败的ID
-        failed_ids = []
-        if affected_rows < len(request.alarm_ids):
-            check_sql = f"""
-                SELECT id FROM alarms 
-                WHERE id IN ({placeholders}) AND status = 'resolved'
-            """
-            pool = await Database.get_pool()
-            async with pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute(check_sql, request.alarm_ids)
-                    failed = await cursor.fetchall()
-                    failed_ids = [f[0] for f in failed]
-
-        return {
-            "code": 200,
-            "message": f"成功解决 {affected_rows} 条告警",
-            "data": {
-                "resolved_count": affected_rows,
-                "failed_ids": failed_ids
-            }
-        }
-
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"数据库更新失败: {str(e)}",
-            "data": None
-        }
-
 
 # ========== 告警类型枚举接口 ==========
 
@@ -651,3 +592,396 @@ async def init_alarm_dict_tables():
             """)
 
             await conn.commit()
+
+
+# ========== 告警分析接口 ==========
+
+class AlarmAnalysisResponse(BaseModel):
+    """告警分析响应"""
+    alarm_id: int
+    building_id: str
+    alarm_type: str
+    alarm_level: int
+    description: str
+    start_time: datetime
+
+    # 分析结果
+    main_cause: str  # 主要原因
+    top_factors: List[Dict[str, Any]]  # TOP3影响因素
+    quick_solution: str  # 快速解决方案
+    related_knowledge: Optional[List[Dict]] = None  # 相关知识库条目
+
+
+@router.get(
+    "/{alarm_id}/analysis",
+    responses={
+        200: {
+            "description": "成功获取告警分析",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 200,
+                        "message": "成功",
+                        "data": {
+                            "alarm_id": 123,
+                            "building_id": "Eagle_education_Wesley",
+                            "alarm_type": "energy",
+                            "alarm_level": 2,
+                            "description": "能耗异常，值为1150kW",
+                            "start_time": "2016-07-03T01:00:00",
+                            "main_cause": "当日气温较高（28.3℃），空调系统负荷增大导致能耗飙升",
+                            "top_factors": [
+                                {"factor": "气温", "value": 28.3, "impact": "high",
+                                 "description": "气温比正常值高5.2℃"},
+                                {"factor": "设备效率", "value": 0.72, "impact": "medium",
+                                 "description": "COP低于正常值0.85"},
+                                {"factor": "运行时段", "value": "11:00", "impact": "high",
+                                 "description": "处于用电高峰期"}
+                            ],
+                            "quick_solution": "1. 检查空调系统运行参数\n2. 清洗冷凝器\n3. 调整设定温度",
+                            "related_knowledge": [
+                                {"title": "空调系统节能运行规范", "url": "/knowledge/123"},
+                                {"title": "能耗异常排查指南", "url": "/knowledge/456"}
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "告警不存在",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 404,
+                        "message": "告警不存在",
+                        "data": None
+                    }
+                }
+            }
+        }
+    }
+)
+async def analyze_alarm(alarm_id: int):
+    """
+    分析告警：返回主要原因、TOP3影响因素、快速解决方案
+    """
+    try:
+        # 1. 获取告警基本信息
+        alarm_sql = """
+            SELECT 
+                id,
+                building_id,
+                meter_id,
+                alarm_type,
+                alarm_level,
+                description,
+                start_time,
+                value,
+                status
+            FROM alarms 
+            WHERE id = %s
+        """
+        alarm = await Database.fetch_one(alarm_sql, (alarm_id,))
+
+        if not alarm:
+            return {
+                "code": 404,
+                "message": "告警不存在",
+                "data": None
+            }
+
+        building_id = alarm['building_id']
+        start_time = alarm['start_time']
+
+        # 2. 查询告警发生时的环境数据（从energy_consumption表）
+        env_sql = """
+            SELECT 
+                timestamp,
+                electricity,
+                ambient_temp,
+                pressure,
+                cooling_load,
+                heating_load
+            FROM energy_consumption 
+            WHERE building_id = %s 
+                AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 6 HOUR) AND DATE_ADD(%s, INTERVAL 6 HOUR)
+            ORDER BY timestamp
+        """
+        env_data = await Database.fetch_all(env_sql, (building_id, start_time, start_time))
+
+        # 3. 计算对比数据（正常时段 vs 异常时段）
+        normal_period_sql = """
+            SELECT 
+                AVG(electricity) as avg_electricity,
+                AVG(ambient_temp) as avg_temp,
+                AVG(cooling_load) as avg_cooling
+            FROM energy_consumption 
+            WHERE building_id = %s 
+                AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 30 DAY) AND %s
+                AND is_anomaly = 0
+                AND HOUR(timestamp) = HOUR(%s)
+        """
+        normal_stats = await Database.fetch_one(normal_period_sql, (building_id, start_time, start_time, start_time))
+
+        # 4. 分析影响因素
+        factors = []
+        main_cause = ""
+        quick_solution = ""
+
+        # 获取告警时的数据点
+        alarm_point = next((e for e in env_data if e['timestamp'] == start_time), None)
+
+        if alarm_point:
+            current_elec = alarm_point['electricity']
+            current_temp = alarm_point['ambient_temp']
+
+            # 计算与正常值的差异
+            if normal_stats:
+                avg_elec = normal_stats['avg_electricity'] or current_elec
+                avg_temp = normal_stats['avg_temp'] or current_temp
+
+                elec_diff = ((current_elec - avg_elec) / avg_elec) * 100 if avg_elec > 0 else 0
+                temp_diff = current_temp - avg_temp
+
+                # 因素1：气温影响
+                if temp_diff > 3:
+                    factors.append({
+                        "factor": "气温异常",
+                        "value": round(current_temp, 1),
+                        "normal": round(avg_temp, 1),
+                        "impact": "high",
+                        "description": f"气温比正常值高{round(temp_diff, 1)}℃，导致制冷负荷增加"
+                    })
+                elif temp_diff > 1:
+                    factors.append({
+                        "factor": "气温偏高",
+                        "value": round(current_temp, 1),
+                        "normal": round(avg_temp, 1),
+                        "impact": "medium",
+                        "description": f"气温比正常值高{round(temp_diff, 1)}℃"
+                    })
+
+                # 因素2：能耗突增
+                if elec_diff > 50:
+                    factors.append({
+                        "factor": "能耗突增",
+                        "value": round(current_elec, 1),
+                        "normal": round(avg_elec, 1),
+                        "impact": "high",
+                        "description": f"能耗比正常值高出{round(elec_diff)}%"
+                    })
+                elif elec_diff > 30:
+                    factors.append({
+                        "factor": "能耗偏高",
+                        "value": round(current_elec, 1),
+                        "normal": round(avg_elec, 1),
+                        "impact": "medium",
+                        "description": f"能耗比正常值高出{round(elec_diff)}%"
+                    })
+
+                # 因素3：设备效率（如果冷却负荷数据可用）
+                if alarm_point.get('cooling_load') and alarm_point['cooling_load'] > 0:
+                    cop = alarm_point['cooling_load'] / current_elec if current_elec > 0 else 0
+                    normal_cop = normal_stats['avg_cooling'] / avg_elec if avg_elec > 0 and normal_stats[
+                        'avg_cooling'] > 0 else 3.5
+
+                    if cop < normal_cop * 0.8:
+                        factors.append({
+                            "factor": "设备效率下降",
+                            "value": round(cop, 2),
+                            "normal": round(normal_cop, 2),
+                            "impact": "high",
+                            "description": f"COP值{round(cop, 2)}低于正常值{round(normal_cop, 2)}"
+                        })
+
+        # 5. 根据告警类型和级别生成主要原因和解决方案
+        alarm_level = alarm['alarm_level']
+        alarm_type = alarm['alarm_type']
+
+        # 主要原因分析
+        if alarm_type == 'energy':
+            if any(f['impact'] == 'high' for f in factors):
+                main_cause = "高温导致制冷负荷剧增，同时设备运行效率下降"
+            elif temp_diff > 2:
+                main_cause = f"气温升高{round(temp_diff, 1)}℃，空调系统负荷增大"
+            else:
+                main_cause = "设备运行异常导致能耗突增"
+        elif alarm_type == 'equipment':
+            main_cause = "设备故障或运行参数异常"
+        elif alarm_type == 'environment':
+            main_cause = "环境因素超出正常范围"
+        else:
+            main_cause = "未知原因，建议检查设备运行日志"
+
+        # 快速解决方案
+        if alarm_type == 'energy':
+            quick_solution = "1. 检查空调系统运行参数\n2. 清洗冷凝器滤网\n3. 优化运行时段\n4. 检查是否有设备异常运行"
+        elif alarm_type == 'equipment':
+            quick_solution = "1. 查看设备故障代码\n2. 重启设备\n3. 联系运维人员检查\n4. 参考设备手册排查"
+        else:
+            quick_solution = "1. 检查环境监测设备\n2. 校准传感器\n3. 查看历史数据对比"
+
+        # 取TOP3影响因素
+        top_factors = sorted(factors, key=lambda x: {'high': 3, 'medium': 2, 'low': 1}[x['impact']], reverse=True)[:3]
+
+        # 6. 关联知识库（如果有）
+        related_knowledge = await search_related_knowledge(alarm_type, main_cause)
+
+        return {
+            "code": 200,
+            "message": "成功",
+            "data": {
+                "alarm_id": alarm['id'],
+                "building_id": alarm['building_id'],
+                "alarm_type": alarm['alarm_type'],
+                "alarm_level": alarm['alarm_level'],
+                "description": alarm['description'],
+                "start_time": alarm['start_time'],
+                "main_cause": main_cause,
+                "top_factors": top_factors,
+                "quick_solution": quick_solution,
+                "related_knowledge": related_knowledge
+            }
+        }
+
+    except Exception as e:
+        print(f"告警分析错误: {e}")
+        return {
+            "code": 500,
+            "message": f"分析失败: {str(e)}",
+            "data": None
+        }
+
+
+# ========== 批量告警分析接口 ==========
+
+class BatchAnalysisRequest(BaseModel):
+    alarm_ids: List[int]
+
+
+@router.post(
+    "/batch-analysis",
+    responses={
+        200: {
+            "description": "成功获取批量告警分析",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 200,
+                        "message": "成功",
+                        "data": {
+                            "total": 3,
+                            "summaries": [
+                                {
+                                    "alarm_id": 123,
+                                    "main_cause": "气温过高",
+                                    "quick_solution": "检查空调系统"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+async def batch_analyze_alarms(request: BatchAnalysisRequest):
+    """
+    批量分析告警（返回简要分析结果）
+    """
+    if not request.alarm_ids:
+        return {
+            "code": 400,
+            "message": "告警ID列表不能为空",
+            "data": None
+        }
+
+    try:
+        placeholders = ','.join(['%s'] * len(request.alarm_ids))
+
+        # 查询告警基本信息
+        sql = f"""
+            SELECT 
+                id,
+                building_id,
+                alarm_type,
+                alarm_level,
+                description,
+                start_time
+            FROM alarms 
+            WHERE id IN ({placeholders})
+            ORDER BY start_time DESC
+        """
+
+        alarms = await Database.fetch_all(sql, tuple(request.alarm_ids))
+
+        summaries = []
+        for alarm in alarms:
+            # 简单分析（不查详细数据，提高性能）
+            alarm_type = alarm['alarm_type']
+
+            if alarm_type == 'energy':
+                main_cause = "能耗异常，建议检查空调系统和运行时段"
+                quick_solution = "1.检查空调参数 2.优化运行时间"
+            elif alarm_type == 'equipment':
+                main_cause = "设备异常，建议查看故障代码"
+                quick_solution = "1.重启设备 2.联系运维"
+            else:
+                main_cause = "环境异常，检查传感器"
+                quick_solution = "1.校准传感器 2.查看环境数据"
+
+            summaries.append({
+                "alarm_id": alarm['id'],
+                "building_id": alarm['building_id'],
+                "main_cause": main_cause,
+                "quick_solution": quick_solution
+            })
+
+        return {
+            "code": 200,
+            "message": "成功",
+            "data": {
+                "total": len(summaries),
+                "summaries": summaries
+            }
+        }
+
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"批量分析失败: {str(e)}",
+            "data": None
+        }
+
+
+# ========== 辅助函数：搜索相关知识库 ==========
+
+async def search_related_knowledge(alarm_type: str, cause: str) -> List[Dict]:
+    """
+    搜索相关知识库条目（需要接入RAG）
+    """
+    try:
+        # 这里可以调用你的RAG服务
+        # 暂时返回模拟数据
+        knowledge_base = {
+            "energy": [
+                {"title": "空调系统节能运行规范", "url": "/knowledge/1"},
+                {"title": "能耗异常排查指南", "url": "/knowledge/2"},
+                {"title": "制冷系统维护手册", "url": "/knowledge/3"}
+            ],
+            "equipment": [
+                {"title": "设备故障代码对照表", "url": "/knowledge/4"},
+                {"title": "冷水机组维修手册", "url": "/knowledge/5"}
+            ],
+            "environment": [
+                {"title": "环境监测规范", "url": "/knowledge/6"},
+                {"title": "传感器校准指南", "url": "/knowledge/7"}
+            ]
+        }
+
+        return knowledge_base.get(alarm_type, [])
+
+    except Exception as e:
+        print(f"知识库搜索失败: {e}")
+        return []

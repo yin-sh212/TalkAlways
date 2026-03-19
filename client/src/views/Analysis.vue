@@ -79,8 +79,9 @@
           content-style="padding: 0 24px 24px;"
         >
           <n-alert 
+            v-if="currentAnomaly.type !== '无异常'"
             type="warning" 
-            :title="`今日最严重异常：${currentAnomaly.type || '电力突增'}`"
+            :title="`今日最严重异常：${currentAnomaly.type}`"
             closable
             style="margin-bottom: 16px;"
           >
@@ -101,6 +102,22 @@
                     保存到知识库
                   </n-button>
                 </div>
+              </n-space>
+            </template>
+          </n-alert>
+          
+          <!-- 无异常时的友好提示 -->
+          <n-alert 
+            v-else
+            type="success" 
+            title="设备运行正常"
+            closable
+            style="margin-bottom: 16px;"
+          >
+            <template #default>
+              <n-space vertical :size="12">
+                <div>当前未检测到明显能耗异常，设备运行平稳。</div>
+                <div>建议：继续保持当前运行策略，定期巡检设备。</div>
               </n-space>
             </template>
           </n-alert>

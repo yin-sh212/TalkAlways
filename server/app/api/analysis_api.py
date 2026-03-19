@@ -33,7 +33,7 @@ class AnalysisResponse(BaseModel):
     anomaly: AnomalySummary
 
 
-@router.get("/insights", response_model=AnalysisResponse)
+@router.get("/insights")
 async def get_analysis_insights(
     building_id: str = Query(..., description="建筑编号"),
     days: int = Query(7, ge=1, le=30, description="分析天数"),
@@ -106,14 +106,14 @@ async def get_analysis_insights(
         # 4. 生成异常摘要
         anomaly_summary = generate_anomaly_summary(anomaly_data, energy_data)
         
-        return {
+        return format_response(200, {
             "insights": insights,
             "anomaly": anomaly_summary
-        }
+        })
         
     except Exception as e:
         # 返回默认数据
-        return {
+        return format_response(200, {
             "insights": [
                 {
                     "title": "暂无足够数据生成洞察",
@@ -130,7 +130,7 @@ async def get_analysis_insights(
                 "impact": "暂无影响",
                 "suggestion": "继续监测数据变化"
             }
-        }
+        })
 
 
 def analyze_peak_hours(energy_data):

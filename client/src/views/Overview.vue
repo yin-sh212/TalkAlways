@@ -38,7 +38,7 @@ import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { useBuildingStore } from '@/store/building'
-import { getKPIData, getChartData, getAnomalyList } from '@/api/dashboard'
+import { getKPIData, getChartData, getAnomalyList, getTrendData } from '@/api/dashboard'
 import { getSummary, detectAnomaly } from '@/api/statistics'
 import { getBuildings, getDeviceStatus } from '@/api/query'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
@@ -348,32 +348,22 @@ const loadData = async () => {
   
   loading.value = true
   try {
-    // 并行调用：KPI 数据 + 分布图数据 + 异常列表
-    const [kpiRes, distributionRes, anomalyRes] = await Promise.all([
+    // 并行调用：KPI 数据 + 分布图数据（24 小时）+ 趋势数据（近 7 日）+ 异常列表
+    const [kpiRes, distributionRes, trendRes, anomalyRes] = await Promise.all([
       getKPIData(),
       getChartData(),
+      getTrendData(),
       getAnomalyList(5)
     ])
 
     // 填充 KPI 数据
     kpiData.value = kpiRes
     
-    // 填充图表数据
+    // 填充图表数据 - 分别使用不同的数据源
     chartData.value = {
       ...chartData.value,
-      distributionData: distributionRes // 新增：保存分布图数据
-    }
-    
-    // 从分布图中提取趋势数据（如果没有独立的 trend 接口）
-    if (distributionRes.categories && distributionRes.series) {
-      // 使用第一个 series 的数据作为趋势数据
-      const firstSeries = distributionRes.series[0]
-      if (firstSeries) {
-        chartData.value.trendData = distributionRes.categories.map((date: string, index: number) => ({
-          date: date,
-          energy: firstSeries.data[index] || 0
-        }))
-      }
+      distributionData: distributionRes, // 24 小时能耗分布
+      trendData: trendRes                // 近 7 日总能耗趋势（独立数据）
     }
     
     // 填充异常列表

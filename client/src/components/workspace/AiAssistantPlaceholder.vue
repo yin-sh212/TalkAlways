@@ -189,7 +189,7 @@ function handleQuickQuestion(question: string) {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 200px);
+  height: 100%;
 }
 
 .messages-container {
@@ -199,7 +199,6 @@ function handleQuickQuestion(question: string) {
   background: #f5f7f9;
   border-radius: 8px;
   margin-bottom: 16px;
-  min-height: 0;
 }
 
 .message-item {
@@ -263,7 +262,6 @@ function handleQuickQuestion(question: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex-shrink: 0;
 }
 
 .quick-questions {

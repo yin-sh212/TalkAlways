@@ -123,22 +123,14 @@ export const getChartData = async () => {
   }
 }
 
-// 获取趋势数据 - 对接真实接口
+// 获取趋势数据 - 对接真实接口（近 7 日总能耗趋势）
 export const getTrendData = async () => {
   // 后端接口：GET /api/charts/trend?building_id=xxx&days=7
   const buildingId = getBuildingId()
   
   if (!buildingId) {
     console.warn('未设置建筑 ID，返回默认数据')
-    return {
-      data: {
-        code: 200,
-        data: {
-          categories: [],
-          series: []
-        }
-      }
-    }
+    return []
   }
   
   try {
@@ -147,19 +139,22 @@ export const getTrendData = async () => {
       days: 7
     })
     
-    return response
+    const trendResponse = response.data.data
+    
+    // 将后端返回的趋势数据转换为前端需要的格式
+    // 后端返回：{ categories: ['2016-07-09', '2016-07-10', ...], series: [{name: '平均用电量', data: [...}] }
+    if (trendResponse.categories && trendResponse.series && trendResponse.series.length > 0) {
+      return trendResponse.categories.map((date: string, index: number) => ({
+        date: date,
+        energy: trendResponse.series[0].data[index] || 0
+      }))
+    }
+    
+    return []
   } catch (error) {
     console.error('获取趋势数据失败:', error)
-    // 返回空响应
-    return {
-      data: {
-        code: 200,
-        data: {
-          categories: [],
-          series: []
-        }
-      }
-    }
+    // 返回空数组
+    return []
   }
 }
 

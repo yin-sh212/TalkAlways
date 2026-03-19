@@ -140,10 +140,10 @@ async def get_meters(building_id: Optional[str] = Query(None, description="建�
 @router.get("/device-status")
 async def get_device_status(
         building_id: Optional[str] = Query(None, description="建筑编号"),
-        meter_id: Optional[str] = Query(None, description="设备ID"),
+        meter_id: Optional[str] = Query(None, description="设备 ID"),
         status: Optional[str] = Query(None, description="状态")
 ):
-    """获取设备运行状态 - 修复版"""
+    """获取设备运行状态 - 返回统计汇总数据"""
     sql = """
         SELECT 
             m.id as meter_id,
@@ -175,7 +175,7 @@ async def get_device_status(
 
     data = await Database.fetch_all(sql, tuple(params) if params else None)
 
-    # 计算健康度（代码不变）
+    # 计算健康度
     for item in data:
         total = item['data_count'] or 1
         anomaly = item['anomaly_count'] or 0
@@ -189,7 +189,27 @@ async def get_device_status(
         else:
             item['status_desc'] = '正常'
 
-    return {"code": 200, "data": data}
+    # 新增：统计汇总数据
+    total_count = len(data)
+    normal_count = sum(1 for item in data if item['status'] == 'normal')
+    abnormal_count = sum(1 for item in data if item['status'] == 'abnormal')
+    offline_count = sum(1 for item in data if item['status'] == 'offline' or not item['status'])
+    
+    # 计算整体健康度
+    health_score = round((normal_count / total_count * 100) if total_count > 0 else 0, 2)
+
+    # 返回统计对象
+    return {
+        "code": 200,
+        "data": {
+            "totalCount": total_count,
+            "normalCount": normal_count,
+            "abnormalCount": abnormal_count,
+            "offlineCount": offline_count,
+            "healthScore": health_score,
+            "details": data  # 保留原始详细数据供参考
+        }
+    }
 
 @router.post("/query")
 async def query_data(

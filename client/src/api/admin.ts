@@ -9,7 +9,7 @@ export const uploadCSV = (data: FormData) => {
   })
 }
 
-// 下载CSV模板
+// 下载 CSV 模板
 export const downloadTemplate = () => {
   return http.get('/admin/upload/template', {
     responseType: 'blob'
@@ -19,4 +19,27 @@ export const downloadTemplate = () => {
 // 获取上传历史
 export const getUploadHistory = () => {
   return http.get('/admin/upload/history')
+}
+
+// 获取支持的文件格式
+export const getSupportedFormats = () => {
+  return http.get('/admin/supported-formats')
+}
+
+// ========== 知识库管理接口 ==========
+
+// 新增文档参数
+export interface AddDocumentParams {
+  title: string
+  category: string
+  tags: string[]
+  summary: string
+  description: string
+  solution: string
+  notes: string[]
+}
+
+// 新增文档到知识库
+export const addDocument = (data: AddDocumentParams) => {
+  return http.post('/knowledge/add', data)
 }

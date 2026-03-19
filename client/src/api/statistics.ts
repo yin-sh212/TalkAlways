@@ -16,6 +16,32 @@ export const getSummary = (params: { building_id?: string; start_date?: string; 
   }>>('/statistics/summary', { params })
 }
 
+// 批量获取多个建筑的能耗汇总 - 用于建筑能耗对比
+export const getBuildingsSummary = (params: { start_date: string; end_date: string; time_unit?: string; building_ids?: string[] }) => {
+  return http.get<ApiResponse<{
+    buildings: Array<{
+      period: string;
+      building_id: string;
+      building_name: string;
+      total_elec: number;
+      avg_elec: number;
+      data_points: number;
+    }>
+  }>>('/statistics/summary/buildings', { params })
+}
+
+// 批量获取多日的能耗数据 - 用于日环比、周同比计算
+export const getDailyComparison = (params: { building_id: string; dates: string[] }) => {
+  return http.get<ApiResponse<{
+    daily_data: Array<{
+      date: string;
+      total_elec: number;
+      avg_elec: number;
+      data_points: number;
+    }>
+  }>>('/statistics/summary/daily-comparison', { params })
+}
+
 // 计算能效比 (COP)
 export const calculateCOP = (params: { building_id?: string; start_date?: string; end_date?: string }) => {
   return http.get<ApiResponse<number>>('/statistics/cop', { params })

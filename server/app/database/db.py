@@ -1,18 +1,21 @@
+import os
 import aiomysql
+from dotenv import load_dotenv
 from app.config import config
+
+load_dotenv()
 
 class Database:
     _pool = None
 
     @classmethod
     async def get_pool(cls):
-        """获取数据库连接池单例"""
+        """获取数据库连接池单例（支持云端 SSL）"""
         if cls._pool is None:
             # 准备 SSL 配置（TiDB Cloud 需要）
             ssl_ctx = None
             
             # 检查是否配置了 SSL
-            import os
             ssl_ca = os.getenv("SSL_CA")
             ssl_cert = os.getenv("SSL_CERT")
             ssl_key = os.getenv("SSL_KEY")
@@ -62,37 +65,29 @@ class Database:
             cls._pool = None
 
     @classmethod
-    async def execute(cls, sql: str, params: tuple = None):
-        """执行 SQL（增删改）"""
+    async def fetch_all(cls, query, params=None):
+        """执行查询并返回所有结果"""
         pool = await cls.get_pool()
         async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(sql, params or ())
-                return cursor.lastrowid
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(query, params)
+                return await cur.fetchall()
 
     @classmethod
-    async def fetch_all(cls, sql: str, params: tuple = None):
-        """查询多条数据"""
+    async def fetch_one(cls, query, params=None):
+        """执行查询并返回单条结果"""
         pool = await cls.get_pool()
         async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(sql, params or ())
-                rows = await cursor.fetchall()
-                # 获取列名
-                columns = [desc[0] for desc in cursor.description]
-                # 转为字典列表
-                result = []
-                for row in rows:
-                    item = dict(zip(columns, row))
-                    # 处理 datetime 类型
-                    for key, value in item.items():
-                        if hasattr(value, 'isoformat'):
-                            item[key] = value.isoformat()
-                    result.append(item)
-                return result
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(query, params)
+                return await cur.fetchone()
 
     @classmethod
-    async def fetch_one(cls, sql: str, params: tuple = None):
-        """查询单条数据"""
-        results = await cls.fetch_all(sql, params)
-        return results[0] if results else None
+    async def execute(cls, query, params=None):
+        """执行 SQL 语句（INSERT/UPDATE/DELETE）"""
+        pool = await cls.get_pool()
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(query, params)
+                await conn.commit()
+                return cur.rowcount

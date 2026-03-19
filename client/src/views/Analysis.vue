@@ -208,7 +208,7 @@ import {
 } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
-import { getLineChartConfig, getBarChartConfig } from '@/utils/echarts-config'
+import { getLineChartConfig, getBarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 import { getBuildings } from '@/api/query'
 import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
 import { detectAnomaly, getSummary } from '@/api/statistics'
@@ -439,6 +439,23 @@ const updateCompareChartWithMock = () => {
                 <div>${point.marker} 能耗：${point.value} MWh</div>`
       }
     },
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
+      data: mockData.series.map((s: any) => s.name),
+    },
+    grid: {
+      left: '3%',
+      right: '3%',
+      bottom: '15%',
+      containLabel: true,
+    },
     xAxis: {
       type: 'category',
       data: mockData.categories
@@ -482,11 +499,24 @@ const updateTrendChart = (data: any) => {
       smooth: true
     })), {
       yAxisName: '能耗 (MWh)',
-      tooltipFormatter: '{b}: {c} MWh'
+      tooltipFormatter: '{b}: {c} MWh',
+      grid: {
+        left: '3%',
+        right: '3%',
+        bottom: '15%',
+        containLabel: true,
+      }
     }),
     legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
       data: series.map((s: any) => s.name),
-      bottom: 10
     }
   }
   
@@ -504,13 +534,35 @@ const updateCompareChart = (data: any) => {
   const categories = data.categories || []
   const series = data.series || []
   
+  // 为每个系列分配不同的颜色
+  const seriesData = series.map((s: any, index: number) => ({
+    name: s.name,
+    data: s.data,
+    color: CHART_COLORS.palette[index % CHART_COLORS.palette.length]
+  }))
+  
   const option: EChartsOption = {
-    ...getBarChartConfig(categories, series.map((s: any) => ({
-      name: s.name,
-      data: s.data
-    })), {
-      yAxisName: '能耗 (MWh)'
+    ...getBarChartConfig(categories, seriesData, {
+      yAxisName: '能耗 (MWh)',
+      showLegend: true,
+      grid: {
+        left: '3%',
+        right: '3%',
+        bottom: '15%',
+        containLabel: true,
+      }
     }),
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
+      data: series.map((s: any) => s.name),
+    },
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },

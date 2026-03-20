@@ -106,14 +106,16 @@ async def get_trend_data(
 @router.get("/comparison")
 async def get_comparison_data(
         building_ids: str = Query(...,
-                                  description="建筑编号，逗号分隔，如：Eagle_education_Cassie,Eagle_education_Wesley"),
-        start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
-        end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2016-07-31")
+                                  description="建筑编号，逗号分隔"),
+        start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD"),
+        end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD")
 ):
-    """获取多建筑对比数据（柱状图）- 适配新数据"""
+    """获取多建筑对比数据（增强版 - 支持多维度对比和综合评分）"""
     ids = building_ids.split(',')
 
-    result = []
+    building_details = []
+    
+    # 第一阶段：收集所有建筑的原始数据
     for building_id in ids:
         building_id = building_id.strip()
 
@@ -125,155 +127,105 @@ async def get_comparison_data(
                 COALESCE(MAX(electricity), 0) as peak_elec,
                 COALESCE(AVG(cooling_load), 0) as avg_cooling,
                 COALESCE(AVG(heating_load), 0) as avg_heating,
-                COALESCE(AVG(ambient_temp), 0) as avg_temp
+                COALESCE(AVG(ambient_temp), 0) as avg_temp,
+                SUM(CASE WHEN is_anomaly = 1 THEN 1 ELSE 0 END) as anomaly_count,
+                COUNT(*) as total_count
             FROM energy_consumption
             WHERE building_id = %s 
                 AND DATE(timestamp) BETWEEN %s AND %s
         """
         data = await Database.fetch_one(sql, (building_id, start_date, end_date))
+
         if not data:
             data = {
                 "total_elec": 0, "avg_elec": 0, "peak_elec": 0,
-                "avg_cooling": 0, "avg_heating": 0, "avg_temp": 0
+                "avg_cooling": 0, "avg_heating": 0, "avg_temp": 0,
+                "anomaly_count": 0, "total_count": 0
             }
 
-        # 获取建筑名称（从 buildings 表）
-        name_sql = "SELECT name FROM buildings WHERE id = %s"
+        # 获取建筑信息（包含面积）
+        name_sql = "SELECT name, type, area FROM buildings WHERE id = %s"
         name_data = await Database.fetch_one(name_sql, (building_id,))
-
-        result.append({
+        
+        building_name = name_data['name'] if name_data else building_id
+        building_type = name_data['type'] if name_data else '未知'
+        building_area = name_data['area'] if name_data and name_data['area'] else 1  # 避免除零
+        
+        # 计算各项指标
+        total_elec = data['total_elec']
+        avg_elec = data['avg_elec']
+        peak_elec = data['peak_elec']
+        anomaly_count = data['anomaly_count']
+        total_count = data['total_count']
+        
+        # 单位面积能耗 (kWh/m²) - 由于面积为 0，直接用总能耗代替
+        per_area = total_elec / building_area if building_area > 0 else total_elec
+        
+        # 峰值系数
+        peak_ratio = peak_elec / avg_elec if avg_elec > 0 else 0
+        
+        # 异常率
+        anomaly_rate = (anomaly_count / total_count * 100) if total_count > 0 else 0
+        
+        # 健康度 (100 - 异常率)
+        health_score = 100 - anomaly_rate
+        
+        # 稳定性 (100 - (峰值系数 - 1) * 50)
+        stability_score = max(0, min(100, 100 - (peak_ratio - 1) * 50))
+        
+        building_details.append({
             "building_id": building_id,
-            "building_name": name_data['name'] if name_data else building_id,
-            "total_electricity": float(data['total_elec']),
-            "avg_electricity": float(data['avg_elec']),
-            "peak_electricity": float(data['peak_elec']),
-            "avg_cooling_load": float(data['avg_cooling']),
-            "avg_heating_load": float(data['avg_heating']),
-            "avg_temperature": float(data['avg_temp'])
+            "building_name": building_name,
+            "building_type": building_type,
+            "area": building_area,
+            "total_elec": total_elec,
+            "avg_elec": avg_elec,
+            "per_area": per_area,
+            "peak_ratio": peak_ratio,
+            "health_score": health_score,
+            "stability_score": stability_score,
+            "efficiency_score": 0,  # 第二阶段计算
+            "anomaly_rate": anomaly_rate
         })
+    
+    # 第二阶段：基于平均能耗计算节能性评分（相对比较）
+    if len(building_details) > 0:
+        avg_per_area = sum(b["per_area"] for b in building_details) / len(building_details)
+        
+        for b in building_details:
+            # 节能性：低于平均水平的建筑得分更高
+            # 使用标准差归一化：(当前值 - 平均值) / 平均值 * 50 + 50
+            # 这样平均值为 50 分，优于平均 20% 得 60 分，差于平均 20% 得 40 分
+            if avg_per_area > 0:
+                relative_efficiency = 50 - (b["per_area"] - avg_per_area) / avg_per_area * 50
+                b["efficiency_score"] = max(0, min(100, relative_efficiency))
+            else:
+                b["efficiency_score"] = 50  # 默认中间分
 
-    # 基础对比（用电量）
-    base_series = [
-        {
-            "name": "总用电量 (kWh)",
-            "type": "bar",
-            "data": [item['total_electricity'] for item in result]
-        },
-        {
-            "name": "平均用电量 (kWh)",
-            "type": "bar",
-            "data": [item['avg_electricity'] for item in result]
-        }
-    ]
-
-    # 可选：冷热负荷对比（如果前端需要）
-    cooling_series = [
-        {
-            "name": "平均冷冻水冷量",
-            "type": "bar",
-            "data": [item['avg_cooling_load'] for item in result]
-        }
-    ]
-
-    heating_series = [
-        {
-            "name": "平均供热能耗",
-            "type": "bar",
-            "data": [item['avg_heating_load'] for item in result]
-        }
-    ]
-
-    return {
-        "code": 200,
-        "data": {
-            "categories": [item['building_name'] for item in result],
-            "series": base_series,
-            # 如果需要更多对比，可以添加：
-            "extra_series": {
-                "cooling": cooling_series,
-                "heating": heating_series,
-                "temperature": [item['avg_temperature'] for item in result]
+    # 构建雷达图数据
+    radar_data = {
+        "indicators": [
+            {"name": "节能性", "max": 100},
+            {"name": "稳定性", "max": 100},
+            {"name": "健康度", "max": 100},
+            {"name": "能效比", "max": 100}
+        ],
+        "buildings": [
+            {
+                "building_name": b["building_name"],
+                "values": [
+                    round(b["efficiency_score"], 2),
+                    round(b["stability_score"], 2),
+                    round(b["health_score"], 2),
+                    # 能效比：基于单位面积能耗的相对评分（与节能性类似但权重不同）
+                    round(max(0, min(100, 50 - (b["per_area"] - avg_per_area) / avg_per_area * 30)), 2) if avg_per_area > 0 else 50
+                ]
             }
-        }
+            for b in building_details
+        ]
     }
-
-
-@router.get("/distribution")
-async def get_distribution_data(
-        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
-        date: str = Query(..., description="日期，格式：YYYY-MM-DD，例如：2016-07-15")
-):
-    """获取某天的小时分布数据（折线图）- 适配新数据"""
-    # 查询当天的小时分布
-    sql = """
-        SELECT 
-            HOUR(timestamp) as hour,
-            AVG(electricity) as electricity,
-            AVG(cooling_load) as cooling_load,
-            AVG(heating_load) as heating_load,
-            AVG(ambient_temp) as ambient_temp
-        FROM energy_consumption
-        WHERE building_id = %s 
-            AND DATE(timestamp) = %s
-        GROUP BY HOUR(timestamp)
-        ORDER BY hour
-    """
-
-    data = await Database.fetch_all(sql, (building_id, date))
-
-    # 补全24小时
-    hours = list(range(24))
-    elec_values = [0] * 24
-    cooling_values = [0] * 24
-    heating_values = [0] * 24
-    temp_values = [0] * 24
-
-    for item in data:
-        hour = item['hour']
-        elec_values[hour] = float(item['electricity']) if item['electricity'] else 0
-        cooling_values[hour] = float(item['cooling_load']) if item['cooling_load'] else 0
-        heating_values[hour] = float(item['heating_load']) if item['heating_load'] else 0
-        temp_values[hour] = float(item['ambient_temp']) if item['ambient_temp'] else 0
-
-    # 默认返回用电量分布
-    series = [
-        {
-            "name": "用电量 (kWh)",
-            "type": "line",
-            "data": elec_values,
-            "areaStyle": {}
-        }
-    ]
-
-    # 如果前端需要多系列，可以增加
-    multi_series = [
-        {
-            "name": "用电量 (kWh)",
-            "type": "line",
-            "data": elec_values,
-            "areaStyle": {}
-        },
-        {
-            "name": "冷冻水冷量",
-            "type": "line",
-            "data": cooling_values,
-            "lineStyle": {"type": "dashed"}
-        },
-        {
-            "name": "供热能耗",
-            "type": "line",
-            "data": heating_values,
-            "lineStyle": {"type": "dotted"}
-        }
-    ]
 
     return {
         "code": 200,
-        "data": {
-            "categories": [f"{h:02d}:00" for h in hours],
-            "series": series,  # 默认单系列
-            "multi_series": multi_series,  # 可选多系列
-            "temperature": temp_values  # 温度数据
-        }
+        "data": radar_data
     }
-

@@ -424,3 +424,85 @@ export function getBasePieChartConfig(
     ],
   };
 }
+
+/**
+ * 雷达图配置（用于多建筑综合对比）
+ * @param indicators - 雷达图指标（轴）
+ * @param seriesData - 系列数据（每个建筑一个系列）
+ * @param options - 可选配置项
+ */
+export function getRadarChartConfig(
+  indicators: Array<{
+    name: string;
+    max: number;
+  }>,
+  seriesData: Array<{
+    name: string;
+    value: number[];
+    color?: string;
+  }>,
+  options: {
+    title?: string;
+    shape?: 'circle' | 'polygon';
+    splitNumber?: number;
+    showLegend?: boolean;
+  } = {},
+): EChartsOption {
+  const {
+    title = '',
+    shape = 'circle',
+    splitNumber = 5,
+    showLegend = true,
+  } = options;
+
+  return {
+    title: title ? { text: title, left: 'center' } : undefined,
+    tooltip: {
+      trigger: 'item' as const,
+      formatter: '{b}: {c}',
+    },
+    legend: showLegend ? DEFAULT_LEGEND : undefined,
+    radar: {
+      indicator: indicators,
+      shape,
+      splitNumber,
+      axisName: {
+        color: '#333',
+        fontSize: 12,
+        fontWeight: 'bold',
+      },
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(127, 127, 127, 0.3)',
+        },
+      },
+      splitArea: {
+        show: false,
+      },
+      axisLine: {
+        lineStyle: {
+          color: 'rgba(127, 127, 127, 0.5)',
+        },
+      },
+    },
+    series: [
+      {
+        type: 'radar' as const,
+        data: seriesData.map((series, index) => ({
+          name: series.name,
+          value: series.value,
+          itemStyle: {
+            color: series.color || CHART_COLORS.palette[index % CHART_COLORS.palette.length],
+          },
+          areaStyle: {
+            opacity: 0.2,
+          },
+          lineStyle: {
+            width: 2,
+          },
+          symbolSize: 8,
+        })),
+      },
+    ],
+  };
+}

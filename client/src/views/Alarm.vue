@@ -466,15 +466,8 @@ const handleQuery = async (skipValidation: boolean = false) => {
     const alarmData = alarmRes.data?.data || {};
     const alarms = Array.isArray(alarmData.items) ? alarmData.items : [];
 
-    console.log("[Alarm] 原始告警数据:", alarmData);
-    console.log("[Alarm] 告警数量:", alarms.length);
-    
-    if (alarms.length === 0) {
-      message.warning("当前查询条件下没有找到告警数据");
-    }
-    
-    const mappedAlarms = alarms.map((item: any, index: number) => {
-      const mapped = {
+    tableData.value = alarms
+      .map((item: any, index: number) => ({
         id: item.id || item.alarm_id || `alarm_${index}`,
         timestamp: item.start_time || item.timestamp || item.time,
         building_id: item.building_id,
@@ -488,30 +481,8 @@ const handleQuery = async (skipValidation: boolean = false) => {
         severityName: getSeverityName(
           item.severity || String(item.alarm_level),
         ),
-      };
-      console.log(`[Alarm] 告警 ${index + 1} - ID: ${mapped.id}, 原始状态：${item.status}, 映射后状态：${mapped.status}`);
-      return mapped;
-    });
-    
-    console.log("[Alarm] 映射后的告警总数:", mappedAlarms.length);
-    console.log("[Alarm] 过滤前的状态分布:", mappedAlarms.map(a => a.status));
-    
-    // 统计各状态的告警数量
-    const statusCount = {
-      unresolved: mappedAlarms.filter(a => a.status === 'unresolved').length,
-      acknowledged: mappedAlarms.filter(a => a.status === 'acknowledged').length,
-      resolved: mappedAlarms.filter(a => a.status === 'resolved').length,
-    };
-    console.log("[Alarm] 状态统计:", statusCount);
-    
-    tableData.value = mappedAlarms.filter((item) => item.status !== "resolved"); // 过滤掉已解决的告警
-    
-    console.log("[Alarm] 过滤后的告警数量:", tableData.value.length);
-    console.log("[Alarm] 表格数据:", tableData.value);
-    
-    if (tableData.value.length === 0 && alarms.length > 0) {
-      message.info(`所有 ${alarms.length} 条告警都已是已解决状态，列表中不显示`);
-    }
+      }))
+      .filter((item) => item.status !== "resolved"); // 过滤掉已解决的告警
 
     // 填充指标数据 - 使用确切路径 data.data.summary
     const summaryData = summaryRes.data.data?.summary || {};

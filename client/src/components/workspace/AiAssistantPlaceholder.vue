@@ -1,110 +1,184 @@
 <template>
   <div class="ai-assistant">
-    <!-- 功能预告卡片 -->
-    <n-card
-    title="🤖 AI 智能助手"
-     :bordered="false"
-      embedded
-      style="margin-bottom: 20px;"
-    >
-      <template #header-extra>
-        <n-tag type="warning" size="small">即将上线</n-tag>
-      </template>
-      
-      <n-space vertical :size="16">
-        <n-alert type="info" title="功能说明">
-          基于先进的人工智能技术，为运维人员提供智能问答、故障诊断、知识推荐等服务。
-          <br><strong>支持多模态交互</strong>：不仅限于文本，未来将支持图片、语音等多种交互方式。
-        </n-alert>
-        
-        <n-grid :cols="3" :x-gap="16" :y-gap="16">
-          <n-grid-item>
-            <n-card embedded>
-              <template #header>
-                <n-space align="center">
-                  <n-icon :component="Chatbubbles" size="24" color="#1890ff" />
-                  <span>智能问答</span>
-                </n-space>
-              </template>
-              <n-text depth="3" style="font-size: 14px;">
-                7×24 小时在线解答设备运维相关问题，快速定位故障原因
-              </n-text>
-            </n-card>
-          </n-grid-item>
-          
-          <n-grid-item>
-            <n-card embedded>
-              <template #header>
-                <n-space align="center">
-                  <n-icon :component="Images" size="24" color="#52c41a" />
-                  <span>图像识别</span>
-                </n-space>
-              </template>
-              <n-text depth="3" style="font-size: 14px;">
-                上传设备照片，AI 自动识别设备型号、状态和潜在问题
-              </n-text>
-            </n-card>
-          </n-grid-item>
-          
-          <n-grid-item>
-            <n-card embedded>
-              <template #header>
-                <n-space align="center">
-                  <n-icon :component="DocumentText" size="24" color="#fa8c16" />
-                  <span>文档生成</span>
-                </n-space>
-              </template>
-              <n-text depth="3" style="font-size: 14px;">
-                自动生成维修报告、保养记录等文档，提高工作效率
-              </n-text>
-            </n-card>
-          </n-grid-item>
-        </n-grid>
-      </n-space>
-    </n-card>
+    <!-- 智能对话界面 -->
+    <n-card :bordered="false" style="height: calc(100vh - 200px);">
+      <div class="chat-container">
+        <!-- 消息列表 -->
+        <div ref="messagesContainerRef" class="messages-container">
+          <transition-group name="message-fade">
+            <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.type">
+              <div class="message-avatar">
+                <n-icon v-if="msg.type === 'user'" :component="Person" size="24" />
+                <n-icon v-else :component="Sparkles" size="24" color="#1890ff" />
+              </div>
+              <div class="message-content">
+                <div class="message-bubble">
+                  <n-text v-if="msg.type === 'loading'" depth="3">
+                    <n-spin size="small" /> 思考中...
+                  </n-text>
+                  <markdown-renderer v-else :content="msg.content" />
+                </div>
+                <div class="message-time">{{ msg.time }}</div>
+              </div>
+            </div>
+          </transition-group>
+        </div>
 
-    <!-- 占位对话界面（预留） -->
-    <n-card title="对话界面（开发中）" :bordered="false" style="height: calc(100vh - 400px);">
-      <div class="chat-placeholder">
-        <n-empty
-         description="AI 助手功能开发中，敬请期待..."
-         size="large"
-         style="margin-top: 100px;"
-        >
-          <template #icon>
-            <n-icon :component="Sparkles" size="80" color="#1890ff" />
-          </template>
-        </n-empty>
-        
-        <n-space vertical :size="20" style="margin-top: 40px; max-width: 600px; margin-left: auto; margin-right: auto;">
-          <n-alert type="success" title="规划功能">
-            <ul style="margin: 0; padding-left: 20px;">
-              <li>💬 多轮对话上下文理解</li>
-              <li>🖼️ 图片上传与识别（设备铭牌、故障现象）</li>
-              <li>📊 数据分析和趋势预测</li>
-              <li>🔧 维修方案智能推荐</li>
-              <li>📱 移动端语音交互</li>
-            </ul>
-          </n-alert>
+        <!-- 输入区域 -->
+        <div class="input-area">
+          <n-input
+            v-model:value="inputValue"
+            type="textarea"
+            placeholder="请输入问题，例如：'B001 建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
+            :rows="3"
+            :disabled="loading"
+            @keydown.enter.exact.prevent="handleSend"
+          >
+            <template #suffix>
+              <n-button
+                type="primary"
+                :disabled="!inputValue.trim() || loading"
+                @click="handleSend"
+              >
+                <template #icon>
+                  <n-icon :component="Send" />
+                </template>
+                发送
+              </n-button>
+            </template>
+          </n-input>
           
-          <n-alert type="warning" title="技术架构预留">
-            <strong>后端接口预留：</strong>
-            <pre style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-top: 8px; font-size: 12px;">
-POST /api/ai/chat          - 文本对话
-POST /api/ai/vision        - 图像识别（待实现）
-POST /api/ai/voice         - 语音交互（待实现）
-GET /api/ai/conversations - 获取会话历史
-            </pre>
-          </n-alert>
-        </n-space>
+          <n-space class="quick-questions" :wrap="true">
+            <n-tag
+              v-for="(q, idx) in quickQuestions"
+              :key="idx"
+              checkable
+              :checked="false"
+              @update:checked="() => handleQuickQuestion(q)"
+            >
+              {{ q }}
+            </n-tag>
+          </n-space>
+        </div>
       </div>
     </n-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Chatbubbles, Images, DocumentText, Sparkles } from '@vicons/ionicons5'
+import { ref, nextTick } from 'vue'
+import { Person, Sparkles, Send } from '@vicons/ionicons5'
+import { useMessage } from 'naive-ui'
+import { askQuestion } from '@/api/chat'
+import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue'
 
+interface Message {
+  type: 'user' | 'assistant' | 'loading'
+  content: string
+  time: string
+}
+
+const message = useMessage()
+const messagesContainerRef = ref<HTMLElement | null>(null)
+const inputValue = ref('')
+const loading = ref(false)
+const messages = ref<Message[]>([
+  {
+    type: 'assistant',
+    content: '你好！我是 AI 智能运维助手，可以回答以下问题：\n\n1. **能耗查询**：如 "B001 昨天用电量"\n2. **运维知识**：如 "冷水机组故障处理"\n3. **异常分析**：如 "分析最近能耗异常"\n\n请问有什么可以帮您？',
+    time: getCurrentTime()
+  }
+])
+
+const quickQuestions = [
+  'Eagle_education_Cassie 昨天用电量',
+  '冷水机组高压报警处理',
+  '空调系统运维规范',
+  '能耗异常原因分析'
+]
+
+function getCurrentTime(): string {
+  const now = new Date()
+  return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (messagesContainerRef.value) {
+      messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
+    }
+  })
+}
+
+async function handleSend() {
+  const query = inputValue.value.trim()
+  if (!query || loading.value) return
+
+  // 添加用户消息
+  messages.value.push({
+    type: 'user',
+    content: query,
+    time: getCurrentTime()
+  })
+
+  inputValue.value = ''
+  loading.value = true
+  scrollToBottom()
+
+  // 添加加载中消息
+  const loadingIndex = messages.value.length
+  messages.value.push({
+    type: 'loading',
+    content: '',
+    time: getCurrentTime()
+  })
+  scrollToBottom()
+
+  try {
+    const response = await askQuestion({
+      query
+    })
+
+    // 移除加载消息
+    messages.value.splice(loadingIndex, 1)
+
+    // 检查响应码
+    if (response.data.code !== 200) {
+      throw new Error(response.data.message || '请求失败')
+    }
+
+    // 添加助手回复 - 直接从 response.data 获取答案（扁平化结构）
+    messages.value.push({
+      type: 'assistant',
+      content: response.data.answer,
+      time: getCurrentTime()
+    })
+
+    scrollToBottom()
+  } catch (error: any) {
+    console.error('提问失败:', error)
+    message.error('提问失败，请稍后重试')
+    
+    // 移除加载消息
+    messages.value.splice(loadingIndex, 1)
+    
+    // 添加错误消息
+    messages.value.push({
+      type: 'assistant',
+      content: `抱歉，处理您的问题时出现错误：${error.message || '未知错误'}`,
+      time: getCurrentTime()
+    })
+    
+    scrollToBottom()
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleQuickQuestion(question: string) {
+  inputValue.value = question
+  handleSend()
+}
 </script>
 
 <style scoped>
@@ -112,20 +186,137 @@ import { Chatbubbles, Images, DocumentText, Sparkles } from '@vicons/ionicons5'
   min-height: 100%;
 }
 
-.chat-placeholder {
+.chat-container {
   display: flex;
   flex-direction: column;
+  height: calc(100vh - 200px);
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f5f7f9;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  min-height: 0;
+}
+
+.message-item {
+  display: flex;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.message-item.user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e6f7ff;
+  display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
 }
 
-:deep(.n-alert) {
-  width: 100%;
+.message-item.user .message-avatar {
+  background: #f6ffed;
 }
 
-pre {
+.message-content {
+  max-width: 70%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.message-item.user .message-content {
+  align-items: flex-end;
+}
+
+.message-bubble {
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
+  line-height: 1.6;
+}
+
+.message-item.user .message-bubble {
+  background: #1890ff;
+  color: white;
+}
+
+.message-time {
+  font-size: 12px;
+  color: #999;
+  padding: 0 8px;
+}
+
+.input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.quick-questions {
+  padding: 0 4px;
+}
+
+.message-fade-enter-active,
+.message-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.message-fade-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.message-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+/* Markdown 样式 */
+:deep(.markdown-body) {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3) {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+:deep(.markdown-body code) {
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+:deep(.markdown-body pre) {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 8px 0;
 }
 </style>

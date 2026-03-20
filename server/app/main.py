@@ -17,6 +17,9 @@ from app.api import export_api  # 新增：导入报表导出模块
 from app.api import upload_api
 from app.api import auth_api
 from app.api import alarm_api
+from app.api import device_api
+from app.api import energy_api
+from app.api import knowledge_api
 
 from datetime import datetime
 import os
@@ -146,6 +149,9 @@ app.include_router(export_api.router)  # 新增：注册报表导出路由
 app.include_router(upload_api.router)
 app.include_router(auth_api.router)
 app.include_router(alarm_api.router)  # 新增：注册告警管理路由
+app.include_router(device_api.router)
+app.include_router(energy_api.router)
+app.include_router(knowledge_api.router)
 
 
 @app.get("/")

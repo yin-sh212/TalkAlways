@@ -1,0 +1,33 @@
+[
+  {
+    "title": "测试",
+    "category": "case",
+    "tags": [
+      "test"
+    ],
+    "summary": "摘要",
+    "description": "描述",
+    "solution": "解决",
+    "notes": [
+      "note1"
+    ]
+  },
+  {
+    "id": "DOC002",
+    "title": "早高峰 22-00 点是电力异常高发时段",
+    "category": "时段特征",
+    "tags": [
+      "时段特征",
+      "warning"
+    ],
+    "summary": "占今日告警的 60%，建议在该时段前预先调整设备运行策略",
+    "description": "早高峰 22-00 点是电力异常高发时段 - 占今日告警的 60%，建议在该时段前预先调整设备运行策略",
+    "solution": "基于数据分析得出的优化建议",
+    "notes": [
+      "颜色标识：#faad14",
+      "类型：warning"
+    ],
+    "createDate": "2026-03-20",
+    "views": 0
+  }
+]

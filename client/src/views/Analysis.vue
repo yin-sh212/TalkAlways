@@ -79,8 +79,9 @@
           content-style="padding: 0 24px 24px;"
         >
           <n-alert 
+            v-if="currentAnomaly.type !== '无异常'"
             type="warning" 
-            :title="`今日最严重异常：${currentAnomaly.type || '电力突增'}`"
+            :title="`今日最严重异常：${currentAnomaly.type}`"
             closable
             style="margin-bottom: 16px;"
           >
@@ -101,6 +102,22 @@
                     保存到知识库
                   </n-button>
                 </div>
+              </n-space>
+            </template>
+          </n-alert>
+          
+          <!-- 无异常时的友好提示 -->
+          <n-alert 
+            v-else
+            type="success" 
+            title="设备运行正常"
+            closable
+            style="margin-bottom: 16px;"
+          >
+            <template #default>
+              <n-space vertical :size="12">
+                <div>当前未检测到明显能耗异常，设备运行平稳。</div>
+                <div>建议：继续保持当前运行策略，定期巡检设备。</div>
               </n-space>
             </template>
           </n-alert>
@@ -155,19 +172,31 @@
 
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
-      <n-space justify="end">
-        <n-button @click="handleRefresh">
+      <n-space justify="space-between">
+        <n-button 
+          type="info" 
+          ghost
+          @click="navigateToKnowledgeBase"
+        >
           <template #icon>
-            <n-icon :component="Refresh" />
+            <n-icon :component="Book" />
           </template>
-          刷新
+          前往运维知识库
         </n-button>
-        <n-button type="primary" @click="handleExport">
-          <template #icon>
-            <n-icon :component="Download" />
-          </template>
-          导出分析报告
-        </n-button>
+        <n-space justify="end">
+          <n-button @click="handleRefresh">
+            <template #icon>
+              <n-icon :component="Refresh" />
+            </template>
+            刷新
+          </n-button>
+          <n-button type="primary" @click="handleExport">
+            <template #icon>
+              <n-icon :component="Download" />
+            </template>
+            导出分析报告
+          </n-button>
+        </n-space>
       </n-space>
     </div>
   </div>
@@ -175,6 +204,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { 
   InformationCircle,
@@ -187,11 +217,12 @@ import {
   Flash,
   Thermometer,
   Water,
-  Alert
+  Alert,
+  Book
 } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
-import { getLineChartConfig, getBarChartConfig } from '@/utils/echarts-config'
+import { getLineChartConfig, getBarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 import { getBuildings } from '@/api/query'
 import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
 import { detectAnomaly, getSummary } from '@/api/statistics'
@@ -199,6 +230,7 @@ import { getAnalysisInsights } from '@/api/analysis'
 import { addDocument } from '@/api/admin'
 import { MOCK_TODAY } from '@/api/dashboard'
 
+const router = useRouter()
 const message = useMessage()
 
 // 筛选条件
@@ -422,6 +454,23 @@ const updateCompareChartWithMock = () => {
                 <div>${point.marker} 能耗：${point.value} MWh</div>`
       }
     },
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
+      data: mockData.series.map((s: any) => s.name),
+    },
+    grid: {
+      left: '3%',
+      right: '3%',
+      bottom: '15%',
+      containLabel: true,
+    },
     xAxis: {
       type: 'category',
       data: mockData.categories
@@ -465,11 +514,24 @@ const updateTrendChart = (data: any) => {
       smooth: true
     })), {
       yAxisName: '能耗 (MWh)',
-      tooltipFormatter: '{b}: {c} MWh'
+      tooltipFormatter: '{b}: {c} MWh',
+      grid: {
+        left: '3%',
+        right: '3%',
+        bottom: '15%',
+        containLabel: true,
+      }
     }),
     legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
       data: series.map((s: any) => s.name),
-      bottom: 10
     }
   }
   
@@ -487,13 +549,35 @@ const updateCompareChart = (data: any) => {
   const categories = data.categories || []
   const series = data.series || []
   
+  // 为每个系列分配不同的颜色
+  const seriesData = series.map((s: any, index: number) => ({
+    name: s.name,
+    data: s.data,
+    color: CHART_COLORS.palette[index % CHART_COLORS.palette.length]
+  }))
+  
   const option: EChartsOption = {
-    ...getBarChartConfig(categories, series.map((s: any) => ({
-      name: s.name,
-      data: s.data
-    })), {
-      yAxisName: '能耗 (MWh)'
+    ...getBarChartConfig(categories, seriesData, {
+      yAxisName: '能耗 (MWh)',
+      showLegend: true,
+      grid: {
+        left: '3%',
+        right: '3%',
+        bottom: '15%',
+        containLabel: true,
+      }
     }),
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
+      data: series.map((s: any) => s.name),
+    },
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
@@ -560,18 +644,14 @@ const saveInsightToWorkspace = async (insight: any) => {
       notes: [`颜色标识：${insight.color}`, `类型：${insight.type}`]
     }
     
-    // TODO: 等待后端实现知识库 API 后启用真实调用
-    // const response = await addDocument(documentData)
-    // if (response.data.code === 200) {
-    //   message.success('已成功保存到工作区')
-    //   console.log('[Analysis] 洞察已保存到工作区:', response.data)
-    // } else {
-    //   throw new Error(response.data.message || '保存失败')
-    // }
-    
-    // 临时使用 mock 响应
-    console.log('[Analysis] 模拟保存洞察到工作区:', documentData)
-    message.success('已成功保存到工作区 (演示模式)')
+    // 调用后端知识库 API 保存洞察
+    const response = await addDocument(documentData)
+    if (response.data.code === 200) {
+      message.success('已成功保存到工作区')
+      console.log('[Analysis] 洞察已保存到工作区:', response.data)
+    } else {
+      throw new Error(response.data.message || '保存失败')
+    }
     
   } catch (error: any) {
     console.error('[Analysis] 保存洞察失败:', error)
@@ -602,11 +682,21 @@ const handleExport = async () => {
   try {
     message.loading('正在生成分析报告...')
     
-    // 调用导出PDF 接口
+    // 根据用户选择的时间范围计算日期
+    const days = filters.timeRange === 'today' ? 1 : filters.timeRange === 'week' ? 7 : 30
+    const endDate = new Date(MOCK_TODAY)
+    const startDate = new Date(endDate)
+    startDate.setDate(startDate.getDate() - (days - 1))
+    
+    const formatDate = (date: Date) => {
+      return date.toISOString().split('T')[0]
+    }
+    
+    // 调用导出PDF 接口 - 使用动态时间范围
     const exportParams = {
       buildings: [filters.buildingId],
-      startTime: new Date(),
-      endTime: MOCK_TODAY,
+      startTime: formatDate(startDate),
+      endTime: formatDate(endDate),
       format: 'pdf' as const
     }
     
@@ -614,11 +704,29 @@ const handleExport = async () => {
     const response = await import('@/api/analysis').then(mod => mod.exportPDF(exportParams))
     const blob = response.data || response
     
+    // 检查是否是有效的 PDF blob
+    if (!blob || blob.size === 0) {
+      throw new Error('下载的文件为空，请检查后端接口是否正常')
+    }
+    
+    // 检查返回的是否是 PDF（防止后端返回错误 JSON）
+    if (blob.type && !blob.type.includes('application/pdf')) {
+      // 如果不是 PDF，可能是后端返回了错误信息
+      const text = await blob.text()
+      console.error('[Analysis] 后端返回的不是 PDF:', text)
+      try {
+        const error = JSON.parse(text)
+        throw new Error(error.message || error.error || 'PDF 生成失败')
+      } catch {
+        throw new Error('后端返回的数据格式不正确')
+      }
+    }
+    
     // 创建下载链接
     const url = window.URL.createObjectURL(blob as Blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `能耗分析报告_${filters.buildingId}_${MOCK_TODAY}.pdf`
+    link.download = `能耗分析报告_${filters.buildingId}_${formatDate(endDate)}.pdf`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -627,8 +735,14 @@ const handleExport = async () => {
     message.success('分析报告下载成功')
   } catch (error: any) {
     console.error('[Analysis] 导出失败:', error)
-    message.error(error.response?.data?.message || '导出失败，请稍后重试')
+    message.error(error.response?.data?.message || error.message || '导出失败，请稍后重试')
   }
+}
+
+// 跳转到运维知识库
+const navigateToKnowledgeBase = () => {
+  router.push('/workspace?tab=knowledge')
+  message.info('正在跳转到运维知识库...')
 }
 
 // 初始化图表

@@ -118,6 +118,16 @@
               <n-space align="center">
                 <n-icon :component="Eye" size="16" />
                 <span style="font-size: 12px">{{ doc.views }}</span>
+                <n-button
+                  text
+                  type="error"
+                  size="small"
+                  @click.stop="handleDeleteDocument(doc)"
+                >
+                  <template #icon>
+                    <n-icon :component="Trash" />
+                  </template>
+                </n-button>
               </n-space>
             </n-space>
           </template>
@@ -186,6 +196,13 @@
           <n-space>
             <n-button @click="handleCopy(currentDoc)">复制内容</n-button>
             <n-button type="primary">打印文档</n-button>
+            <n-button 
+              type="error" 
+              ghost
+              @click="handleDeleteDocument(currentDoc)"
+            >
+              删除文档
+            </n-button>
           </n-space>
         </n-space>
       </n-space>
@@ -275,24 +292,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from "vue";
-import { Search, AddCircle, Eye, DocumentText } from "@vicons/ionicons5";
+import { ref, reactive, computed, onMounted, watch, h } from "vue";
+import { Search, AddCircle, Eye, DocumentText, Trash } from "@vicons/ionicons5";
 import { CloudUploadOutline } from "@vicons/ionicons5";
-import { NTag, NIcon, useMessage } from "naive-ui";
+import { NTag, NIcon, NButton, useMessage, useDialog } from "naive-ui";
 import type { UploadFileInfo } from "naive-ui";
 import { uploadDocument } from "@/api/analysis";
+import { 
+  addDocument, 
+  getKnowledgeList, 
+  getKnowledgeDetail,
+  deleteKnowledgeDocument,
+  type KnowledgeDocument as ApiKnowledgeDocument,
+  type AddDocumentParams 
+} from "@/api/admin";
 
-interface Document {
-  id: string;
-  title: string;
-  category: string;
-  tags: string[];
-  summary: string;
+// 本地 Document 类型（兼容 API 返回和本地使用）
+interface Document extends ApiKnowledgeDocument {
   description: string;
   solution: string;
   notes: string[];
-  createDate: string;
-  views: number;
 }
 
 interface UploadResponse {
@@ -305,6 +324,7 @@ interface UploadResponse {
 }
 
 const message = useMessage();
+const dialog = useDialog();
 
 // 搜索和筛选
 const searchQuery = ref("");
@@ -332,51 +352,8 @@ const tagOptions = [
   { label: "应急处理", value: "emergency" },
 ];
 
-// Mock 文档数据
-const documents = ref<Document[]>([
-  {
-    id: "DOC001",
-    title: "中央空调机组夏季运行异常处理",
-    category: "case",
-    tags: ["hvac", "emergency"],
-    summary:
-      "某行政楼中央空调机组在夏季高温期间出现制冷效果下降，经检查为冷凝器脏堵导致散热不良。",
-    description:
-      "行政楼中央空调机组在环境温度超过 35℃时，制冷效果明显下降，出风口温度偏高，影响正常办公。",
-    solution:
-      "1. 停机并切断电源\n2. 拆卸冷凝器防护罩\n3. 使用专用清洗剂清洗冷凝器翅片\n4. 用清水冲洗干净并晾干\n5. 重新安装并试运行",
-    notes: ["清洗前必须断电", "避免水溅到电气元件", "定期清洗可提高效率 20%"],
-    createDate: "2024-01-15",
-    views: 156,
-  },
-  {
-    id: "DOC002",
-    title: "水泵机械密封更换标准流程",
-    category: "maintenance",
-    tags: ["plumbing", "preventive"],
-    summary: "详细介绍离心泵机械密封的更换步骤、注意事项和验收标准。",
-    description: "循环水泵机械密封磨损导致漏水，需要更换新的机械密封组件。",
-    solution:
-      "1. 关闭进出口阀门并排空泵体\n2. 拆除联轴器护罩和叶轮螺母\n3. 取出旧机械密封\n4. 清洁密封腔体\n5. 安装新密封组件\n6. 调整压缩量并试车",
-    notes: ["安装时涂抹润滑油", "检查轴套磨损情况", "运行后观察泄漏情况"],
-    createDate: "2024-02-10",
-    views: 89,
-  },
-  {
-    id: "DOC003",
-    title: "变配电室巡检要点及常见问题",
-    category: "standard",
-    tags: ["electrical", "preventive"],
-    summary: "变配电室日常巡检的标准流程、关键检查点和典型问题处理方法。",
-    description:
-      "为确保变配电设备安全运行，需要定期进行巡检并及时发现和处理隐患。",
-    solution:
-      "巡检要点：\n1. 变压器油温油位正常\n2. 断路器位置正确\n3. 仪表指示准确\n4. 无异常声响和异味\n5. 接地良好\n6. 室温适宜通风良好",
-    notes: ["必须两人同行", "保持安全距离", "做好巡检记录"],
-    createDate: "2024-03-05",
-    views: 234,
-  },
-]);
+// Mock 文档数据 - 仅用于初始展示，实际数据从 API 加载
+const documents = ref<Document[]>([]);
 
 // 过滤后的文档
 const filteredDocuments = computed(() => {
@@ -426,6 +403,7 @@ const addDocRules = {
 function uploadTrigger(){
   addDocFormRef.value.validate();
 }
+
 // 辅助函数
 function getCategoryType(
   category: string,
@@ -449,12 +427,16 @@ function getCategoryName(category: string): string {
 }
 
 // 事件处理
-const showDocumentDetail = (doc: Document) => {
+const showDocumentDetail = async (doc: Document) => {
   currentDoc.value = doc;
   showDetailModal.value = true;
 
-  // 增加浏览量
-  doc.views++;
+  // 增加浏览量 - 调用 API 更新
+  try {
+    await getKnowledgeDetail(doc.id);
+  } catch (error) {
+    console.error('更新浏览量失败:', error);
+  }
 };
 
 const handleCopy = (doc: Document) => {
@@ -463,30 +445,61 @@ const handleCopy = (doc: Document) => {
   message.success("内容已复制到剪贴板");
 };
 
+const handleDeleteDocument = async (doc: Document) => {
+  // 显示确认对话框
+  const confirmed = await new Promise<boolean>((resolve) => {
+    dialog.warning({
+      title: '确认删除',
+      content: `确定要删除文档"${doc.title}"吗？此操作不可恢复。`,
+      positiveText: '确定',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onMaskClick: () => resolve(false),
+    });
+  });
+
+  if (!confirmed) return;
+
+  try {
+    const response = await deleteKnowledgeDocument(doc.id);
+    
+    if (response.data.code === 200 && response.data.data.success) {
+      message.success('文档删除成功');
+      // 刷新文档列表
+      await fetchDocuments();
+      // 如果正在查看详情，关闭弹窗
+      showDetailModal.value = false;
+    } else {
+      throw new Error(response.data.message || '删除失败');
+    }
+  } catch (error: any) {
+    console.error('[KnowledgeBase] 删除文档失败:', error);
+    message.error(error.response?.data?.message || '删除失败，请稍后重试');
+  }
+};
+
 const handleAddDocument = async () => {
   try {
     await addDocFormRef.value?.validate();
     addingDoc.value = true;
 
-    setTimeout(() => {
-      const newDoc: Document = {
-        id: `DOC${String(documents.value.length + 1).padStart(3, "0")}`,
-        title: addDocForm.title,
-        category: addDocForm.category,
-        tags: addDocForm.tags,
-        summary: addDocForm.summary,
-        description: addDocForm.description,
-        solution: addDocForm.solution,
-        notes: addDocForm.notes,
-        createDate: new Date().toLocaleDateString("zh-CN"),
-        views: 0,
-      };
+    const documentData: AddDocumentParams = {
+      title: addDocForm.title,
+      category: addDocForm.category,
+      tags: addDocForm.tags,
+      summary: addDocForm.summary,
+      description: addDocForm.description,
+      solution: addDocForm.solution,
+      notes: addDocForm.notes,
+    };
 
-      documents.value.push(newDoc);
+    const response = await addDocument(documentData);
+    
+    if (response.data.code === 200) {
       message.success("文档添加成功");
       showAddModal.value = false;
-      addingDoc.value = false;
-
+      
       // 重置表单
       Object.assign(addDocForm, {
         title: "",
@@ -497,9 +510,17 @@ const handleAddDocument = async () => {
         solution: "",
         notes: [],
       });
-    }, 1000);
-  } catch (e) {
-    console.error(e);
+      
+      // 刷新文档列表
+      await fetchDocuments();
+    } else {
+      throw new Error(response.data.message || '保存失败');
+    }
+  } catch (error: any) {
+    console.error('[KnowledgeBase] 添加文档失败:', error);
+    message.error(error.response?.data?.message || '添加失败，请稍后重试');
+  } finally {
+    addingDoc.value = false;
   }
 };
 
@@ -547,7 +568,7 @@ const handleUploadFinish = ({ file, event }: { file: UploadFileInfo, event?: Pro
       const formData = new FormData();
       formData.append('file', file.file!);
       
-      const response = await fetch('/api/upload/document', {
+      const response = await fetch('/api/admin/upload', {
         method: 'POST',
         body: formData,
       });
@@ -565,21 +586,19 @@ const handleUploadFinish = ({ file, event }: { file: UploadFileInfo, event?: Pro
           blocksIndexed: result.data.stats?.blocks_indexed || 0
         });
 
-        // 上传成功后创建文档记录
-        const newDoc: Document = {
-          id: `DOC${String(documents.value.length + 1).padStart(3, "0")}`,
+        // 上传成功后创建文档记录（调用知识库 API）
+        const documentData: AddDocumentParams = {
           title: file.name.replace(/\.[^/.]+$/, ""), // 去掉文件扩展名作为标题
-          category: "technical", // 默认分类为技术文档
+          category: 'technical', // 默认分类为技术文档
           tags: [], // 初始标签为空
           summary: `上传文件：${file.name}`,
           description: `文件 ${file.name} 已上传至知识库，共建立 ${result.data.stats?.blocks_indexed || 0} 个文本块索引。`,
           solution: "可通过 AI 助手检索此文档内容",
           notes: [`原始文件名：${file.name}`, `保存路径：${result.data.saved_filename}`],
-          createDate: new Date().toLocaleDateString("zh-CN"),
-          views: 0,
         };
 
-        documents.value.push(newDoc);
+        // 调用知识库 API 保存文档记录
+        await addDocument(documentData);
         message.success("📄 文档记录已创建");
 
         // 刷新文档列表
@@ -602,21 +621,39 @@ const handleUploadError = ({ file }: { file: UploadFileInfo }) => {
 };
 
 const fetchDocuments = async () => {
-  // TODO: 从后端 API 获取真实的文档列表
-  // 目前使用 mock 数据，后续可对接真实接口
   try {
-    // 示例：对接真实接口
-    // const response = await getDocumentList();
-    // documents.value = response.data.list;
-    console.log("从后端获取文档列表");
+    const response = await getKnowledgeList({
+      category: selectedCategory.value || undefined,
+      tag: selectedTag.value || undefined,
+      search: searchQuery.value || undefined,
+    });
+    
+    // response 是 AxiosResponse，需要访问 .data 获取业务数据
+    if (response.data.code === 200) {
+      documents.value = response.data.data.list as Document[];
+      console.log('[KnowledgeBase] 获取文档列表成功:', documents.value.length);
+    } else {
+      throw new Error(response.data.message || '获取失败');
+    }
   } catch (error) {
-    console.error("获取文档列表失败", error);
+    console.error("[KnowledgeBase] 获取文档列表失败", error);
+    message.error('获取文档列表失败');
   }
 };
 
 const refreshDocuments = () => {
   fetchDocuments();
 };
+
+// 监听筛选条件变化
+watch([selectedCategory, selectedTag, searchQuery], () => {
+  fetchDocuments();
+});
+
+// 组件挂载时加载数据
+onMounted(() => {
+  fetchDocuments();
+});
 </script>
 
 <style scoped>

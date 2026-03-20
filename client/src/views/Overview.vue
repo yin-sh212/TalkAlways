@@ -312,14 +312,20 @@ const updateLastUpdateTime = () => {
 // 获取当前建筑 ID
 const fetchCurrentBuildingId = async () => {
   try {
-    // 如果 buildingStore 中已有建筑 ID，直接使用
+    // 如果 buildingStore 中已有建筑 ID，直接使用（已缓存）
     if (buildingStore.currentBuildingId) {
       return
     }
     
-    // 否则从接口获取建筑列表
-    await buildingStore.fetchBuildings()
+    // 否则从接口获取建筑列表（会自动使用缓存）
+    const result = await buildingStore.fetchBuildings()
     
+    // 如果是从缓存返回，直接成功
+    if (result.cached) {
+      return
+    }
+    
+    // 如果是新获取的数据，确保设置了当前建筑 ID
     if (!buildingStore.currentBuildingId && buildingStore.buildings.length > 0) {
       // 使用第一个建筑的 ID（已经是字符串）
       const firstBuildingId = buildingStore.buildings[0].id

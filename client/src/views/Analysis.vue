@@ -682,11 +682,21 @@ const handleExport = async () => {
   try {
     message.loading('正在生成分析报告...')
     
-    // 调用导出 PDF 接口
+    // 根据用户选择的时间范围计算日期
+    const days = filters.timeRange === 'today' ? 1 : filters.timeRange === 'week' ? 7 : 30
+    const endDate = new Date(MOCK_TODAY)
+    const startDate = new Date(endDate)
+    startDate.setDate(startDate.getDate() - (days - 1))
+    
+    const formatDate = (date: Date) => {
+      return date.toISOString().split('T')[0]
+    }
+    
+    // 调用导出PDF 接口 - 使用动态时间范围
     const exportParams = {
       buildings: [filters.buildingId],
-      startTime: new Date(),
-      endTime: MOCK_TODAY,
+      startTime: formatDate(startDate),
+      endTime: formatDate(endDate),
       format: 'pdf' as const
     }
     
@@ -694,11 +704,29 @@ const handleExport = async () => {
     const response = await import('@/api/analysis').then(mod => mod.exportPDF(exportParams))
     const blob = response.data || response
     
+    // 检查是否是有效的 PDF blob
+    if (!blob || blob.size === 0) {
+      throw new Error('下载的文件为空，请检查后端接口是否正常')
+    }
+    
+    // 检查返回的是否是 PDF（防止后端返回错误 JSON）
+    if (blob.type && !blob.type.includes('application/pdf')) {
+      // 如果不是 PDF，可能是后端返回了错误信息
+      const text = await blob.text()
+      console.error('[Analysis] 后端返回的不是 PDF:', text)
+      try {
+        const error = JSON.parse(text)
+        throw new Error(error.message || error.error || 'PDF 生成失败')
+      } catch {
+        throw new Error('后端返回的数据格式不正确')
+      }
+    }
+    
     // 创建下载链接
     const url = window.URL.createObjectURL(blob as Blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `能耗分析报告_${filters.buildingId}_${MOCK_TODAY}.pdf`
+    link.download = `能耗分析报告_${filters.buildingId}_${formatDate(endDate)}.pdf`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -707,7 +735,7 @@ const handleExport = async () => {
     message.success('分析报告下载成功')
   } catch (error: any) {
     console.error('[Analysis] 导出失败:', error)
-    message.error(error.response?.data?.message || '导出失败，请稍后重试')
+    message.error(error.response?.data?.message || error.message || '导出失败，请稍后重试')
   }
 }
 

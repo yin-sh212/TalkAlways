@@ -172,19 +172,31 @@
 
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
-      <n-space justify="end">
-        <n-button @click="handleRefresh">
+      <n-space justify="space-between">
+        <n-button 
+          type="info" 
+          ghost
+          @click="navigateToKnowledgeBase"
+        >
           <template #icon>
-            <n-icon :component="Refresh" />
+            <n-icon :component="Book" />
           </template>
-          刷新
+          前往运维知识库
         </n-button>
-        <n-button type="primary" @click="handleExport">
-          <template #icon>
-            <n-icon :component="Download" />
-          </template>
-          导出分析报告
-        </n-button>
+        <n-space justify="end">
+          <n-button @click="handleRefresh">
+            <template #icon>
+              <n-icon :component="Refresh" />
+            </template>
+            刷新
+          </n-button>
+          <n-button type="primary" @click="handleExport">
+            <template #icon>
+              <n-icon :component="Download" />
+            </template>
+            导出分析报告
+          </n-button>
+        </n-space>
       </n-space>
     </div>
   </div>
@@ -192,6 +204,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { 
   InformationCircle,
@@ -204,7 +217,8 @@ import {
   Flash,
   Thermometer,
   Water,
-  Alert
+  Alert,
+  Book
 } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
@@ -216,6 +230,7 @@ import { getAnalysisInsights } from '@/api/analysis'
 import { addDocument } from '@/api/admin'
 import { MOCK_TODAY } from '@/api/dashboard'
 
+const router = useRouter()
 const message = useMessage()
 
 // 筛选条件
@@ -629,18 +644,14 @@ const saveInsightToWorkspace = async (insight: any) => {
       notes: [`颜色标识：${insight.color}`, `类型：${insight.type}`]
     }
     
-    // TODO: 等待后端实现知识库 API 后启用真实调用
-    // const response = await addDocument(documentData)
-    // if (response.data.code === 200) {
-    //   message.success('已成功保存到工作区')
-    //   console.log('[Analysis] 洞察已保存到工作区:', response.data)
-    // } else {
-    //   throw new Error(response.data.message || '保存失败')
-    // }
-    
-    // 临时使用 mock 响应
-    console.log('[Analysis] 模拟保存洞察到工作区:', documentData)
-    message.success('已成功保存到工作区 (演示模式)')
+    // 调用后端知识库 API 保存洞察
+    const response = await addDocument(documentData)
+    if (response.data.code === 200) {
+      message.success('已成功保存到工作区')
+      console.log('[Analysis] 洞察已保存到工作区:', response.data)
+    } else {
+      throw new Error(response.data.message || '保存失败')
+    }
     
   } catch (error: any) {
     console.error('[Analysis] 保存洞察失败:', error)
@@ -671,7 +682,7 @@ const handleExport = async () => {
   try {
     message.loading('正在生成分析报告...')
     
-    // 调用导出PDF 接口
+    // 调用导出 PDF 接口
     const exportParams = {
       buildings: [filters.buildingId],
       startTime: new Date(),
@@ -698,6 +709,12 @@ const handleExport = async () => {
     console.error('[Analysis] 导出失败:', error)
     message.error(error.response?.data?.message || '导出失败，请稍后重试')
   }
+}
+
+// 跳转到运维知识库
+const navigateToKnowledgeBase = () => {
+  router.push('/workspace?tab=knowledge')
+  message.info('正在跳转到运维知识库...')
 }
 
 // 初始化图表

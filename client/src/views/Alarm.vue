@@ -3,9 +3,14 @@
     <!-- 顶部查询条件栏 -->
     <div class="query-section">
       <n-card :bordered="false" content-style="padding: 20px;">
-        <n-collapse :expanded-keys="['query-form']" arrow-placement="right">
+        <n-collapse default-expanded-names="query-form" arrow-placement="right">
           <n-collapse-item title="查询条件" name="query-form">
-            <n-form :model="queryForm" :rules="queryRules" ref="queryFormRef" label-placement="top">
+            <n-form
+              :model="queryForm"
+              :rules="queryRules"
+              ref="queryFormRef"
+              label-placement="top"
+            >
               <n-grid :cols="4" :x-gap="16" :y-gap="16">
                 <!-- 建筑选择 -->
                 <n-grid-item>
@@ -47,17 +52,23 @@
                 <!-- 时间范围 -->
                 <n-grid-item>
                   <n-form-item label="时间范围" path="timeRange">
-                    <n-space :size="8" style="width: 100%;">
+                    <n-space :size="8" style="width: 100%">
                       <n-date-picker
                         v-model:value="queryForm.timeRange"
                         type="daterange"
                         placeholder="选择日期范围"
-                        style="flex: 1;"
+                        style="flex: 1"
                       />
                       <n-space :size="4">
-                        <n-button size="small" @click="setQuickTime('today')">今日</n-button>
-                        <n-button size="small" @click="setQuickTime('week')">本周</n-button>
-                        <n-button size="small" @click="setQuickTime('month')">本月</n-button>
+                        <n-button size="small" @click="setQuickTime('today')"
+                          >今日</n-button
+                        >
+                        <n-button size="small" @click="setQuickTime('week')"
+                          >本周</n-button
+                        >
+                        <n-button size="small" @click="setQuickTime('month')"
+                          >本月</n-button
+                        >
                       </n-space>
                     </n-space>
                   </n-form-item>
@@ -65,9 +76,13 @@
               </n-grid>
 
               <!-- 操作按钮 -->
-              <n-space justify="end" style="margin-top: 16px;">
+              <n-space justify="end" style="margin-top: 16px">
                 <n-button @click="handleReset">重置</n-button>
-                <n-button type="primary" @click="() => handleQuery(false)" :loading="queryLoading">
+                <n-button
+                  type="primary"
+                  @click="() => handleQuery(false)"
+                  :loading="queryLoading"
+                >
                   查询
                 </n-button>
               </n-space>
@@ -79,24 +94,21 @@
 
     <!-- 告警统计指标卡 -->
     <div class="metrics-section">
-      <AlarmKpiCards 
-        :metrics="metrics"
-        :loading="metricsLoading"
-      />
+      <AlarmKpiCards :metrics="metrics" :loading="metricsLoading" />
     </div>
 
     <!-- 告警图表分析 -->
     <div class="charts-section">
       <n-grid :cols="24" :x-gap="16" :y-gap="16">
         <n-grid-item :span="16">
-          <AlarmTrend 
+          <AlarmTrend
             ref="alarmTrendRef"
             :trendData="trendData"
             :loading="chartLoading"
           />
         </n-grid-item>
         <n-grid-item :span="8">
-          <AlarmDistribution 
+          <AlarmDistribution
             ref="alarmDistributionRef"
             :distributionData="distributionData"
             :loading="chartLoading"
@@ -107,7 +119,7 @@
 
     <!-- 告警列表 -->
     <div class="list-section">
-      <AlarmList 
+      <AlarmList
         ref="alarmListRef"
         :tableData="tableData"
         :loading="tableLoading"
@@ -120,8 +132,8 @@
       />
     </div>
 
-    <!-- 能耗详情表格 -->
-    <div class="detail-section">
+    <!-- 告警统计表格 -->
+    <!-- <div class="detail-section">
       <AlarmDetailTable
         ref="alarmDetailTableRef"
         :tableData="energyDetailData"
@@ -132,7 +144,7 @@
         @refresh="() => handleQuery(true)"
         @export="handleExportEnergyDetail"
       />
-    </div>
+    </div> -->
 
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
@@ -140,643 +152,742 @@
         <template #icon>
           <n-icon :component="Download" />
         </template>
-        {{ exportLoading ? '生成中...' : '导出报表' }}
+        {{ exportLoading ? "生成中..." : "导出报表" }}
       </n-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useMessage } from 'naive-ui'
-import { Download, Alert } from '@vicons/ionicons5'
-import AlarmKpiCards from '@/components/alarm/KpiCards.vue'
-import AlarmTrend from '@/components/alarm/Trend.vue'
-import AlarmDistribution from '@/components/alarm/Distribution.vue'
-import AlarmList from '@/components/alarm/List.vue'
-import AlarmDetailTable from '@/components/alarm/DetailTable.vue'
-import * as alarmApi from '@/api/alarm'
-import type { AlarmItem, AlarmQueryParams, AlarmListItem, AlarmTypeDict, AlarmLevelDict } from '@/api/alarm'
-import type { BuildingEnergyDetailResponse, BuildingEnergyDetail, EnergySummary } from '@/types/analysis'
-import { MOCK_TODAY } from '@/api/dashboard'
+import { ref, reactive, onMounted } from "vue";
+import { useMessage } from "naive-ui";
+import { Download, Alert } from "@vicons/ionicons5";
+import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
+import AlarmTrend from "@/components/alarm/Trend.vue";
+import AlarmDistribution from "@/components/alarm/Distribution.vue";
+import AlarmList from "@/components/alarm/List.vue";
+import AlarmDetailTable from "@/components/alarm/DetailTable.vue";
+import * as alarmApi from "@/api/alarm";
+import type {
+  AlarmItem,
+  AlarmQueryParams,
+  AlarmListItem,
+  AlarmTypeDict,
+  AlarmLevelDict,
+} from "@/api/alarm";
+import type {
+  BuildingEnergyDetailResponse,
+  BuildingEnergyDetail,
+  EnergySummary,
+} from "@/types/analysis";
+import { MOCK_TODAY } from "@/api/dashboard";
 
-const message = useMessage()
+const message = useMessage();
 
 // 状态
-const queryLoading = ref(false)
-const tableLoading = ref(false)
-const metricsLoading = ref(false)
-const chartLoading = ref(false)
-const exportLoading = ref(false)
+const queryLoading = ref(false);
+const tableLoading = ref(false);
+const metricsLoading = ref(false);
+const chartLoading = ref(false);
+const exportLoading = ref(false);
 
 // 查询表单
-const queryFormRef = ref<any>(null)
+const queryFormRef = ref<any>(null);
 const queryForm = reactive({
   buildings: [] as string[],
   severity: [] as string[],
   alarmType: [] as string[],
-  timeRange: null as [number, number] | null
-})
+  timeRange: null as [number, number] | null,
+});
 
 // 验证规则
 const queryRules = {
   timeRange: [
     {
       required: true,
-      message: '请选择时间范围',
-      trigger: ['blur', 'change'],
+      message: "请选择时间范围",
+      trigger: ["blur", "change"],
       validator: (rule: any, value: [number, number] | null) => {
         if (!value || !Array.isArray(value) || value.length !== 2) {
-          return new Error('请选择时间范围')
+          return new Error("请选择时间范围");
         }
         if (!value[0] || !value[1]) {
-          return new Error('请选择时间范围')
+          return new Error("请选择时间范围");
         }
-        return true
-      }
-    }
-  ]
-}
+        return true;
+      },
+    },
+  ],
+};
 
 // 建筑选项（从后端获取）
-const buildingOptions = ref<any[]>([])
+const buildingOptions = ref<any[]>([]);
 
 // 告警级别选项（从后端获取）
-const severityOptions = ref<any[]>([])
+const severityOptions = ref<any[]>([]);
 
 // 告警类型选项（从后端获取）
-const alarmTypeOptions = ref<any[]>([])
+const alarmTypeOptions = ref<any[]>([]);
 
 // 表格数据
-const tableData = ref<any[]>([])
+const tableData = ref<any[]>([]);
 const pagination = reactive({
   page: 1,
   pageSize: 10,
   pageSizes: [10, 20, 50],
   showSizePicker: true,
   onChange: (page: number) => {
-    pagination.page = page
+    pagination.page = page;
   },
   onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
-    pagination.page = 1
-  }
-})
+    pagination.pageSize = pageSize;
+    pagination.page = 1;
+  },
+});
 
 // 指标数据
 const metrics = ref({
   totalAlarms: 0,
   unresolvedCount: 0,
   criticalCount: 0,
-  acknowledgedCount: 0
-})
+  acknowledgedCount: 0,
+});
 
 // 图表数据
-const trendData = ref<any[]>([])
-const distributionData = ref<any[]>([])
+const trendData = ref<any[]>([]);
+const distributionData = ref<any[]>([]);
 
 // 能耗详情数据
-const energyDetailData = ref<BuildingEnergyDetail[]>([])
-const energySummaryData = ref<EnergySummary | undefined>(undefined)
-const energyDetailPeriod = ref<string>('')
+const energyDetailData = ref<BuildingEnergyDetail[]>([]);
+const energySummaryData = ref<EnergySummary | undefined>(undefined);
+const energyDetailPeriod = ref<string>("");
 
 // 组件引用
-const alarmTrendRef = ref<InstanceType<typeof AlarmTrend> | null>(null)
-const alarmDistributionRef = ref<InstanceType<typeof AlarmDistribution> | null>(null)
-const alarmListRef = ref<InstanceType<typeof AlarmList> | null>(null)
-const alarmDetailTableRef = ref<InstanceType<typeof AlarmDetailTable> | null>(null)
+const alarmTrendRef = ref<InstanceType<typeof AlarmTrend> | null>(null);
+const alarmDistributionRef = ref<InstanceType<typeof AlarmDistribution> | null>(
+  null,
+);
+const alarmListRef = ref<InstanceType<typeof AlarmList> | null>(null);
+const alarmDetailTableRef = ref<InstanceType<typeof AlarmDetailTable> | null>(
+  null,
+);
 
 // 获取建筑列表
 const loadBuildings = async () => {
   try {
-    const response = await alarmApi.getBuildings()
-    const buildings = response.data.data || []
-    
+    const response = await alarmApi.getBuildings();
+    const buildings = response.data.data || [];
+
     buildingOptions.value = buildings.map((building: any) => ({
       label: building.name || `建筑${building.id || building.building_id}`,
-      value: building.id || building.building_id
-    }))
+      value: building.id || building.building_id,
+    }));
   } catch (error: any) {
-    console.error('获取建筑列表失败:', error)
+    console.error("获取建筑列表失败:", error);
   }
-}
+};
 
 // 获取告警级别字典
 const loadAlarmLevels = async () => {
   try {
-    const response = await alarmApi.getAlarmLevels()
-    const levels = response.data?.data || []
-    
+    const response = await alarmApi.getAlarmLevels();
+    const levels = response.data?.data || [];
+
     severityOptions.value = levels.map((level: AlarmLevelDict) => ({
       label: level.name,
       value: level.level,
-      style: { color: level.color }
-    }))
+      style: { color: level.color },
+    }));
   } catch (error: any) {
-    console.error('获取告警级别失败:', error)
+    console.error("获取告警级别失败:", error);
   }
-}
+};
 
 // 获取告警类型字典
 const loadAlarmTypes = async () => {
   try {
-    const response = await alarmApi.getAlarmTypes()
-    const types = response.data?.data || []
-    
+    const response = await alarmApi.getAlarmTypes();
+    const types = response.data?.data || [];
+
     alarmTypeOptions.value = types.map((type: AlarmTypeDict) => ({
       label: type.name,
-      value: type.code
-    }))
+      value: type.code,
+    }));
   } catch (error: any) {
-    console.error('获取告警类型失败:', error)
-    }
-}
+    console.error("获取告警类型失败:", error);
+  }
+};
 
 // 设置快捷时间 - 基于 MOCK_TODAY 动态计算
-const setQuickTime = (type: 'today' | 'week' | 'month') => {
+const setQuickTime = (type: "today" | "week" | "month") => {
   // 使用 MOCK_TODAY 作为基准日期
-  const mockDate = new Date(MOCK_TODAY)
-  let start: Date
-  let end: Date
+  const mockDate = new Date(MOCK_TODAY);
+  let start: Date;
+  let end: Date;
 
   switch (type) {
-    case 'today':
+    case "today":
       // 今日：MOCK_TODAY 的 00:00:00 至 23:59:59
-      start = new Date(mockDate.setHours(0, 0, 0, 0))
-      end = new Date(mockDate.setHours(23, 59, 59, 999))
-      break
-    case 'week':
+      start = new Date(mockDate.setHours(0, 0, 0, 0));
+      end = new Date(mockDate.setHours(23, 59, 59, 999));
+      break;
+    case "week":
       // 本周：根据 MOCK_TODAY 所在周的周一和周日确定
-      const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
-      const monday = new Date(mockDate)
-      monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
-      monday.setHours(0, 0, 0, 0)
+      const dayOfWeek = mockDate.getDay() || 7; // 将周日转换为 7
+      const monday = new Date(mockDate);
+      monday.setDate(mockDate.getDate() - (dayOfWeek - 1));
+      monday.setHours(0, 0, 0, 0);
+
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+
+      start = monday;
+      end = sunday;
+      break;
+    case "month":
+      // 本月：MOCK_TODAY 往前推 30 天
+      start = new Date(mockDate);
+      start.setDate(mockDate.getDate() - 29);
+      start.setHours(0, 0, 0, 0);
       
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      sunday.setHours(23, 59, 59, 999)
-      
-      start = monday
-      end = sunday
-      break
-    case 'month':
-      // 本月：MOCK_TODAY 所在月的第一天和最后一天
-      start = new Date(mockDate.getFullYear(), mockDate.getMonth(), 1)
-      start.setHours(0, 0, 0, 0)
-      end = new Date(mockDate.getFullYear(), mockDate.getMonth() + 1, 0, 23, 59, 59, 999)
-      break
+      end = new Date(mockDate);
+      end.setHours(23, 59, 59, 999);
+      break;
   }
 
-  queryForm.timeRange = [start.getTime(), end.getTime()]
-  
-  // 清除验证错误
+  queryForm.timeRange = [start.getTime(), end.getTime()];
+
+  // 清除验证错误 - 使用 Naive UI 正确的方法
   if (queryFormRef.value) {
-    queryFormRef.value.clearValidationStatus('timeRange')
+    queryFormRef.value.restoreValidation();
   }
-}
+};
 
 // 执行查询 - 对接真实接口
 const handleQuery = async (skipValidation: boolean = false) => {
   if (!skipValidation) {
     try {
-      await queryFormRef.value?.validate()
+      await queryFormRef.value?.validate();
     } catch (error) {
-      message.warning('请填写完整的查询条件')
-      return
+      message.warning("请填写完整的查询条件");
+      return;
     }
   }
 
   // 确保选择了建筑
   if (!queryForm.buildings || queryForm.buildings.length === 0) {
-    message.warning('请选择建筑')
-    return
+    message.warning("请选择建筑");
+    return;
   }
 
-  queryLoading.value = true
-  tableLoading.value = true
-  metricsLoading.value = true
-  chartLoading.value = true
+  queryLoading.value = true;
+  tableLoading.value = true;
+  metricsLoading.value = true;
+  chartLoading.value = true;
 
   try {
     // 准备查询参数
-    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    
+    const startDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+    const endDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+
     // 验证时间范围（2016-07-01 至 2016-08-31）
-    const validStartDate = '2016-07-01'
-    const validEndDate = '2016-08-31'
-    
-    if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
-      message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
-      queryLoading.value = false
-      tableLoading.value = false
-      metricsLoading.value = false
-      chartLoading.value = false
-      return
+    const validStartDate = "2016-07-01";
+    const validEndDate = "2016-08-31";
+
+    if (
+      startDate < validStartDate ||
+      startDate > validEndDate ||
+      endDate < validStartDate ||
+      endDate > validEndDate
+    ) {
+      message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
+      queryLoading.value = false;
+      tableLoading.value = false;
+      metricsLoading.value = false;
+      chartLoading.value = false;
+      return;
     }
-    
+
     // 使用用户选择的第一个建筑 ID（必须是从后端获取的真实 ID）
-    const buildingId = queryForm.buildings[0]
-    console.log('[Alarm] 使用的建筑 ID:', buildingId)
-    console.log('[Alarm] 查询参数:', {
+    const buildingId = queryForm.buildings[0];
+    console.log("[Alarm] 使用的建筑 ID:", buildingId);
+    console.log("[Alarm] 查询参数:", {
       buildingId,
       startDate,
       endDate,
       page: pagination.page,
-      pageSize: pagination.pageSize
-    })
-    
+      pageSize: pagination.pageSize,
+    });
+
     // 并行调用多个接口
-    const [alarmRes, summaryRes, trendRes, distributionRes, detailRes] = await Promise.all([
-      alarmApi.getAlarmList({ // 使用新的告警列表接口
-        building_id: buildingId,
-        page: pagination.page,
-        page_size: pagination.pageSize
-      }),
-      alarmApi.getAlarmSummary({ // 统计摘要
-        building_id: buildingId,
-        start_date: startDate,
-        end_date: endDate,
-        time_unit: 'day'
-      }),
-      alarmApi.getAlarmTrend({ // 趋势图数据
-        building_id: buildingId,
-        start_date: startDate,
-        end_date: endDate
-      }),
-      alarmApi.getAlarmDistribution({ // 分布图数据
-        building_id: buildingId,
-        date: endDate
-      }),
-      // 获取能耗详情数据 - 使用 statistics API
-      import('@/api/statistics').then(mod => mod.getSummary({
-        building_id: buildingId,
-        start_date: startDate,
-        end_date: endDate,
-        time_unit: 'day'
-      }))
-    ])
+    const [alarmRes, summaryRes, trendRes, distributionRes, detailRes] =
+      await Promise.all([
+        alarmApi.getAlarmList({
+          // 使用新的告警列表接口
+          building_id: buildingId,
+          page: pagination.page,
+          page_size: pagination.pageSize,
+        }),
+        alarmApi.getAlarmSummary({
+          // 统计摘要
+          building_id: buildingId,
+          start_date: startDate,
+          end_date: endDate,
+          time_unit: "day",
+        }),
+        alarmApi.getAlarmTrend({
+          // 趋势图数据
+          building_id: buildingId,
+          start_date: startDate,
+          end_date: endDate,
+        }),
+        alarmApi.getAlarmDistribution({
+          // 分布图数据
+          building_id: buildingId,
+          date: endDate,
+        }),
+        // 获取能耗详情数据 - 使用 statistics API
+        import("@/api/statistics").then((mod) =>
+          mod.getSummary({
+            building_id: buildingId,
+            start_date: startDate,
+            end_date: endDate,
+            time_unit: "day",
+          }),
+        ),
+      ]);
 
     // 填充表格数据 - 新接口返回格式：{ total, page, page_size, items }
-    const alarmData = alarmRes.data?.data || {}
-    const alarms = Array.isArray(alarmData.items) ? alarmData.items : []
-    
-    tableData.value = alarms.map((item: any, index: number) => ({
-      id: item.id || item.alarm_id || `alarm_${index}`,
-      timestamp: item.start_time || item.timestamp || item.time,
-      building_id: item.building_id,
-      building_name: item.building_name || getBuildingName(item.building_id),
-      alarm_type: item.alarm_type,
-      severity: item.severity || String(item.alarm_level),
-      status: mapStatus(item.status),
-      description: item.description,
-      buildingName: item.building_name || getBuildingName(item.building_id),
-      alarmTypeName: getAlarmTypeName(item.alarm_type),
-      severityName: getSeverityName(item.severity || String(item.alarm_level))
-    }))
+    const alarmData = alarmRes.data?.data || {};
+    const alarms = Array.isArray(alarmData.items) ? alarmData.items : [];
 
-    // 填充指标数据 - 使用确切路径 data.data.summary
-    const summaryData = summaryRes.data.data?.summary || {}
-    metrics.value = {
-      totalAlarms: summaryData?.total_alarm_count || alarmData.total || alarms.length,
-      unresolvedCount: summaryData?.unresolved_count || alarms.filter(a => a.status === 'pending').length,
-      criticalCount: summaryData?.critical_count || alarms.filter(a => a.alarm_level === 1).length,
-      acknowledgedCount: summaryData?.acknowledged_count || alarms.filter(a => a.status === 'confirmed').length
+    console.log("[Alarm] 原始告警数据:", alarmData);
+    console.log("[Alarm] 告警数量:", alarms.length);
+    
+    if (alarms.length === 0) {
+      message.warning("当前查询条件下没有找到告警数据");
+    }
+    
+    const mappedAlarms = alarms.map((item: any, index: number) => {
+      const mapped = {
+        id: item.id || item.alarm_id || `alarm_${index}`,
+        timestamp: item.start_time || item.timestamp || item.time,
+        building_id: item.building_id,
+        building_name: item.building_name || getBuildingName(item.building_id),
+        alarm_type: item.alarm_type,
+        severity: item.severity || String(item.alarm_level),
+        status: mapStatus(item.status),
+        description: item.description,
+        buildingName: item.building_name || getBuildingName(item.building_id),
+        alarmTypeName: getAlarmTypeName(item.alarm_type),
+        severityName: getSeverityName(
+          item.severity || String(item.alarm_level),
+        ),
+      };
+      console.log(`[Alarm] 告警 ${index + 1} - ID: ${mapped.id}, 原始状态：${item.status}, 映射后状态：${mapped.status}`);
+      return mapped;
+    });
+    
+    console.log("[Alarm] 映射后的告警总数:", mappedAlarms.length);
+    console.log("[Alarm] 过滤前的状态分布:", mappedAlarms.map(a => a.status));
+    
+    // 统计各状态的告警数量
+    const statusCount = {
+      unresolved: mappedAlarms.filter(a => a.status === 'unresolved').length,
+      acknowledged: mappedAlarms.filter(a => a.status === 'acknowledged').length,
+      resolved: mappedAlarms.filter(a => a.status === 'resolved').length,
+    };
+    console.log("[Alarm] 状态统计:", statusCount);
+    
+    tableData.value = mappedAlarms.filter((item) => item.status !== "resolved"); // 过滤掉已解决的告警
+    
+    console.log("[Alarm] 过滤后的告警数量:", tableData.value.length);
+    console.log("[Alarm] 表格数据:", tableData.value);
+    
+    if (tableData.value.length === 0 && alarms.length > 0) {
+      message.info(`所有 ${alarms.length} 条告警都已是已解决状态，列表中不显示`);
     }
 
+    // 填充指标数据 - 使用确切路径 data.data.summary
+    const summaryData = summaryRes.data.data?.summary || {};
+    metrics.value = {
+      totalAlarms:
+        summaryData?.total_alarm_count || alarmData.total || alarms.length,
+      unresolvedCount:
+        summaryData?.unresolved_count ||
+        alarms.filter((a) => a.status === "pending").length,
+      criticalCount:
+        summaryData?.critical_count ||
+        alarms.filter((a) => a.alarm_level === 1).length,
+      acknowledgedCount:
+        summaryData?.acknowledged_count ||
+        alarms.filter((a) => a.status === "confirmed").length,
+    };
+
     // 图表数据 - 后端返回的是 { categories, series } 格式
-    trendData.value = trendRes.data.data || { categories: [], series: [] }
-    distributionData.value = distributionRes.data.data || { categories: [], series: [] }
+    trendData.value = trendRes.data.data || { categories: [], series: [] };
+    distributionData.value = distributionRes.data.data || {
+      categories: [],
+      series: [],
+    };
 
     // 填充能耗详情数据
     if (detailRes && detailRes.data?.data) {
-      const detailData = detailRes.data.data
-      energyDetailData.value = detailData.details || []
-      energySummaryData.value = detailData.summary || undefined
-      energyDetailPeriod.value = detailData.period || `${startDate} 至 ${endDate}`
+      const detailData = detailRes.data.data;
+      energyDetailData.value = detailData.details || [];
+      energySummaryData.value = detailData.summary || undefined;
+      energyDetailPeriod.value =
+        detailData.period || `${startDate} 至 ${endDate}`;
     } else {
-      energyDetailData.value = []
-      energySummaryData.value = undefined
-      energyDetailPeriod.value = ''
+      energyDetailData.value = [];
+      energySummaryData.value = undefined;
+      energyDetailPeriod.value = "";
     }
 
     // 更新图表
     if (alarmTrendRef.value) {
-      alarmTrendRef.value.updateChart(trendData.value)
+      alarmTrendRef.value.updateChart(trendData.value);
     }
     if (alarmDistributionRef.value) {
-      alarmDistributionRef.value.updateChart(distributionData.value)
+      alarmDistributionRef.value.updateChart(distributionData.value);
     }
 
-    message.success('查询成功')
+    message.success("查询成功");
   } catch (error: any) {
-    console.error('查询失败:', error)
-    message.error('查询失败：' + (error.message || '未知错误'))
+    console.error("查询失败:", error);
+    message.error("查询失败：" + (error.message || "未知错误"));
   } finally {
-    queryLoading.value = false
-    tableLoading.value = false
-    metricsLoading.value = false
-    chartLoading.value = false
+    queryLoading.value = false;
+    tableLoading.value = false;
+    metricsLoading.value = false;
+    chartLoading.value = false;
   }
-}
+};
 
 // 重置查询
 const handleReset = () => {
-  queryForm.buildings = []
-  queryForm.severity = []
-  queryForm.alarmType = []
-  queryForm.timeRange = null
-  tableData.value = []
+  queryForm.buildings = [];
+  queryForm.severity = [];
+  queryForm.alarmType = [];
+  queryForm.timeRange = null;
+  tableData.value = [];
   metrics.value = {
     totalAlarms: 0,
     unresolvedCount: 0,
     criticalCount: 0,
-    acknowledgedCount: 0
-  }
-  trendData.value = []
-  distributionData.value = []
-  
+    acknowledgedCount: 0,
+  };
+  trendData.value = [];
+  distributionData.value = [];
+
   if (alarmTrendRef.value) {
-    alarmTrendRef.value.clearChart()
+    alarmTrendRef.value.clearChart();
   }
   if (alarmDistributionRef.value) {
-    alarmDistributionRef.value.clearChart()
+    alarmDistributionRef.value.clearChart();
   }
-  
-  message.success('已重置')
-}
+
+  message.success("已重置");
+};
 
 // 表格更新回调
 const handleTableUpdate = (page: number, pageSize: number) => {
-  pagination.page = page
-  pagination.pageSize = pageSize
-  handleQuery()
-}
+  pagination.page = page;
+  pagination.pageSize = pageSize;
+  handleQuery();
+};
 
 // 获取告警类型名称
 const getAlarmTypeName = (type: string) => {
   const typeMap: Record<string, string> = {
-    'energy_anomaly': '能耗异常',
-    'device_fault': '设备故障',
-    'sensor_error': '传感器异常',
-    'communication_error': '通信故障',
-    'threshold_exceeded': '超限告警',
-    'equipment': '设备告警',
-    'energy': '能耗告警',
-    'environment': '环境告警'
-  }
-  return typeMap[type] || type
-}
+    energy_anomaly: "能耗异常",
+    device_fault: "设备故障",
+    sensor_error: "传感器异常",
+    communication_error: "通信故障",
+    threshold_exceeded: "超限告警",
+    equipment: "设备告警",
+    energy: "能耗告警",
+    environment: "环境告警",
+  };
+  return typeMap[type] || type;
+};
 
 // 获取级别名称
 const getSeverityName = (severity: string) => {
   const severityMap: Record<string, string> = {
-    'critical': '紧急',
-    'major': '重要',
-    'minor': '一般',
-    'warning': '提示',
-    '1': '严重',
-    '2': '警告',
-    '3': '提示'
-  }
-  return severityMap[severity] || severity
-}
+    critical: "紧急",
+    major: "重要",
+    minor: "一般",
+    warning: "提示",
+    "1": "严重",
+    "2": "警告",
+    "3": "提示",
+  };
+  return severityMap[severity] || severity;
+};
 
 // 获取建筑名称（辅助函数）
 const getBuildingName = (buildingId: string) => {
-  const building = buildingOptions.value.find(b => b.value === buildingId)
-  return building?.label || buildingId
-}
+  const building = buildingOptions.value.find((b) => b.value === buildingId);
+  return building?.label || buildingId;
+};
 
 // 映射后端状态到前端状态
 const mapStatus = (status: string) => {
   const statusMap: Record<string, string> = {
-    'pending': 'unresolved',
-    'confirmed': 'acknowledged',
-    'resolved': 'resolved'
-  }
-  return statusMap[status] || status
-}
+    pending: "unresolved",
+    confirmed: "acknowledged",
+    resolved: "resolved",
+  };
+  return statusMap[status] || status;
+};
 
 // 确认告警 - 对接真实接口
 const handleAcknowledge = async (alarmId: string) => {
   try {
     // 使用新接口的单个确认（通过批量接口实现）
     await alarmApi.batchConfirmAlarms({
-      alarm_ids: [parseInt(alarmId) || 0]
-    })
-    message.success('告警已确认')
-    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
+      alarm_ids: [parseInt(alarmId) || 0],
+    });
+    message.success("告警已确认");
+    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error('确认失败:', error)
-    message.error('确认失败：' + (error.message || '未知错误'))
+    console.error("确认失败:", error);
+    message.error("确认失败：" + (error.message || "未知错误"));
   }
-}
+};
 
 // 解决告警 - 对接真实接口
 const handleResolve = async (alarmId: string) => {
   try {
     // 使用新接口的单个解决（通过批量接口实现）
     await alarmApi.batchResolveAlarms({
-      alarm_ids: [parseInt(alarmId) || 0]
-    })
-    message.success('告警已解决')
-    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
+      alarm_ids: [parseInt(alarmId) || 0],
+    });
+    message.success("告警已解决");
+    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error('解决失败:', error)
-    message.error('解决失败：' + (error.message || '未知错误'))
+    console.error("解决失败:", error);
+    message.error("解决失败：" + (error.message || "未知错误"));
   }
-}
+};
 
 // 批量确认告警 - 新增
 const handleBatchAcknowledge = async (alarmIds: string[]) => {
   try {
-    const ids = alarmIds.map(id => parseInt(id) || 0).filter(id => id !== 0)
-    
+    const ids = alarmIds
+      .map((id) => parseInt(id) || 0)
+      .filter((id) => id !== 0);
+
     if (ids.length === 0) {
-      message.warning('没有有效的告警 ID')
-      return
+      message.warning("没有有效的告警 ID");
+      return;
     }
 
     const response = await alarmApi.batchConfirmAlarms({
-      alarm_ids: ids
-    })
+      alarm_ids: ids,
+    });
 
-    const result = response.data?.data
-    const successCount = result?.confirmed_count || 0
-    const failedCount = result?.failed_ids?.length || 0
+    const result = response.data?.data;
+    const successCount = result?.confirmed_count || 0;
+    const failedCount = result?.failed_ids?.length || 0;
 
     if (successCount > 0) {
-      message.success(`成功确认 ${successCount} 条告警`)
-    }
-    
-    if (failedCount > 0) {
-      message.warning(`${failedCount} 条告警无法确认（可能已处理）`)
+      message.success(`成功确认 ${successCount} 条告警`);
     }
 
-    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法确认（可能已处理）`);
+    }
+
+    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error('批量确认失败:', error)
-    message.error('批量确认失败：' + (error.message || '未知错误'))
+    console.error("批量确认失败:", error);
+    message.error("批量确认失败：" + (error.message || "未知错误"));
   }
-}
+};
 
 // 批量解决告警 - 新增
 const handleBatchResolve = async (alarmIds: string[]) => {
   try {
-    const ids = alarmIds.map(id => parseInt(id) || 0).filter(id => id !== 0)
-    
+    const ids = alarmIds
+      .map((id) => parseInt(id) || 0)
+      .filter((id) => id !== 0);
+
     if (ids.length === 0) {
-      message.warning('没有有效的告警 ID')
-      return
+      message.warning("没有有效的告警 ID");
+      return;
     }
 
     const response = await alarmApi.batchResolveAlarms({
-      alarm_ids: ids
-    })
+      alarm_ids: ids,
+    });
 
-    const result = response.data?.data
-    const successCount = result?.resolved_count || 0
-    const failedCount = result?.failed_ids?.length || 0
+    const result = response.data?.data;
+    const successCount = result?.resolved_count || 0;
+    const failedCount = result?.failed_ids?.length || 0;
 
     if (successCount > 0) {
-      message.success(`成功解决 ${successCount} 条告警`)
-    }
-    
-    if (failedCount > 0) {
-      message.warning(`${failedCount} 条告警无法解决（可能已解决）`)
+      message.success(`成功解决 ${successCount} 条告警`);
     }
 
-    handleQuery(true) // 跳过验证，直接刷新列表和 metrics 指标
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
+    }
+
+    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error('批量解决失败:', error)
-    message.error('批量解决失败：' + (error.message || '未知错误'))
+    console.error("批量解决失败:", error);
+    message.error("批量解决失败：" + (error.message || "未知错误"));
   }
-}
+};
 
 // 导出报表 - 对接真实接口
 const handleExport = async () => {
-  exportLoading.value = true
-  message.info('正在生成报表...')
-  
+  exportLoading.value = true;
+  message.info("正在生成报表...");
+
   try {
-    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    
+    const startDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+    const endDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+
     // 验证时间范围（2016-07-01 至 2016-08-31）
-    const validStartDate = '2016-07-01'
-    const validEndDate = '2016-08-31'
-    
-    if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
-      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
-      exportLoading.value = false
-      return
+    const validStartDate = "2016-07-01";
+    const validEndDate = "2016-08-31";
+
+    if (
+      startDate < validStartDate ||
+      startDate > validEndDate ||
+      endDate < validStartDate ||
+      endDate > validEndDate
+    ) {
+      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
+      exportLoading.value = false;
+      return;
     }
-    
+
     // 确保使用从后端获取的真实建筑 ID
     if (!queryForm.buildings || queryForm.buildings.length === 0) {
-      message.warning('请选择建筑')
-      exportLoading.value = false
-      return
+      message.warning("请选择建筑");
+      exportLoading.value = false;
+      return;
     }
-    
+
     const exportParams = {
       building_ids: queryForm.buildings,
       startTime: startDate,
       endTime: endDate,
-      format: 'excel' as const
-    }
+      format: "excel" as const,
+    };
 
-    const response = await alarmApi.exportExcel(exportParams)
-    
-    const url = window.URL.createObjectURL(response.data as Blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `告警报表_${startDate}_${endDate}_${Date.now()}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    
-    message.success('报表已下载')
+    const response = await alarmApi.exportExcel(exportParams);
+
+    const url = window.URL.createObjectURL(response.data as Blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `告警报表_${startDate}_${endDate}_${Date.now()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    message.success("报表已下载");
   } catch (error: any) {
-    console.error('导出失败:', error)
-    message.error('导出失败：' + (error.message || '未知错误'))
+    console.error("导出失败:", error);
+    message.error("导出失败：" + (error.message || "未知错误"));
   } finally {
-    exportLoading.value = false
+    exportLoading.value = false;
   }
-}
+};
 
 // 导出能耗详情数据
 const handleExportEnergyDetail = async () => {
-  exportLoading.value = true
-  message.info('正在导出能耗详情数据...')
-  
+  exportLoading.value = true;
+  message.info("正在导出能耗详情数据...");
+
   try {
-    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    
+    const startDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+    const endDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+
     // 验证时间范围（2016-07-01 至 2016-08-31）
-    const validStartDate = '2016-07-01'
-    const validEndDate = '2016-08-31'
-    
-    if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
-      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
-      exportLoading.value = false
-      return
+    const validStartDate = "2016-07-01";
+    const validEndDate = "2016-08-31";
+
+    if (
+      startDate < validStartDate ||
+      startDate > validEndDate ||
+      endDate < validStartDate ||
+      endDate > validEndDate
+    ) {
+      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
+      exportLoading.value = false;
+      return;
     }
-    
+
     // 确保使用从后端获取的真实建筑 ID
     if (!queryForm.buildings || queryForm.buildings.length === 0) {
-      message.warning('请选择建筑')
-      exportLoading.value = false
-      return
+      message.warning("请选择建筑");
+      exportLoading.value = false;
+      return;
     }
-    
+
     const exportParams = {
       building_ids: queryForm.buildings,
       startTime: startDate,
       endTime: endDate,
-      format: 'excel' as const
-    }
+      format: "excel" as const,
+    };
 
-    const response = await alarmApi.exportExcel(exportParams)
-    
-    const url = window.URL.createObjectURL(response.data as Blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `能耗详情_${startDate}_${endDate}_${Date.now()}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    
-    message.success('能耗详情数据已下载')
+    const response = await alarmApi.exportExcel(exportParams);
+
+    const url = window.URL.createObjectURL(response.data as Blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `能耗详情_${startDate}_${endDate}_${Date.now()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    message.success("能耗详情数据已下载");
   } catch (error: any) {
-    console.error('导出失败:', error)
-    message.error('导出失败：' + (error.message || '未知错误'))
+    console.error("导出失败:", error);
+    message.error("导出失败：" + (error.message || "未知错误"));
   } finally {
-    exportLoading.value = false
+    exportLoading.value = false;
   }
-}
+};
 
 onMounted(async () => {
   // 初始化时执行查询
-  await loadBuildings()
-  loadAlarmLevels()
-  loadAlarmTypes()
+  await loadBuildings();
+  loadAlarmLevels();
+  loadAlarmTypes();
   if (buildingOptions.value.length > 0) {
     queryForm.buildings = [buildingOptions.value[0].value];
-    setQuickTime('today'); // 默认查询今天
+    setQuickTime("today"); // 默认查询今天
     handleQuery();
   }
-})
+});
 </script>
 
 <style scoped>
 .alarm-container {
   padding: 16px;
-  background-color:var(--bg-color);
+  background-color: var(--bg-color);
   min-height: 100vh;
 }
 

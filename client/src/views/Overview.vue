@@ -39,7 +39,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { useBuildingStore } from '@/store/building'
 import { getKPIData, getChartData, getAnomalyList, getTrendData, MOCK_TODAY } from '@/api/dashboard'
-import { getSummary, detectAnomaly, getBuildingsSummary, getDailyComparison } from '@/api/statistics'
+import { getSummary, detectAnomaly, getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings, getDeviceStatus } from '@/api/query'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
@@ -84,7 +84,8 @@ const kpiData = ref<KPIData>({
   weekChange: 0,
   deviceOnlineRate: 0,
   abnormalDeviceCount: 0,
-  co2Reduction: 0
+  cop: 0 // COP(能效比)
+  // co2Reduction: 0 // 已注释，不再使用
 })
 
 const chartData = ref({
@@ -165,23 +166,58 @@ const updateDeviceStats = async () => {
   }
 }
 
-// 更新今日 CO₂减排
-const updateCO2Reduction = async () => {
+// // 更新今日 CO₂减排
+// const updateCO2Reduction = async () => {
+//   try {
+//     // 获取今日总能耗（使用有效数据范围内的日期）
+//     const summaryResponse = await getSummary({
+//       building_id: currentBuildingId.value,
+//       start_date: MOCK_TODAY,
+//       end_date: MOCK_TODAY,
+//       time_unit: 'day'
+//     })
+    
+//     const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    
+//     // 更新 KPI 数据中的 CO₂减排量
+//     kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
+//   } catch (error) {
+//     console.error('更新 CO₂减排失败:', error)
+//   }
+// }
+
+// 更新 COP(能效比)
+const updateCOP = async () => {
   try {
-    // 获取今日总能耗（使用有效数据范围内的日期）
-    const summaryResponse = await getSummary({
+    // 基于 MOCK_TODAY 动态计算日期范围（近 7 天）
+    const mockDate = new Date(MOCK_TODAY)
+    const lastWeek = new Date(mockDate)
+    lastWeek.setDate(lastWeek.getDate() - 7)
+    
+    // 格式化为 YYYY-MM-DD
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+    
+    // 调用 COP计算接口
+    const response = await calculateCOP({
       building_id: currentBuildingId.value,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
-      time_unit: 'day'
+      start_date: formatDate(lastWeek),
+      end_date: MOCK_TODAY
     })
     
-    const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
-    
-    // 更新 KPI 数据中的 CO₂减排量
-    kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
+    // 后端返回格式：{ avg_cop_cooling, avg_cop_heating }
+    const copData = response.data.data
+    // 优先使用制冷 COP，如果没有则使用供热 COP，最后使用默认值
+    const cop = copData.avg_cop_cooling || copData.avg_cop_heating || 3.5
+    kpiData.value.cop = Number(cop.toFixed(2))
   } catch (error) {
-    console.error('更新 CO₂减排失败:', error)
+    console.error('更新 COP 失败:', error)
+    // 使用默认值
+    kpiData.value.cop = 3.5 // 典型 COP 值
   }
 }
 
@@ -385,7 +421,8 @@ const loadData = async () => {
     
     // 并行调用其他更新函数
     await Promise.all([
-      updateCO2Reduction(),
+      // updateCO2Reduction(),
+      updateCOP(),
       updateAbnormalDeviceCount(),
       updateDayAndWeekChange()
     ])
@@ -402,9 +439,9 @@ const loadData = async () => {
 
 // 处理建筑点击事件（图表联动）
 const handleBuildingClick = (buildingName: string) => {
-  if (energyChartsRef.value) {
-    energyChartsRef.value.updateChartsWithBuilding(buildingName)
-  }
+  // EnergyCharts 组件内部已经通过 emit 事件处理了联动逻辑
+  // 这里不需要额外操作
+  console.log('建筑联动:', buildingName)
 }
 
 // 刷新数据

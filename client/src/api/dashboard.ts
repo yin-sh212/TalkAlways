@@ -32,7 +32,8 @@ export const getKPIData = async () => {
       weekChange: 0,
       deviceOnlineRate: 100,
       abnormalDeviceCount: 0,
-      co2Reduction: 0
+      // co2Reduction: 0,
+      cop: 0
     }
   }
   
@@ -56,7 +57,8 @@ export const getKPIData = async () => {
         weekChange: 0,
         deviceOnlineRate: 100,
         abnormalDeviceCount: 0,
-        co2Reduction: 0
+        // co2Reduction: 0,
+        cop: 0
       }
     }
     
@@ -70,7 +72,7 @@ export const getKPIData = async () => {
       weekChange: 0,   // 需要上周数据对比
       deviceOnlineRate: 100, // 需要设备状态接口
       abnormalDeviceCount: 0, // 需要异常检测接口
-      co2Reduction: Number((totalEnergy * 0.5).toFixed(1)) // 估算：每 MWh 减排 0.5 吨 CO₂
+      cop: 0 // COP 将在 Overview.vue 中通过 calculateCOP 接口单独获取
     }
   } catch (error) {
     console.error('获取 KPI 数据失败:', error)
@@ -82,7 +84,8 @@ export const getKPIData = async () => {
       weekChange: 0,
       deviceOnlineRate: 100,
       abnormalDeviceCount: 0,
-      co2Reduction: 0
+      // co2Reduction: 0,
+      cop: 0
     }
   }
 }

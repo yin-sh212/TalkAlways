@@ -155,14 +155,12 @@ import AlarmTrend from '@/components/alarm/Trend.vue'
 import AlarmDistribution from '@/components/alarm/Distribution.vue'
 import AlarmList from '@/components/alarm/List.vue'
 import AlarmDetailTable from '@/components/alarm/DetailTable.vue'
-import { useBuildingStore } from '@/store/building'
 import * as alarmApi from '@/api/alarm'
 import type { AlarmItem, AlarmQueryParams, AlarmListItem, AlarmTypeDict, AlarmLevelDict } from '@/api/alarm'
 import type { BuildingEnergyDetailResponse, BuildingEnergyDetail, EnergySummary } from '@/types/analysis'
 import { MOCK_TODAY } from '@/api/dashboard'
 
 const message = useMessage()
-const buildingStore = useBuildingStore()
 
 // 状态
 const queryLoading = ref(false)
@@ -248,12 +246,11 @@ const alarmDistributionRef = ref<InstanceType<typeof AlarmDistribution> | null>(
 const alarmListRef = ref<InstanceType<typeof AlarmList> | null>(null)
 const alarmDetailTableRef = ref<InstanceType<typeof AlarmDetailTable> | null>(null)
 
-// 获取建筑列表（使用缓存）
+// 获取建筑列表
 const loadBuildings = async () => {
   try {
-    // 从 buildingStore 获取（自动使用缓存）
-    await buildingStore.fetchBuildings()
-    const buildings = buildingStore.buildings
+    const response = await alarmApi.getBuildings()
+    const buildings = response.data.data || []
     
     buildingOptions.value = buildings.map((building: any) => ({
       label: building.name || `建筑${building.id || building.building_id}`,
@@ -380,6 +377,14 @@ const handleQuery = async (skipValidation: boolean = false) => {
     
     // 使用用户选择的第一个建筑 ID（必须是从后端获取的真实 ID）
     const buildingId = queryForm.buildings[0]
+    console.log('[Alarm] 使用的建筑 ID:', buildingId)
+    console.log('[Alarm] 查询参数:', {
+      buildingId,
+      startDate,
+      endDate,
+      page: pagination.page,
+      pageSize: pagination.pageSize
+    })
     
     // 并行调用多个接口
     const [alarmRes, summaryRes, trendRes, distributionRes, detailRes] = await Promise.all([

@@ -1,4 +1,5 @@
 import http from './http'
+import type { ApiResponse } from '@/types/user'
 
 // 上传CSV文件
 export const uploadCSV = (data: FormData) => {
@@ -41,5 +42,52 @@ export interface AddDocumentParams {
 
 // 新增文档到知识库
 export const addDocument = (data: AddDocumentParams) => {
-  return http.post('/knowledge/add', data)
+  return http.post('/admin/knowledge/add', data)
+}
+
+// 获取知识库文档列表
+export interface KnowledgeListParams {
+  category?: string
+  tag?: string
+  search?: string
+}
+
+export interface KnowledgeDocument {
+  id: string
+  title: string
+  category: string
+  tags: string[]
+  summary: string
+  description?: string
+  solution?: string
+  notes?: string[]
+  createDate: string
+  views: number
+}
+
+export interface KnowledgeListData {
+  list: KnowledgeDocument[]
+  total: number
+}
+
+export const getKnowledgeList = (params?: KnowledgeListParams) => {
+  return http.get<ApiResponse<KnowledgeListData>>('/admin/knowledge/list', { params })
+}
+
+// 获取知识库文档详情
+export interface KnowledgeDetailResponse extends KnowledgeDocument {
+  description: string
+  solution: string
+  notes: string[]
+}
+
+export const getKnowledgeDetail = (docId: string) => {
+  return http.get<ApiResponse<KnowledgeDetailResponse>>(`/admin/knowledge/detail/${docId}`)
+}
+
+// 删除知识库文档
+export const deleteKnowledgeDocument = (docId: string) => {
+  return http.delete<ApiResponse<{ success: boolean; document_id: string; title: string; message: string }>>(
+    `/admin/knowledge/delete/${docId}`
+  )
 }

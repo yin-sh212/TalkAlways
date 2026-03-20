@@ -1,0 +1,70 @@
+[
+  {
+    "title": "测试",
+    "category": "case",
+    "tags": [
+      "test"
+    ],
+    "summary": "摘要",
+    "description": "描述",
+    "solution": "解决",
+    "notes": [
+      "note1"
+    ]
+  },
+  {
+    "id": "DOC002",
+    "title": "API 测试文档",
+    "category": "test",
+    "tags": [
+      "api",
+      "test"
+    ],
+    "summary": "这是一个测试摘要",
+    "description": "这是测试描述",
+    "solution": "这是解决方案",
+    "notes": [
+      "注意 1",
+      "注意 2"
+    ],
+    "createDate": "2026-03-20",
+    "views": 2
+  },
+  {
+    "id": "DOC003",
+    "title": "API 测试文档",
+    "category": "test",
+    "tags": [
+      "api",
+      "test"
+    ],
+    "summary": "这是一个测试摘要",
+    "description": "这是测试描述",
+    "solution": "这是解决方案",
+    "notes": [
+      "注意 1",
+      "注意 2"
+    ],
+    "createDate": "2026-03-20",
+    "views": 0
+  },
+  {
+    "id": "DOC005",
+    "title": "能耗优化建议 - 电力突增",
+    "category": "optimization",
+    "tags": [
+      "能耗优化",
+      "电力突增",
+      "运行策略"
+    ],
+    "summary": "建议检查设备运行状态，优化运行策略，避免峰值运行",
+    "description": "检测到电力消耗异常，峰值达 467.5 kWh",
+    "solution": "建议检查设备运行状态，优化运行策略，避免峰值运行",
+    "notes": [
+      "关联因素：设备高负荷运行 + 环境温度影响",
+      "影响评估：该异常导致多消耗电力 422.8 kWh"
+    ],
+    "createDate": "2026-03-20",
+    "views": 1
+  }
+]

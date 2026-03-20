@@ -209,7 +209,7 @@ import {
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { getLineChartConfig, getBarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
-import { useBuildingStore } from '@/store/building'
+import { getBuildings } from '@/api/query'
 import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
 import { detectAnomaly, getSummary } from '@/api/statistics'
 import { getAnalysisInsights } from '@/api/analysis'
@@ -217,7 +217,6 @@ import { addDocument } from '@/api/admin'
 import { MOCK_TODAY } from '@/api/dashboard'
 
 const message = useMessage()
-const buildingStore = useBuildingStore()
 
 // 筛选条件
 const filters = reactive({
@@ -254,13 +253,11 @@ let compareChart: echarts.ECharts | null = null
 const trendChartRef = ref<HTMLElement | null>(null)
 const compareChartRef = ref<HTMLElement | null>(null)
 
-// 加载建筑列表（使用缓存）
+// 加载建筑列表
 const loadBuildings = async () => {
   try {
-    // 从 buildingStore 获取（自动使用缓存）
-    await buildingStore.fetchBuildings()
-    
-    const buildings = buildingStore.buildings
+    const response = await getBuildings()
+    const buildings: any[] = response.data.data || []
     
     buildingOptions.value = buildings.map((building: any) => ({
       label: building.name || `建筑${building.id}`,
@@ -269,7 +266,7 @@ const loadBuildings = async () => {
     
     // 默认选中第一个建筑
     if (buildings.length > 0) {
-      filters.buildingId = buildings[0].id
+      filters.buildingId = buildings[0].id || buildings[0]
       handleFilterChange()
     }
   } catch (error) {

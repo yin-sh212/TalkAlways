@@ -16,7 +16,7 @@ export const getTrendData = (params: { building_id?: string; days?: number; end_
 }
 
 // 获取对比图数据
-export const getComparisonData = (params: { building_ids?: string[]; start_date?: string; end_date?: string }) => {
+export const getComparisonData = (params: { building_ids?: string | string[]; start_date?: string; end_date?: string }) => {
   return http.get<ApiResponse<{
     categories: string[];
     series: Array<{

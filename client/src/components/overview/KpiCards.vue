@@ -61,6 +61,28 @@
       <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
         <template #header>
           <n-space justify="space-between" align="center">
+            <span class="card-title">能效比 (COP)</span>
+            <n-icon size="24" color="#52c41a">
+              <Leaf />
+            </n-icon>
+          </n-space>
+        </template>
+        <n-skeleton v-if="loading" :rows="2" />
+        <template v-else>
+          <div class="kpi-value">
+            {{ kpiData.cop.toFixed(2) }}
+          </div>
+          <div class="kpi-subtitle">
+            <span class="sub-text">根据能耗与温差计算</span>
+          </div>
+        </template>
+      </n-card>
+    </n-grid-item>
+    
+    <!-- <n-grid-item>
+      <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
+        <template #header>
+          <n-space justify="space-between" align="center">
             <span class="card-title">今日 CO₂减排</span>
             <n-icon size="24" color="#52c41a">
               <Leaf />
@@ -78,7 +100,7 @@
           </div>
         </template>
       </n-card>
-    </n-grid-item>
+    </n-grid-item> -->
   </n-grid>
 </template>
 

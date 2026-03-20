@@ -43,8 +43,15 @@ export const getDailyComparison = (params: { building_id: string; dates: string[
 }
 
 // 计算能效比 (COP)
-export const calculateCOP = (params: { building_id?: string; start_date?: string; end_date?: string }) => {
-  return http.get<ApiResponse<number>>('/statistics/cop', { params })
+export const calculateCOP = (params: { building_id?: string; start_date?: string; end_date?: string; cop_type?: string }) => {
+  return http.get<ApiResponse<{
+    building_id: string;
+    period: string;
+    cop_type: string;
+    avg_cop_cooling: number | null;
+    avg_cop_heating: number | null;
+    details: any[];
+  }>>('/statistics/cop', { params })
 }
 
 // 检测能耗异常

@@ -19,32 +19,13 @@ class Question(BaseModel):
         description="用户问题（必填）",
         example="冷水机组故障怎么处理"
     )
-    building_id: Optional[str] = Field(
-        None,
-        description="建筑编号，如：B001（可选）",
-        example="B001"
-    )
-    session_id: Optional[str] = Field(
-        None,
-        description="会话 ID（可选，不传则自动生成）"
-    )
-    assistant: Optional[str] = Field(
-        "main",
-        description="聊天助手：main 或 alt（可选，默认 main）",
-        example="main"
-    )
-    chat_id: Optional[str] = Field(
-        None,
-        description="直接指定聊天助手 ID（可选，优先级高于 assistant）"
-    )
 
 
-class Answer(BaseModel):
-    """问答响应模型"""
-    answer: str = Field(..., description="AI 回答内容")
-    type: str = Field(..., description="回答类型：knowledge/data/diagnosis/help")
-    sources: Optional[List[Dict]] = Field(None, description="参考来源")
-    data: Optional[Dict] = Field(None, description="附加数据")
+class ApiResponse(BaseModel):
+    """统一 API 响应结构"""
+    code: int = Field(..., description="状态码：200 成功，其他表示失败")
+    message: str = Field(..., description="响应消息")
+    data: Optional[Dict] = Field(None, description="响应数据")
 
 
 # RAG 初始化标志
@@ -62,7 +43,7 @@ async def init_rag():
 
 @router.post(
     "/ask",
-    response_model=Answer,
+    response_model=ApiResponse,
     summary="智能问答",
     description="所有问题都通过 RAGFlow 助手回答"
 )
@@ -72,34 +53,10 @@ async def ask_question(question: Question):
 
     ## 使用示例
 
-    ### 基础问答（只传问题）
+    ### 基础问答
     ```json
     {
         "query": "冷水机组故障怎么处理"
-    }
-    ```
-
-    ### 指定建筑（用于数据查询）
-    ```json
-    {
-        "query": "昨天用电量多少",
-        "building_id": "B001"
-    }
-    ```
-
-    ### 使用备用助手
-    ```json
-    {
-        "query": "冷水机组故障怎么处理",
-        "assistant": "alt"
-    }
-    ```
-
-    ### 直接指定 chat_id
-    ```json
-    {
-        "query": "冷水机组故障怎么处理",
-        "chat_id": "1c84f3e022a711f18847375572c3852a"
     }
     ```
     """
@@ -107,18 +64,16 @@ async def ask_question(question: Question):
     await init_rag()
 
     print(f"📝 收到问题：{question.query}")
-    print(f"🤖 使用助手：{question.assistant if not question.chat_id else f'自定义 ID: {question.chat_id}'}")
-    print(f"🏢 建筑编号：{question.building_id or '未指定，使用默认 B001'}")
 
     try:
         # 获取原始问题
         original_query = question.query
-        building_id = question.building_id or "B001"
+        building_id = "B001"  # 默认建筑编号
 
         # ========== 步骤 1：处理数据查询类问题 ==========
         # 检查问题是否涉及数据查询
         data_keywords = ['用电', '电量', '能耗', '多少', '统计', 'kwh', '度', '水耗', '用水',
-                         '7月', '8月', '9月', '昨天', '今天', '上周', '本月', '上月',
+                         '7 月', '8 月', '9 月', '昨天', '今天', '上周', '本月', '上月',
                          '日能耗', '月能耗', '年能耗', '用电量', '用水量']
         is_data_query = any(keyword in original_query for keyword in data_keywords)
 
@@ -165,25 +120,20 @@ async def ask_question(question: Question):
                 enhanced_query = f"{original_query}\n\n【提示】数据库查询失败，请检查数据源"
 
         # ========== 步骤 2：调用 RAGFlow 助手 ==========
-        # 根据参数选择使用哪个助手
-        if question.chat_id:
-            # 方式 1：直接使用指定的 chat_id
-            print(f"🔧 使用自定义 chat_id: {question.chat_id}")
-            result = rag_pipeline.answer_with_chat_id(enhanced_query, question.chat_id)
-        else:
-            # 方式 2：根据 assistant 参数选择（main 或 alt）
-            use_alt = (question.assistant == "alt")
-            assistant_name = "备用助手" if use_alt else "主助手"
-            print(f"🔧 使用{assistant_name}: {question.assistant}")
-            result = rag_pipeline.answer(enhanced_query, use_alt=use_alt)
+        # 使用主助手回答问题
+        result = rag_pipeline.answer(enhanced_query, use_alt=False)
 
         # ========== 步骤 3：返回结果 ==========
         print(f"✅ 回答成功，长度：{len(result['answer'])} 字符")
 
-        return Answer(
-            answer=result['answer'],
-            type="knowledge",
-            sources=result.get('sources')
+        return ApiResponse(
+            code=200,
+            message="回答成功",
+            data={
+                "answer": result['answer'],
+                "type": "knowledge",
+                "sources": result.get('sources')
+            }
         )
 
     except Exception as e:
@@ -204,9 +154,10 @@ async def ask_question(question: Question):
         else:
             user_message = f"处理失败：{error_message[:100]}"
 
-        return Answer(
-            answer=f"抱歉，{user_message}",
-            type="error"
+        return ApiResponse(
+            code=500,
+            message=f"抱歉，{user_message}",
+            data=None
         )
 
 

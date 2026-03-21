@@ -229,3 +229,63 @@ async def get_comparison_data(
         "code": 200,
         "data": radar_data
     }
+
+
+@router.get("/distribution")
+async def get_distribution_data(
+        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        date: str = Query(default="2016-08-15", description="日期，格式：YYYY-MM-DD")
+):
+    """获取 24 小时能耗分布数据（按小时统计）"""
+    try:
+        # 查询指定日期的 24 小时能耗数据
+        sql = """
+            SELECT 
+                HOUR(timestamp) as hour,
+                AVG(electricity) as avg_elec
+            FROM energy_consumption
+            WHERE building_id = %s 
+                AND DATE(timestamp) = %s
+            GROUP BY HOUR(timestamp)
+            ORDER BY hour ASC
+        """
+        
+        data = await Database.fetch_all(sql, (building_id, date))
+        
+        # 生成 24 小时的数据（0-23 点）
+        categories = [f"{h:02d}:00" for h in range(24)]
+        values = [0.0] * 24
+        
+        # 填充实际数据
+        for item in data:
+            hour = int(item['hour'])
+            if 0 <= hour < 24:
+                values[hour] = float(item['avg_elec']) if item['avg_elec'] is not None else 0.0
+        
+        series = [
+            {
+                "name": "平均用电量",
+                "type": "line",
+                "data": values,
+                "areaStyle": {"opacity": 0.2},
+                "smooth": True,
+                "lineStyle": {"width": 2}
+            }
+        ]
+        
+        return {
+            "code": 200,
+            "data": {
+                "categories": categories,
+                "series": series
+            }
+        }
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"获取分布数据失败：{str(e)}",
+            "data": {
+                "categories": [],
+                "series": []
+            }
+        }

@@ -339,6 +339,116 @@ def detect_anomalies_moving_average(values, timestamps, window=3, threshold=3):
     return anomalies
 
 
+@router.get("/summary/buildings")
+async def get_buildings_summary(
+        start_date: str,
+        end_date: str,
+        time_unit: str = Query("day", pattern="^(hour|day|week|month)$"),
+        building_ids: Optional[List[str]] = Query(None, description="建筑 ID 列表，不传则查询所有建筑")
+):
+    """批量获取多个建筑的能耗汇总 - 用于建筑能耗对比"""
+    group_by = time_unit
+
+    # 根据 group_by 确定 SQL
+    if group_by == "day":
+        group_sql = "DATE(e.timestamp) as period"
+    elif group_by == "week":
+        group_sql = "DATE_FORMAT(e.timestamp, '%Y-%u') as period"
+    elif group_by == "month":
+        group_sql = "DATE_FORMAT(e.timestamp, '%Y-%m') as period"
+    else:
+        group_sql = "DATE(e.timestamp) as period"
+
+    # 构建 WHERE 条件
+    where_conditions = ["DATE(e.timestamp) BETWEEN %s AND %s"]
+    params = [start_date, end_date]
+
+    if building_ids:
+        placeholders = ",".join(["%s"] * len(building_ids))
+        where_conditions.append(f"e.building_id IN ({placeholders})")
+        params.extend(building_ids)
+
+    where_clause = " AND ".join(where_conditions)
+
+    # 简化版本：不关联 buildings 表，直接使用 building_id
+    sql = f"""
+        SELECT 
+            {group_sql},
+            e.building_id,
+            SUM(e.electricity) as total_elec,
+            AVG(e.electricity) as avg_elec,
+            COUNT(*) as data_points
+        FROM energy_consumption e
+        WHERE {where_clause}
+        GROUP BY period, e.building_id
+        ORDER BY period, e.building_id
+    """
+
+    data = await Database.fetch_all(sql, tuple(params))
+
+    return {
+        "code": 200,
+        "data": {
+            "buildings": data
+        }
+    }
+
+
+@router.get("/summary/daily-comparison")
+async def get_daily_comparison(
+        building_id: str,
+        dates: List[str] = Query(..., description="日期列表，例如：['2016-07-15', '2016-07-14', '2016-07-08']")
+):
+    """批量获取多日的能耗数据 - 用于日环比、周同比计算"""
+    if not dates:
+        raise HTTPException(status_code=400, detail="dates 参数不能为空")
+
+    placeholders = ",".join(["%s"] * len(dates))
+    sql = f"""
+        SELECT 
+            DATE(timestamp) as date,
+            SUM(electricity) as total_elec,
+            AVG(electricity) as avg_elec,
+            COUNT(*) as data_points
+        FROM energy_consumption
+        WHERE building_id = %s 
+            AND DATE(timestamp) IN ({placeholders})
+        GROUP BY DATE(timestamp)
+        ORDER BY DATE(timestamp)
+    """
+
+    params = [building_id] + list(dates)
+    data = await Database.fetch_all(sql, tuple(params))
+
+    return {
+        "code": 200,
+        "data": {
+            "daily_data": data
+        }
+    }
+
+
+async def get_table_columns():
+    """移动平均法异常检测"""
+    anomalies = []
+    for i in range(len(values)):
+        start = max(0, i - window)
+        end = min(len(values), i + window + 1)
+        window_values = values[start:end]
+        mean = sum(window_values) / len(window_values)
+        std = (sum((x - mean) ** 2 for x in window_values) / len(window_values)) ** 0.5
+        if std > 0 and abs(values[i] - mean) > threshold * std:
+            anomalies.append({
+                "index": i,
+                "timestamp": timestamps[i],
+                "value": float(values[i]),
+                "mean": float(mean),
+                "z_score": float(abs(values[i] - mean) / std),
+                "deviation": f"{((values[i] - mean) / mean * 100):.1f}%" if mean > 0 else "N/A"
+            })
+    return anomalies
+
+
 async def get_table_columns():
     """获取表的所有列名（缓存）"""
     sql = "SHOW COLUMNS FROM energy_consumption"

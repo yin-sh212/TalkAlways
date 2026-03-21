@@ -9,6 +9,25 @@ const http: AxiosInstance = axios.create({
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
+  },
+  // 自定义参数序列化器，支持数组参数（如 dates=[a, b, c] -> dates=a&dates=b&dates=c）
+  paramsSerializer: (params) => {
+    if (!params) return ''
+    const parts: string[] = []
+    
+    Object.entries(params).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        // 数组类型：key=value1&key=value2&key=value3
+        value.forEach(v => {
+          parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(v)}`)
+        })
+      } else if (value !== undefined && value !== null) {
+        // 普通类型
+        parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      }
+    })
+    
+    return parts.join('&')
   }
 })
 

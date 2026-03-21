@@ -277,3 +277,34 @@ export const batchConfirmAlarms = (data: BatchOperationRequest) => {
 export const batchResolveAlarms = (data: BatchOperationRequest) => {
   return http.post<BatchOperationResponse>('/alarm/batch-resolve', data)
 }
+
+// 获取告警分析详情
+export interface AlarmAnalysisResponse {
+  code: number
+  message: string
+  data: {
+    alarm_id: number
+    building_id: string
+    alarm_type: string
+    alarm_level: number
+    description: string
+    start_time: string
+    main_cause: string
+    top_factors: Array<{
+      factor: string
+      value: number
+      normal?: number
+      impact: 'high' | 'medium' | 'low'
+      description: string
+    }>
+    quick_solution: string
+    related_knowledge?: Array<{
+      title: string
+      url: string
+    }>
+  }
+}
+
+export const getAlarmAnalysis = (alarmId: number) => {
+  return http.get<AlarmAnalysisResponse>(`/alarm/${alarmId}/analysis`)
+}

@@ -1,1043 +1,878 @@
 <template>
   <div class="analysis-container">
-    <!-- 顶部查询条件栏 -->
-    <div class="query-section">
-      <n-card :bordered="false" content-style="padding: 20px;">
-        <n-collapse :expanded-keys="['query-form']" arrow-placement="right">
-          <n-collapse-item title="查询条件" name="query-form">
-            <n-form :model="queryForm" :rules="queryRules" ref="queryFormRef" label-placement="top">
-              <n-grid :cols="4" :x-gap="16" :y-gap="16">
-                <!-- 建筑选择 -->
-                <n-grid-item>
-                  <n-form-item label="建筑选择" path="buildings">
-                    <n-select
-                      v-model:value="queryForm.buildings"
-                      placeholder="请选择建筑"
-                      filterable
-                      multiple
-                      :options="buildingOptions"
-                    />
-                  </n-form-item>
-                </n-grid-item>
-
-                <!-- 参数选择 -->
-                <n-grid-item>
-                  <n-form-item label="参数类型" path="parameter">
-                    <n-select
-                      v-model:value="queryForm.parameter"
-                      placeholder="请选择参数"
-                      :options="parameterOptions"
-                    />
-                  </n-form-item>
-                </n-grid-item>
-
-                <!-- 时间范围 -->
-                <n-grid-item>
-                  <n-form-item label="时间范围" path="timeRange">
-                    <n-space :size="8" style="width: 100%;">
-                      <n-date-picker
-                        v-model:value="queryForm.timeRange"
-                        type="daterange"
-                        placeholder="选择日期范围"
-                        style="flex: 1;"
-                      />
-                      <n-space :size="4">
-                        <n-button size="small" @click="setQuickTime('today')">今日</n-button>
-                        <n-button size="small" @click="setQuickTime('week')">本周</n-button>
-                        <n-button size="small" @click="setQuickTime('month')">本月</n-button>
-                      </n-space>
-                    </n-space>
-                  </n-form-item>
-                </n-grid-item>
-
-                <!-- 自然语言输入 -->
-                <n-grid-item>
-                  <n-form-item label="自然语言查询" path="naturalQuery">
-                    <n-input
-                      v-model:value="queryForm.naturalQuery"
-                      placeholder="试试说：A 栋上周每天的空调电耗"
-                      @keydown.enter="handleNaturalQuery"
-                    >
-                      <template #prefix>
-                        <n-icon :component="Search" />
-                      </template>
-                    </n-input>
-                  </n-form-item>
-                </n-grid-item>
-              </n-grid>
-
-              <!-- 操作按钮 -->
-              <n-space justify="end" style="margin-top: 16px;">
-                <n-button @click="handleReset">重置</n-button>
-                <n-button type="primary" @click="handleQuery" :loading="queryLoading">
-                  查询
-                </n-button>
-              </n-space>
-            </n-form>
-          </n-collapse-item>
-        </n-collapse>
+    <!-- 顶部轻量筛选栏 -->
+    <div class="filter-section">
+      <n-card :bordered="false" content-style="padding: 16px 24px;">
+        <n-space :size="24" align="center">
+          <!-- 建筑选择 -->
+          <n-select
+            v-model:value="filters.buildingId"
+            placeholder="选择建筑"
+            :options="buildingOptions"
+            style="width: 200px;"
+            @update:value="handleFilterChange"
+          />
+          
+          <!-- 时间范围 -->
+          <n-space :size="8" align="center">
+            <n-radio-group v-model:value="filters.timeRange" @update:value="handleTimeRangeChange">
+              <n-radio-button value="today">今日</n-radio-button>
+              <n-radio-button value="week">近 7 天</n-radio-button>
+              <n-radio-button value="month">近 30 天</n-radio-button>
+            </n-radio-group>
+            
+            <n-divider vertical />
+            
+            <!-- 自定义日期选择器 -->
+            <n-date-picker
+              v-model:value="customDateRange"
+              type="daterange"
+              placement="bottom-end"
+              placeholder="选择日期范围"
+              style="width: 240px;"
+              @update:value="handleCustomDateChange"
+            />
+          </n-space>
+        </n-space>
       </n-card>
     </div>
 
-    <!-- 结果展示区 -->
-    <div class="result-section">
-      <n-tabs v-model:value="activeTab" type="line" animated>
-        <!-- Tab 1: 数据表格 -->
-        <n-tab-pane name="table" tab="数据表格">
-          <n-card :bordered="false" content-style="padding: 16px;">
-            <template #header>
-              <n-space justify="space-between" align="center">
-                <span>数据明细</span>
-                <n-checkbox v-model:checked="enableCompare" @update:checked="handleCompareToggle">
-                  启用对比模式
-                </n-checkbox>
+    <!-- 主内容区 -->
+    <div class="content-section">
+      <n-space vertical :size="16">
+        
+        <!-- 模块 1：多维度趋势分析 -->
+        <n-card title="多维度趋势分析" :bordered="false">
+          <n-grid :cols="2" :x-gap="16" :y-gap="16">
+            <!-- 图表 1：能耗 - 环境关联趋势图 -->
+            <n-grid-item>
+              <div class="chart-header">
+                <span class="chart-title">能耗 - 环境关联趋势</span>
+                <n-tooltip>
+                  <template #trigger>
+                    <n-icon size="18" :component="InformationCircle" style="cursor: pointer; color: #1890ff;" />
+                  </template>
+                  同图展示电力/冷量/供热曲线 + 气温次 Y 轴，标注异常点
+                </n-tooltip>
+              </div>
+              <div ref="trendChartRef" class="chart-container"></div>
+            </n-grid-item>
+
+            <!-- 图表 2：建筑综合评分对比 -->
+            <n-grid-item>
+              <div class="chart-header">
+                <span class="chart-title">建筑综合评分对比</span>
+                <n-tooltip>
+                  <template #trigger>
+                    <n-icon size="18" :component="InformationCircle" style="cursor: pointer; color: #1890ff;" />
+                  </template>
+                  雷达图展示多建筑在节能性、稳定性、健康度、能效比四个维度的综合表现
+                </n-tooltip>
+              </div>
+              <div ref="compareChartRef" class="chart-container"></div>
+            </n-grid-item>
+          </n-grid>
+        </n-card>
+
+        <!-- 模块 2：异常根因智能分析 -->
+        <n-card 
+          title="异常根因智能分析" 
+          :bordered="false"
+          header-style="padding: 16px 24px;"
+          content-style="padding: 0 24px 24px;"
+        >
+          <n-alert 
+            v-if="currentAnomaly.type !== '无异常'"
+            type="warning" 
+            :title="`今日最严重异常：${currentAnomaly.type}`"
+            closable
+            style="margin-bottom: 16px;"
+          >
+            <template #default>
+              <n-space vertical :size="12">
+                <div><strong>异常表现：</strong>{{ currentAnomaly.description }}</div>
+                <div><strong>关联因素：</strong>{{ currentAnomaly.factors }}</div>
+                <div><strong>影响评估：</strong>{{ currentAnomaly.impact }}</div>
+                <div>
+                  <strong>优化建议：</strong>{{ currentAnomaly.suggestion }}
+                  <n-button 
+                    text 
+                    type="primary" 
+                    size="small"
+                    style="margin-left: 8px;"
+                    @click="saveSuggestionToKnowledge"
+                  >
+                    保存到知识库
+                  </n-button>
+                </div>
               </n-space>
             </template>
-            <n-data-table
-              :columns="tableColumns"
-              :data="tableData"
-              :loading="tableLoading"
-              :pagination="pagination"
-              :row-key="(row) => row.id"
-              striped
-            />
-          </n-card>
-        </n-tab-pane>
-
-        <!-- 新增 Tab: 对比分析 -->
-        <n-tab-pane name="comparison" tab="对比分析" v-if="enableCompare">
-          <n-grid :cols="24" :x-gap="16" :y-gap="16">
-            <n-grid-item :span="24">
-              <n-card title="多建筑能耗对比" :bordered="false" content-style="padding: 16px;">
-                <div ref="compareChartRef" class="chart-container" style="height: 400px;"></div>
-              </n-card>
-            </n-grid-item>
-          </n-grid>
-        </n-tab-pane>
-
-        <!-- Tab 2: 分析视图 -->
-        <n-tab-pane name="analysis" tab="分析视图">
-          <n-grid :cols="24" :x-gap="16" :y-gap="16">
-            <!-- 左侧图表区 -->
-            <n-grid-item :span="16">
-              <n-card :bordered="false" content-style="padding: 16px;">
-                <n-space vertical :size="16">
-                  <!-- 图表 1：能耗趋势 -->
-                  <div class="chart-wrapper">
-                    <div class="chart-header">
-                      <span class="chart-title">能耗趋势折线图</span>
-                      <n-icon 
-                        size="20" 
-                        style="cursor: pointer;" 
-                        :component="Expand"
-                        @click="showChartDetail(0)"
-                      />
-                    </div>
-                    <div ref="chart1Ref" class="chart-container"></div>
-                  </div>
-
-                  <!-- 图表 2：能耗分布 -->
-                  <div class="chart-wrapper">
-                    <div class="chart-header">
-                      <span class="chart-title">能耗分布柱状图</span>
-                      <n-icon 
-                        size="20" 
-                        style="cursor: pointer;" 
-                        :component="Expand"
-                        @click="showChartDetail(1)"
-                      />
-                    </div>
-                    <div ref="chart2Ref" class="chart-container"></div>
-                  </div>
-                </n-space>
-              </n-card>
-            </n-grid-item>
-
-            <!-- 右侧指标卡 -->
-            <n-grid-item :span="8">
-              <n-space vertical :size="16">
-                <n-card :bordered="false" content-style="padding: 20px;">
-                  <template #header>
-                    <n-space justify="space-between">
-                      <span class="metric-title">查询时段总能耗</span>
-                      <n-icon size="24" color="#1890ff">
-                        <Energy />
-                      </n-icon>
-                    </n-space>
-                  </template>
-                  <div class="metric-value">{{ metrics.totalEnergy.toFixed(2) }} MWh</div>
-                </n-card>
-
-                <n-card :bordered="false" content-style="padding: 20px;">
-                  <template #header>
-                    <n-space justify="space-between">
-                      <span class="metric-title">平均能耗</span>
-                      <n-icon size="24" color="#52c41a">
-                        <TrendingUp />
-                      </n-icon>
-                    </n-space>
-                  </template>
-                  <div class="metric-value">{{ metrics.avgEnergy.toFixed(2) }} MWh</div>
-                </n-card>
-
-                <n-card :bordered="false" content-style="padding: 20px;">
-                  <template #header>
-                    <n-space justify="space-between">
-                      <span class="metric-title">异常点数</span>
-                      <n-icon size="24" color="#f5222d">
-                        <Alert />
-                      </n-icon>
-                    </n-space>
-                  </template>
-                  <div class="metric-value" style="color: #f5222d;">{{ metrics.anomalyCount }}</div>
-                </n-card>
+          </n-alert>
+          
+          <!-- 无异常时的友好提示 -->
+          <n-alert 
+            v-else
+            type="success" 
+            title="设备运行正常"
+            closable
+            style="margin-bottom: 16px;"
+          >
+            <template #default>
+              <n-space vertical :size="12">
+                <div>当前未检测到明显能耗异常，设备运行平稳。</div>
+                <div>建议：继续保持当前运行策略，定期巡检设备。</div>
               </n-space>
-            </n-grid-item>
-          </n-grid>
-        </n-tab-pane>
-      </n-tabs>
+            </template>
+          </n-alert>
+        </n-card>
+
+        <!-- 模块 3：能耗优化洞察 -->
+        <n-card 
+          title="能耗优化洞察" 
+          :bordered="false"
+          header-style="padding: 16px 24px;"
+          content-style="padding: 0 24px 24px;"
+        >
+          <n-list hoverable clickable>
+            <template #header>
+              <div v-if="insights.length === 0" style="padding: 20px; text-align: center; color: var(--text-color-secondary);">
+                <n-empty description="暂无优化洞察数据" />
+              </div>
+            </template>
+            <n-list-item 
+              v-for="(insight, index) in insights" 
+              :key="index"
+              @click="handleInsightClick(insight)"
+            >
+              <template #prefix>
+                <n-icon size="20" :color="insight.color" :component="Bulb" />
+              </template>
+              <n-thing :description="insight.description">
+                <template #header>
+                  <n-space :size="8" align="center">
+                    <span>{{ insight.title }}</span>
+                    <n-tag :type="insight.type" size="small">{{ insight.category }}</n-tag>
+                  </n-space>
+                </template>
+                <template #action>
+                  <n-space :size="8">
+                    <n-button text size="small" @click.stop="copyInsight(insight)">
+                      <template #icon>
+                        <n-icon :component="Copy" />
+                      </template>
+                      复制
+                    </n-button>
+                    <n-button text size="small" @click.stop="saveInsightToWorkspace(insight)">
+                      <template #icon>
+                        <n-icon :component="Save" />
+                      </template>
+                      保存
+                    </n-button>
+                  </n-space>
+                </template>
+              </n-thing>
+            </n-list-item>
+          </n-list>
+        </n-card>
+
+      </n-space>
     </div>
 
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
-      <n-button type="primary" @click="handleExport" :loading="exportLoading">
-        <template #icon>
-          <n-icon :component="Download" />
-        </template>
-        {{ exportLoading ? '生成中...' : '导出报表' }}
-      </n-button>
+      <n-space justify="space-between">
+        <n-button 
+          type="info" 
+          ghost
+          @click="navigateToKnowledgeBase"
+        >
+          <template #icon>
+            <n-icon :component="Book" />
+          </template>
+          前往运维知识库
+        </n-button>
+        <n-space justify="end">
+          <n-button @click="handleRefresh">
+            <template #icon>
+              <n-icon :component="Refresh" />
+            </template>
+            刷新
+          </n-button>
+          <n-button type="primary" @click="handleExport">
+            <template #icon>
+              <n-icon :component="Download" />
+            </template>
+            导出分析报告
+          </n-button>
+        </n-space>
+      </n-space>
     </div>
-
-    <!-- 图表详情弹窗 -->
-    <n-modal
-      v-model:show="showChartModal"
-      preset="card"
-      title="图表详情"
-      style="width: 90%; max-width: 1200px;"
-    >
-      <div ref="detailChartRef" class="detail-chart-container"></div>
-    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, h, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { 
-  Search, 
-  Expand, 
-  Download, 
-  Alert, 
-  TrendingUp, 
-  Flash as Energy 
+  InformationCircle,
+  Bulb,
+  Copy,
+  Save,
+  Download,
+  Refresh,
+  TrendingUp,
+  Flash,
+  Thermometer,
+  Water,
+  Alert,
+  Book
 } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
-import type { DataTableColumns } from 'naive-ui'
-import * as analysisApi from '@/api/analysis'
-import { getLineChartConfig, getBarChartConfig } from '@/utils/echarts-config'
-
-import type { QueryDataItem } from '@/types/analysis'
+import { getLineChartConfig, getBarChartConfig, getRadarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
+import { getBuildings } from '@/api/query'
+import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
+import { detectAnomaly, getSummary } from '@/api/statistics'
+import { getAnalysisInsights } from '@/api/analysis'
+import { addDocument } from '@/api/admin'
 import { MOCK_TODAY } from '@/api/dashboard'
 
+const router = useRouter()
 const message = useMessage()
-const route = useRoute()
 
-// 状态
-const queryLoading = ref(false)
-const tableLoading = ref(false)
-const exportLoading = ref(false)
-const activeTab = ref<'table' | 'analysis' | 'comparison'>('table')
-const showChartModal = ref(false)
-const enableCompare = ref(false) // 是否启用对比模式
-
-// 图表实例
-let chart1: echarts.ECharts | null = null
-let chart2: echarts.ECharts | null = null
-let compareChart: echarts.ECharts | null = null // 对比图表实例
-let detailChart: echarts.ECharts | null = null
-const chart1Ref = ref<HTMLElement | null>(null)
-const chart2Ref = ref<HTMLElement | null>(null)
-const compareChartRef = ref<HTMLElement | null>(null) // 对比图表引用
-const detailChartRef = ref<HTMLElement | null>(null)
-
-// 查询表单
-const queryFormRef = ref<any>(null)
-const queryForm = reactive({
-  buildings: [] as string[],
-  parameter: 'electricity',
-  timeRange: null as [number, number] | null,
-  naturalQuery: ''
+// 筛选条件
+const filters = reactive({
+  buildingId: '',
+  dimension: 'energy', // energy | device | alarm
+  timeRange: 'week', // today | week | month
+  isCustomDate: false // 是否使用自定义日期
 })
 
-// 验证规则
-const queryRules = {
-  buildings: [
-    {
-      required: true,
-      message: '请选择建筑',
-      trigger: ['blur', 'change'],
-      validator: (rule: any, value: string[]) => {
-        if (!value || value.length === 0) {
-          return new Error('请选择建筑')
-        }
-        return true
-      }
-    }
-  ],
-  timeRange: [
-    {
-      required: true,
-      message: '请选择时间范围',
-      trigger: ['blur', 'change'],
-      validator: (rule: any, value: [number, number] | null) => {
-        if (!value || !Array.isArray(value) || value.length !== 2) {
-          return new Error('请选择时间范围')
-        }
-        // 检查是否两个日期都选择了
-        if (!value[0] || !value[1]) {
-          return new Error('请选择时间范围')
-        }
-        return true
-      }
-    }
-  ]
-}
+// 自定义日期范围
+const customDateRange = ref<[number, number] | null>(null)
 
-// 建筑选项（从后端获取）
+// 固定使用雷达图模式显示综合评分
+const compareDimension = ref('radar')
+
+// 建筑选项
 const buildingOptions = ref<any[]>([])
 
-// 参数选项
-const parameterOptions = [
-  { label: '电力能耗', value: 'electricity' },
-  { label: '空调能耗', value: 'hvac' },
-  { label: '环境温度', value: 'temperature' },
-  { label: 'COP 值', value: 'cop' }
-]
-
-// 表格数据
-const tableData = ref<any[]>([])
-const tableColumns: DataTableColumns = [
-  {
-    title: '时间',
-    key: 'time',
-    width: 180,
-    sorter: 'default'
-  },
-  {
-    title: '建筑名称',
-    key: 'buildingName',
-    width: 150,
-    sorter: 'default'
-  },
-  {
-    title: '参数类型',
-    key: 'parameterName',
-    width: 120
-  },
-  {
-    title: '数值',
-    key: 'value',
-    width: 120,
-    sorter: 'default'
-  },
-  {
-    title: '单位',
-    key: 'unit',
-    width: 100
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 100,
-    render: (row: any) => {
-      if (row.isAnomaly) {
-        return h(
-          'span',
-          { style: { color: '#f5222d', fontWeight: 'bold' } },
-          '异常'
-        )
-      }
-      return h('span', '正常')
-    }
-  }
-]
-
-// 表格分页
-const pagination = reactive({
-  page: 1,
-  pageSize: 10,
-  pageSizes: [10, 20, 50],
-  showSizePicker: true,
-  onChange: (page: number) => {
-    pagination.page = page
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
-    pagination.page = 1
-  }
+// 当前异常数据
+const currentAnomaly = ref({
+  type: '无异常',
+  description: '当前未检测到明显能耗异常',
+  factors: '设备运行平稳',
+  impact: '无额外能耗损失',
+  suggestion: '继续保持当前运行策略，定期巡检设备'
 })
 
-// 指标数据
-const metrics = ref({
-  totalEnergy: 0,
-  avgEnergy: 0,
-  anomalyCount: 0
-})
+// 优化洞察数据 - 初始为空，由 API 加载
+const insights = ref<any[]>([])
 
-// 获取建筑列表
+// 图表实例
+let trendChart: echarts.ECharts | null = null
+let compareChart: echarts.ECharts | null = null
+const trendChartRef = ref<HTMLElement | null>(null)
+const compareChartRef = ref<HTMLElement | null>(null)
+
+// 加载建筑列表
 const loadBuildings = async () => {
   try {
-    const response = await analysisApi.getBuildings()
-    const buildings = response.data.data || []
+    const response = await getBuildings()
+    const buildings: any[] = response.data.data || []
     
-    // 转换为下拉选项格式
     buildingOptions.value = buildings.map((building: any) => ({
-      label: building.name || `建筑${building.id || building.building_id}`,
-      value: building.id || building.building_id
+      label: building.name || `建筑${building.id}`,
+      value: building.id
     }))
-  } catch (error: any) {
-    console.error('获取建筑列表失败:', error)
-    // 使用默认 Mock 数据
-    buildingOptions.value = [
-      { label: '行政楼', value: 'building-001' },
-      { label: '教学楼 A', value: 'building-002' },
-      { label: '教学楼 B', value: 'building-003' },
-      { label: '图书馆', value: 'building-004' },
-      { label: '实验楼', value: 'building-005' }
-    ]
-  }
-}
-
-// 设置快捷时间
-const setQuickTime = (type: 'today' | 'week' | 'month') => {
-  // 使用 MOCK_TODAY 作为基准日期
-  const mockDate = new Date(MOCK_TODAY)
-  let start: Date
-  let end: Date
-
-  switch (type) {
-    case 'today':
-      // 今日：MOCK_TODAY 的 00:00:00 至 23:59:59
-      start = new Date(mockDate.setHours(0, 0, 0, 0))
-      end = new Date(mockDate.setHours(23, 59, 59, 999))
-      break
-    case 'week':
-      // 本周：根据 MOCK_TODAY 所在周的周一和周日确定
-      const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
-      const monday = new Date(mockDate)
-      monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
-      monday.setHours(0, 0, 0, 0)
-      
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      sunday.setHours(23, 59, 59, 999)
-      
-      start = monday
-      end = sunday
-      break
-    case 'month':
-      // 本月：MOCK_TODAY 所在月的第一天和最后一天
-      start = new Date(mockDate.getFullYear(), mockDate.getMonth(), 1)
-      start.setHours(0, 0, 0, 0)
-      end = new Date(mockDate.getFullYear(), mockDate.getMonth() + 1, 0, 23, 59, 59, 999)
-      break
-  }
-
-  queryForm.timeRange = [start.getTime(), end.getTime()]
-  
-  // 清除验证错误
-  if (queryFormRef.value) {
-    queryFormRef.value.clearValidationStatus('timeRange')
-  }
-}
-
-// 自然语言查询 - 对接真实接口
-const handleNaturalQuery = async () => {
-  if (!queryForm.naturalQuery.trim()) {
-    message.warning('请输入查询内容')
-    return
-  }
-
-  queryLoading.value = true
-  try {
-    // 调用智能问答接口
-    const parseResult = await analysisApi.parseNaturalQuery({
-      query: queryForm.naturalQuery
-    })
     
-    console.log('NL2Query 响应:', parseResult)
-    
-    // 后端返回的是 answer 文本，需要简单解析
-    // TODO: 实际应该由后端返回结构化数据
-    // 这里暂时使用 Mock 数据
-    const mockParsedResult = {
-      buildings: ['B001'],
-      parameter: 'electricity',
-      timeRange: [Date.now() - 7 * 24 * 3600 * 1000, Date.now()]
+    // 默认选中第一个建筑
+    if (buildings.length > 0) {
+      filters.buildingId = buildings[0].id || buildings[0]
+      handleFilterChange()
     }
-
-    // 回填到表单
-    queryForm.buildings = mockParsedResult.buildings
-    queryForm.parameter = mockParsedResult.parameter
-    queryForm.timeRange = mockParsedResult.timeRange as [number, number]
-
-    message.success('解析成功，已自动填充查询条件')
-    
-    // 执行查询
-    await handleQuery()
-  } catch (error: any) {
-    message.error('解析失败：' + error.message)
-  } finally {
-    queryLoading.value = false
-  }
-}
-
-// 执行查询 - 对接真实接口
-const handleQuery = async () => {
-  // 验证表单
-  try {
-    await queryFormRef.value?.validate()
-    // 验证通过后清除可能存在的错误状态
-    queryFormRef.value?.restoreValidation()
   } catch (error) {
-    message.warning('请填写完整的查询条件')
-    return
+    console.error('获取建筑列表失败:', error)
+    // 使用 Mock 数据
+    buildingOptions.value = [
+      { label: '行政楼', value: 'B001' },
+      { label: '教学楼 A', value: 'B002' },
+      { label: '教学楼 B', value: 'B003' }
+    ]
+    filters.buildingId = 'B001'
+    handleFilterChange()
   }
+}
 
-  // 确保选择了建筑
-  if (!queryForm.buildings || queryForm.buildings.length === 0) {
-    message.warning('请选择建筑')
-    return
+// 处理时间范围变化
+const handleTimeRangeChange = () => {
+  filters.isCustomDate = false
+  customDateRange.value = null
+  handleFilterChange()
+}
+
+// 处理自定义日期变化
+const handleCustomDateChange = (value: [number, number] | null) => {
+  if (value) {
+    filters.isCustomDate = true
+    // 重置快捷选项的视觉状态
+    filters.timeRange = '' as any
+    handleFilterChange()
   }
+}
 
-  // 验证时间范围
-  const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-  const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-  
-  // 检查时间是否在有效范围内（2016-07-01 至 2016-08-31）
-  const validStartDate = '2016-07-01'
-  const validEndDate = '2016-08-31'
-  
-  if (startDate < validStartDate || startDate > validEndDate || endDate < validStartDate || endDate > validEndDate) {
-    message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`)
-    return
+// 获取时间范围参数
+const getTimeRangeParams = () => {
+  if (filters.isCustomDate && customDateRange.value) {
+    const startDate = new Date(customDateRange.value[0])
+    const endDate = new Date(customDateRange.value[1])
+    const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    
+    return {
+      start_date: formatDate(startDate),
+      end_date: formatDate(endDate),
+      days,
+      isSingleDay: days === 1
+    }
+  } else {
+    const days = filters.timeRange === 'today' ? 1 : filters.timeRange === 'week' ? 7 : 30
+    const endDate = new Date(MOCK_TODAY)
+    const startDate = new Date(endDate)
+    startDate.setDate(startDate.getDate() - (days - 1))
+    
+    return {
+      start_date: formatDate(startDate),
+      end_date: formatDate(endDate),
+      days,
+      isSingleDay: days === 1
+    }
   }
+}
+
+// 格式化日期
+const formatDate = (date: Date) => {
+  return date.toISOString().split('T')[0]
+}
+
+// 处理筛选条件变化
+const handleFilterChange = async () => {
+  await loadAnalysisData()
+}
+
+// 加载分析数据
+const loadAnalysisData = async () => {
+  if (!filters.buildingId) return
   
-  // 使用用户选择的第一个建筑 ID（必须是从后端获取的真实 ID）
-  const buildingId = queryForm.buildings[0]
-  console.log('[Analysis] 使用的建筑 ID:', buildingId)
-  console.log('[Analysis] 查询参数:', {
-    buildingId,
-    parameter: queryForm.parameter,
-    startDate,
-    endDate
-  })
-
-  tableLoading.value = true
-  queryLoading.value = false
-
   try {
-    // 并行调用多个接口获取数据
-    const [queryRes, summaryRes, anomalyRes, trendRes, distributionRes] = await Promise.all([
-      analysisApi.queryData({ // 核心查询接口
-        building_id: buildingId,
-        parameter: queryForm.parameter,
-        start_date: startDate,
-        end_date: endDate,
-        time_unit: 'day'
-      }),
-      analysisApi.getStatisticsSummary({ // 统计摘要
-        building_id: buildingId,
-        start_date: startDate,
-        end_date: endDate,
-        time_unit: 'day'
-      }),
-      analysisApi.detectAnomaly({ // 异常检测
-        building_id: buildingId,
-        start_date: startDate,
-        end_date: endDate,
-        threshold: 2.0
-      }),
-      analysisApi.getTrendData({ // 趋势图数据
-        building_id: buildingId,
-        start_date: startDate,
-        end_date: endDate
-      }),
-      analysisApi.getDistributionData({ // 分布图数据
-        building_id: buildingId,
-        date: endDate
+    // 获取时间范围参数
+    const timeParams = getTimeRangeParams()
+    
+    // 串行加载多个数据源，避免一个失败导致全部失败
+    // 1. 加载趋势数据
+    let trendRes: any = null
+    try {
+      trendRes = await getTrendData({ 
+        building_id: filters.buildingId, 
+        days: timeParams.days,
+        end_date: timeParams.end_date
       })
-    ])
-
-    // 填充表格数据
-    const queryData = queryRes.data.data || []
-    tableData.value = queryData.map((item: any) => ({
-      id: item.id || item.timestamp,
-      time: item.timestamp,
-      buildingId: item.building_id,
-      buildingName: item.building_name || '建筑',
-      parameterName: item.parameter_name || '电力能耗',
-      value: item.value || item.electricity || 0,
-      unit: item.unit || 'kWh',
-      isAnomaly: item.is_anomaly === 1 || item.status === '异常'
-    }))
-
-    // 填充指标数据
-    const summaryData = summaryRes.data.data?.summary
-    metrics.value = {
-      totalEnergy: summaryData?.total_elec ? Number((summaryData.total_elec / 1000).toFixed(2)) : 0, // kWh 转 MWh
-      avgEnergy: summaryData?.avg_elec ? Number((summaryData.avg_elec / 1000).toFixed(2)) : 0,
-      anomalyCount: anomalyRes.data.data?.anomaly_count || 0
+      updateTrendChart(trendRes.data.data, timeParams.isSingleDay)
+    } catch (error) {
+      console.error('加载趋势数据失败:', error)
     }
-
-    // 更新图表
-    updateCharts({
-      trendData: trendRes.data.data || [],
-      distributionData: distributionRes.data.data || []
-    })
-
-    message.success('查询成功')
     
-    // 切换到表格 Tab
-    activeTab.value = 'table'
-  } catch (error: any) {
-    console.error('查询失败:', error)
-    message.error('查询失败：' + (error.message || '未知错误'))
-  } finally {
-    tableLoading.value = false
-    queryLoading.value = false
-  }
-}
-
-// 重置查询
-const handleReset = () => {
-  queryForm.buildings = []
-  queryForm.parameter = 'electricity'
-  queryForm.timeRange = null
-  queryForm.naturalQuery = ''
-  tableData.value = []
-  metrics.value = {
-    totalEnergy: 0,
-    avgEnergy: 0,
-    anomalyCount: 0
-  }
-  
-  // 清空图表
-  chart1?.clear()
-  chart2?.clear()
-  
-  message.success('已重置')
-}
-
-// 导出报表 - 对接真实接口
-const handleExport = async () => {
-  exportLoading.value = true
-  message.info('正在生成报表...')
-  
-  try {
-    // 准备导出参数
-    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    
-    const exportParams = {
-      buildings: queryForm.buildings,
-      startTime: startDate,
-      endTime: endDate,
-      format: 'excel' as const // 默认导出为 Excel
+    // 2. 加载异常检测数据
+    let anomalyRes: any = null
+    try {
+      anomalyRes = await detectAnomaly({
+        building_id: filters.buildingId,
+        start_date: timeParams.start_date,
+        end_date: timeParams.end_date,
+        threshold: 2.0
+      })
+    } catch (error) {
+      console.error('加载异常检测数据失败:', error)
     }
-
-    // 调用导出接口（默认 Excel）
-    const response = await analysisApi.exportExcel(exportParams)
     
-    // 创建下载链接
-    const url = window.URL.createObjectURL(response.data as Blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `能耗报表_${new Date().toLocaleDateString()}_${Date.now()}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    
-    message.success('报表已下载')
-  } catch (error: any) {
-    console.error('导出失败:', error)
-    message.error('导出失败：' + (error.message || '未知错误'))
-  } finally {
-    exportLoading.value = false
-  }
-}
-
-// 显示图表详情
-const showChartDetail = (index: number) => {
-  showChartModal.value = true
-  
-  setTimeout(() => {
-    if (detailChartRef.value) {
-      detailChart = echarts.init(detailChartRef.value)
-      // 使用当前已渲染的图表数据
-      const option = index === 0 ? chart1?.getOption() : chart2?.getOption()
-      if (option) {
-        detailChart?.setOption(option as EChartsOption)
+    // 3. 加载分析洞察数据
+    let insightsRes: any = null
+    try {
+      console.log('[Analysis] 请求洞察数据，参数:', {
+        building_id: filters.buildingId,
+        days: timeParams.days,
+        end_date: timeParams.end_date
+      })
+      insightsRes = await getAnalysisInsights({
+        building_id: filters.buildingId,
+        days: timeParams.days,
+        end_date: timeParams.end_date
+      })
+      if (insightsRes?.data?.data?.insights) {
+        insights.value = insightsRes.data.data.insights
+      } else {
+        insights.value = []
+        console.warn('[Analysis] 警告：没有有效的洞察数据')
       }
+    } catch (error) {
+      console.error('加载洞察数据失败:', error)
+      insights.value = []
     }
-  }, 100)
-}
 
-// 更新图表 - 对接真实数据
-const updateCharts = (data: {
-  trendData: any,
-  distributionData: any
-}) => {
-  // 图表 1：能耗趋势（带异常标记）
-  if (chart1Ref.value && data.trendData) {
-    chart1 = echarts.init(chart1Ref.value)
-    chart1.setOption(getChart1Option(data.trendData))
-  }
-
-  // 图表 2：能耗分布
-  if (chart2Ref.value && data.distributionData) {
-    chart2 = echarts.init(chart2Ref.value)
-    chart2.setOption(getChart2Option(data.distributionData))
+    // 4. 加载对比数据（所有建筑）
+    await loadAllBuildingsComparison()
+    
+    message.success('数据加载成功')
+    
+  } catch (error) {
+    console.error('加载分析数据失败:', error)
+    message.error('加载数据失败')
   }
 }
 
-// 获取图表 1 配置（折线图 - 带异常标记）
-const getChart1Option = (trendData: any): EChartsOption => {
-  // 后端返回的格式：{ categories: [], series: [] }
-  const categories = trendData.categories || []
-  const series = trendData.series || []
+// 加载对比数据（固定为雷达图模式）
+const loadComparisonData = async (startDate?: string, endDate?: string) => {
+  await loadAllBuildingsComparison()
+}
+
+// 使用 Mock 数据更新对比图表
+const updateCompareChartWithMock = () => {
+  if (!compareChartRef.value) return
   
-  const seriesData = series.map((s: any) => ({
-    name: s.name,
-    data: s.data,
-    areaStyle: !!s.areaStyle,
-    smooth: true,
-    color: s.color || '#1890ff'
-  }))
+  if (!compareChart) {
+    compareChart = echarts.init(compareChartRef.value)
+  }
   
-  return {
-    ...getLineChartConfig(categories, seriesData, {
-      yAxisName: '能耗 (MWh)',
-    }),
+  const mockData = {
+    categories: ['行政楼', '教学楼 A', '教学楼 B', '图书馆', '实验楼'],
+    series: [{
+      name: '总用电量 (kWh)',
+      data: [120, 132, 101, 134, 90]
+    }]
+  }
+  
+  const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
-      formatter: (params: any) => {
-        const point = params[0]
-        let html = `<div style="font-weight: bold;">${point.name}</div>`
-        params.forEach((p: any) => {
-          const color = p.data?.isAnomaly ? '#f5222d' : '#1890ff'
-          html += `<div style="color: ${color}">
-            ${p.marker} ${p.seriesName}: ${p.value} MWh
-            ${p.data?.isAnomaly ? ' <span style="color: #f5222d; font-weight: bold;">(异常)</span>' : ''}
-          </div>`
-        })
-        return html
-      }
-    },
-    series: series.map((s: any) => ({
-      name: s.name,
-      type: 'line',
-      smooth: true,
-      data: s.data,
-      itemStyle: {
-        color: s.color || '#1890ff'
-      },
-      areaStyle: s.areaStyle,
-      markPoint: {
-        data: [
-          { 
-            type: 'max', 
-            name: '最大值',
-            itemStyle: { color: '#f5222d' }
-          }
-        ]
-      },
-      markLine: {
-        data: [
-          {
-            type: 'average',
-            name: '平均值'
-          }
-        ]
-      }
-    }))
-  }
-}
-
-// 获取图表 2 配置（柱状图）
-const getChart2Option = (distributionData: any): EChartsOption => {
-  // 后端返回的格式：{ categories: [], series: [] }
-  const categories = distributionData.categories || []
-  const series = distributionData.series || []
-  
-  const seriesData = series.map((s: any) => ({
-    name: s.name,
-    data: s.data,
-    color: s.color || '#1890ff'
-  }))
-  
-  return {
-    ...getBarChartConfig(categories, seriesData, {
-      yAxisName: '能耗 (MWh)',
-    }),
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      },
+      axisPointer: { type: 'shadow' },
       formatter: (params: any) => {
         const point = params[0]
         return `<div style="font-weight: bold;">${point.name}</div>
                 <div>${point.marker} 能耗：${point.value} MWh</div>`
       }
+    },
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
+      data: mockData.series.map((s: any) => s.name),
+    },
+    grid: {
+      left: '3%',
+      right: '3%',
+      bottom: '15%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      data: mockData.categories
+    },
+    yAxis: {
+      type: 'value',
+      name: '能耗 (MWh)'
+    },
+    series: [{
+      name: mockData.series[0].name,
+      type: 'bar',
+      data: mockData.series[0].data,
+      itemStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#83bff6' },
+          { offset: 1, color: '#188df0' }
+        ])
+      }
+    }]
+  }
+  
+  compareChart.setOption(option)
+}
+
+// 更新趋势图表 - 支持小时/天粒度切换
+const updateTrendChart = (data: any, isSingleDay: boolean = false) => {
+  if (!trendChartRef.value) return
+  
+  if (!trendChart) {
+    trendChart = echarts.init(trendChartRef.value)
+  }
+  
+  const categories = data.categories || []
+  const series = data.series || []
+  
+  // 根据是否为单天设置不同的 X 轴标签
+  const xAxisConfig = isSingleDay ? {
+    type: 'category' as const,
+    name: '时间',
+    axisLabel: {
+      formatter: '{value}:00',
+      rotate: 45
+    }
+  } : {
+    type: 'category' as const,
+    name: '日期',
+    axisLabel: {
+      formatter: (value: string) => {
+        // 简化日期显示
+        const date = new Date(value)
+        return `${date.getMonth() + 1}/${date.getDate()}`
+      },
+      rotate: 45
     }
   }
-}
-
-// 切换对比模式
-const handleCompareToggle = () => {
-  if (enableCompare.value) {
-    activeTab.value = 'comparison'
-    message.success('已启用对比模式')
-    // 延迟初始化对比图表
-    setTimeout(() => {
-      initCompareChart()
-    }, 100)
-  } else {
-    activeTab.value = 'table'
-    message.info('已关闭对比模式')
-  }
-}
-
-// 初始化对比图表
-const initCompareChart = async () => {
-  if (!compareChartRef.value || queryForm.buildings.length === 0) return
   
-  compareChart = echarts.init(compareChartRef.value)
-  
-  try {
-    // 调用对比接口
-    const startDate = queryForm.timeRange ? new Date(queryForm.timeRange[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    const endDate = queryForm.timeRange ? new Date(queryForm.timeRange[1]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    
-    const response = await analysisApi.getComparisonData({
-      building_ids: queryForm.buildings,
-      start_date: startDate,
-      end_date: endDate
-    })
-    
-    const comparisonData = response.data.data
-    const categories = comparisonData.categories || []
-    const series = comparisonData.series || []
-    
-    const seriesData = series.map((s: any) => ({
+  const option: EChartsOption = {
+    ...getLineChartConfig(categories, series.map((s: any) => ({
       name: s.name,
       data: s.data,
-      color: s.color || '#1890ff'
-    }))
-    
-    const option = getBarChartConfig(categories, seriesData, {
-      yAxisName: '能耗 (MWh)'
-    })
-    
-    compareChart?.setOption(option)
-  } catch (error: any) {
-    console.error('加载对比数据失败:', error)
-    // 如果后端接口失败，使用表格数据生成简单的对比图
-    if (tableData.value.length > 0) {
-      generateComparisonChartFromTable()
-    } else {
-      message.error('加载对比数据失败')
+      areaStyle: !!s.areaStyle,
+      smooth: true
+    })), {
+      yAxisName: isSingleDay ? '功率 (kW)' : '能耗 (MWh)',
+      tooltipFormatter: isSingleDay 
+        ? '{b}:00 - {c} kW' 
+        : '{b}: {c} MWh',
+      grid: {
+        left: '3%',
+        right: '3%',
+        bottom: '15%',
+        containLabel: true,
+      }
+    }),
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: {
+        fontSize: 12,
+      },
+      data: series.map((s: any) => s.name),
+    },
+    xAxis: {
+      ...xAxisConfig,
+      data: categories
     }
   }
+  
+  trendChart.setOption(option)
 }
 
-// 从表格数据生成对比图表（备用方案）
-const generateComparisonChartFromTable = () => {
-  if (!compareChartRef.value || tableData.value.length === 0) return
-  
-  compareChart = echarts.init(compareChartRef.value)
-  
-  // 按建筑分组数据
-  const buildingMap = new Map<string, number[]>()
-  tableData.value.forEach(item => {
-    if (!buildingMap.has(item.buildingName)) {
-      buildingMap.set(item.buildingName, [])
-    }
-    buildingMap.get(item.buildingName)!.push(item.value)
-  })
-  
-  const categories = Array.from(buildingMap.keys())
-  const series = [{
-    name: '能耗',
-    type: 'bar' as const,
-    data: categories.map(name => {
-      const values = buildingMap.get(name)!
-      return Number(values.reduce((sum, v) => sum + v, 0).toFixed(2))
-    })
-  }]
-  
-  const option = getBarChartConfig(categories, series, {
-    yAxisName: '能耗 (MWh)'
-  })
-  
-  compareChart?.setOption(option)
-}
-
-
-// 窗口大小变化时重新渲染图表
-const handleResize = () => {
-  chart1?.resize()
-  chart2?.resize()
-  compareChart?.resize()
-  detailChart?.resize()
-}
-
-// 处理路由参数（从 Overview 页面跳转时自动填充）
-const handleRouteParams = () => {
-  const { building, start, end } = route.query
-  
-  if (building && start && end) {
-    // 填充建筑
-    queryForm.buildings = [building as string]
-    
-    // 填充时间范围
-    const startTime = new Date(start as string).getTime()
-    const endTime = new Date(end as string).getTime()
-    queryForm.timeRange = [startTime, endTime]
-    
-    // 自动执行查询
-    message.info('已根据异常信息自动填充查询条件')
-    setTimeout(() => {
-      handleQuery()
-    }, 500)
+// 更新对比图表 - 支持多维度切换和雷达图
+const updateCompareChartWithDimension = (data: any) => {
+  if (!compareChartRef.value) {
+    console.error('[Analysis] 图表容器不存在')
+    return
   }
-}
-
-onMounted(() => {
-  // 加载建筑列表
-  loadBuildings()
   
-  // 初始化图表
-  if (chart1Ref.value) {
-    chart1 = echarts.init(chart1Ref.value)
-  }
-  if (chart2Ref.value) {
-    chart2 = echarts.init(chart2Ref.value)
-  }
-  if (compareChartRef.value) {
+  if (!compareChart) {
     compareChart = echarts.init(compareChartRef.value)
   }
   
-  // 从路由参数中获取查询条件（如果有）
-  if (route.query.building) {
-    queryForm.buildings = [route.query.building as string]
-  }
-  if (route.query.start && route.query.end) {
-    queryForm.timeRange = [
-      new Date(route.query.start as string).getTime(),
-      new Date(route.query.end as string).getTime()
-    ]
+  // 后端直接返回 radar_data，不需要再访问 data.radar_data
+  const radarData = data
+  
+  if (!radarData || !radarData.buildings || radarData.buildings.length === 0) {
+    console.error('[Analysis] 警告：没有有效的雷达图数据')
+    return
   }
   
-  // 绑定窗口大小变化事件
-  window.addEventListener('resize', handleResize)
+  // 固定使用雷达图模式 - 每个建筑一个多边形，多个指标作为轴
+  const seriesData = radarData.buildings.map((b: any, index: number) => {
+    return {
+      name: b.building_name,
+      value: b.values,
+      color: CHART_COLORS.palette[index % CHART_COLORS.palette.length]
+    }
+  })
+  
+  const option = getRadarChartConfig(radarData.indicators, seriesData, {
+    title: '建筑综合评分对比',
+    shape: 'circle',
+    splitNumber: 5
+  })
+  
+  compareChart.setOption(option)
+}
+
+
+// 保存建议到知识库
+const saveSuggestionToKnowledge = async () => {
+  try {
+    // 将优化建议保存为知识库文档
+    const documentData = {
+      title: `能耗优化建议 - ${currentAnomaly.value.type}`,
+      category: 'optimization',
+      tags: ['能耗优化', currentAnomaly.value.type, '运行策略'],
+      summary: currentAnomaly.value.suggestion,
+      description: currentAnomaly.value.description,
+      solution: currentAnomaly.value.suggestion,
+      notes: [
+        `关联因素：${currentAnomaly.value.factors}`,
+        `影响评估：${currentAnomaly.value.impact}`
+      ]
+    }
+    
+    const response = await addDocument(documentData)
+    
+    if (response.data.code === 200) {
+      message.success('已成功保存到知识库')
+    } else {
+      throw new Error(response.data.message || '保存失败')
+    }
+  } catch (error: any) {
+    console.error('[Analysis] 保存建议失败:', error)
+    message.error(error.response?.data?.message || '保存失败，请稍后重试')
+  }
+}
+
+// 复制洞察
+const copyInsight = (insight: any) => {
+  const text = `${insight.title} - ${insight.description}`
+  navigator.clipboard.writeText(text)
+  message.success('已复制到剪贴板')
+}
+
+// 保存洞察到工作区
+const saveInsightToWorkspace = async (insight: any) => {
+  try {
+    // 将洞察保存为知识库文档
+    const documentData = {
+      title: insight.title,
+      category: insight.category.toLowerCase(),
+      tags: [insight.category, insight.type],
+      summary: insight.description,
+      description: `${insight.title} - ${insight.description}`,
+      solution: '基于数据分析得出的优化建议',
+      notes: [`颜色标识：${insight.color}`, `类型：${insight.type}`]
+    }
+    
+    // 调用后端知识库 API 保存洞察
+    const response = await addDocument(documentData)
+    if (response.data.code === 200) {
+      message.success('已成功保存到工作区')
+    } else {
+      throw new Error(response.data.message || '保存失败')
+    }
+    
+  } catch (error: any) {
+    console.error('[Analysis] 保存洞察失败:', error)
+    message.error(error.response?.data?.message || '保存失败，请稍后重试')
+  }
+}
+
+// 处理洞察点击
+const handleInsightClick = (insight: any) => {
+  // 显示洞察详情的 Toast 提示
+  message.info(`洞察详情：${insight.title}`, {
+    duration: 3000
+  })
+  
+  // 可以在这里实现更详细的弹窗或下钻分析
+  console.log('[Analysis] 查看洞察详情:', insight)
+}
+
+// 刷新数据
+const handleRefresh = async () => {
+  message.loading('正在刷新数据...')
+  await loadAnalysisData()
+  message.success('数据已刷新')
+}
+
+// 导出分析报告
+const handleExport = async () => {
+  try {
+    message.loading('正在生成分析报告...')
+    
+    // 获取时间范围参数
+    const timeParams = getTimeRangeParams()
+    
+    // 调用导出 PDF 接口 - 使用动态时间范围
+    const exportParams = {
+      buildings: [filters.buildingId],
+      startTime: timeParams.start_date,
+      endTime: timeParams.end_date,
+      format: 'pdf' as const
+    }
+    
+    // 使用 analysis API 中的 exportPDF 函数
+    const response = await import('@/api/analysis').then(mod => mod.exportPDF(exportParams))
+    const blob = response.data || response
+    
+    // 检查是否是有效的 PDF blob
+    if (!blob || blob.size === 0) {
+      throw new Error('下载的文件为空，请检查后端接口是否正常')
+    }
+    
+    // 检查返回的是否是 PDF（防止后端返回错误 JSON）
+    if (blob.type && !blob.type.includes('application/pdf')) {
+      // 如果不是 PDF，可能是后端返回了错误信息
+      const text = await blob.text()
+      console.error('[Analysis] 后端返回的不是 PDF:', text)
+      try {
+        const error = JSON.parse(text)
+        throw new Error(error.message || error.error || 'PDF 生成失败')
+      } catch {
+        throw new Error('后端返回的数据格式不正确')
+      }
+    }
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob as Blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `能耗分析报告_${filters.buildingId}_${timeParams.end_date}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    message.success('分析报告下载成功')
+  } catch (error: any) {
+    console.error('[Analysis] 导出失败:', error)
+    message.error(error.response?.data?.message || error.message || '导出失败，请稍后重试')
+  }
+}
+
+// 跳转到运维知识库
+const navigateToKnowledgeBase = () => {
+  router.push('/workspace?tab=knowledge')
+  message.info('正在跳转到运维知识库...')
+}
+
+// 处理对比维度变化
+const handleCompareDimensionChange = async () => {
+  // 切换维度时需要重新加载对比数据
+  await loadAllBuildingsComparison()
+}
+
+// 加载所有建筑的对比数据
+const loadAllBuildingsComparison = async () => {
+  try {
+    const timeParams = getTimeRangeParams()
+    
+    // 获取所有建筑 ID
+    const allBuildingIds = buildingOptions.value.map(b => b.value)
+    
+    if (allBuildingIds.length === 0) {
+      console.warn('[Analysis] 没有可用的建筑')
+      return
+    }
+    
+    // 将数组转换为逗号分隔的字符串，符合后端接口要求
+    const response = await getComparisonData({
+      building_ids: allBuildingIds.join(','),
+      start_date: timeParams.start_date,
+      end_date: timeParams.end_date
+    })
+    
+    if (!response.data?.data) {
+      console.error('[Analysis] 错误：后端返回的数据为空')
+      updateCompareChartWithMock()
+      return
+    }
+    
+    updateCompareChartWithDimension(response.data.data)
+  } catch (error) {
+    console.error('[Analysis] ❌ 加载多建筑对比数据失败:', error)
+    updateCompareChartWithMock()
+  }
+}
+
+// 初始化图表
+const initCharts = () => {
+  nextTick(() => {
+    if (trendChartRef.value && !trendChart) {
+      trendChart = echarts.init(trendChartRef.value)
+    }
+    if (compareChartRef.value && !compareChart) {
+      compareChart = echarts.init(compareChartRef.value)
+    }
+  })
+}
+
+onMounted(async () => {
+  await loadBuildings()
+  initCharts()
+  
+  // 默认选择第一个建筑（如果有）
+  if (buildingOptions.value.length > 0 && !filters.buildingId) {
+    filters.buildingId = buildingOptions.value[0].value
+  }
+  
+  // 加载分析数据（包括所有建筑的对比数据）
+  await loadAnalysisData()
+  
+  // 监听窗口大小变化
+  window.addEventListener('resize', () => {
+    trendChart?.resize()
+    compareChart?.resize()
+  })
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  chart1?.dispose()
-  chart2?.dispose()
+  trendChart?.dispose()
   compareChart?.dispose()
-  detailChart?.dispose()
 })
-
 </script>
 
 <style scoped lang="scss">
 .analysis-container {
   width: 100%;
   height: 100%;
-  background: var(--bg-color);
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  overflow: hidden;
+  background: var(--bg-color);
 }
 
-.query-section {
-  margin-bottom: 16px;
+.filter-section {
+  padding: 16px 24px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.result-section {
+.content-section {
   flex: 1;
+  padding: 24px;
   overflow: auto;
 }
 
-.chart-wrapper {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 16px;
-  background: var(--bg-color);
-
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-
-    .chart-title {
-      font-size: 16px;
-      font-weight: 500;
-      color: #333;
-    }
-  }
-
-  .chart-container {
-    height: 300px;
-    width: 100%;
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 4px;
+  
+  .chart-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
   }
 }
 
-.metric-card {
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-
-  .metric-title {
-    font-size: 14px;
-    color: #666;
-    font-weight: 500;
-  }
-
-  .metric-value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #333;
-    margin-top: 12px;
-  }
+.chart-container {
+  width: 100%;
+  height: 350px;
 }
 
 .bottom-bar {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 100;
-}
-
-.detail-chart-container {
-  height: 600px;
-  width: 100%;
-}
-
-:deep(.n-card) {
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-:deep(.n-data-table) {
-  font-size: 14px;
+  padding: 16px 24px;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border-color);
 }
 </style>

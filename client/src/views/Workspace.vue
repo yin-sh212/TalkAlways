@@ -47,19 +47,25 @@ onMounted(() => {
 <style scoped>
 .workspace-container {
   padding: 24px;
-  background: var(--bg-color);
-  min-height: calc(100vh - 64px);
+  background: #f5f7f9;
+  height: calc(100vh - 64px);
+}
+
+@media (prefers-color-scheme: dark) {
+  .workspace-container {
+    background: #1a1a1a;
+  }
 }
 
 :deep(.n-tabs) {
   .n-tabs-nav {
-   background: var(--card-bg);
+   background: var(--n-color);
    padding: 0 16px;
     border-radius: 8px 8px 0 0;
   }
   
   .n-tabs-pane-wrapper {
-   background: var(--card-bg);
+   background: var(--n-color);
     border-radius: 0 0 8px 8px;
   }
 }

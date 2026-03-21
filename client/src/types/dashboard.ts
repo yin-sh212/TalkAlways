@@ -8,7 +8,8 @@ export interface KPIData {
   weekChange: number // 周同比
   deviceOnlineRate: number
   abnormalDeviceCount: number
-  co2Reduction: number
+  cop: number // COP(能效比)
+  // co2Reduction: number // 已注释，不再使用
 }
 
 // 图表数据

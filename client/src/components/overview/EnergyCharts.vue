@@ -33,17 +33,6 @@
         <div v-else ref="distributionChartRef" class="chart-container"></div>
       </n-card>
     </n-grid-item>
-
-    <n-grid-item>
-      <n-card
-        title="近 7 日总能耗趋势"
-        :bordered="false"
-        content-style="padding: 20px;"
-      >
-        <n-skeleton v-if="loading" :rows="3" />
-        <div v-else ref="trendChartRef" class="chart-container"></div>
-      </n-card>
-    </n-grid-item>
   </n-grid>
 </template>
 
@@ -57,10 +46,8 @@ import {
   getCurrentInstance,
 } from "vue";
 import * as echarts from "echarts";
-import type { EChartsOption } from "echarts";
 import { LinkOutline as LinkIcon } from "@vicons/ionicons5";
 import { useMessage } from "naive-ui";
-import { getSummary } from "@/api/statistics";
 import {
   getDonutChartConfig,
   getLineChartConfig,
@@ -95,7 +82,6 @@ const emit = defineEmits<{
   (e: "buildingClick", buildingName: string): void;
 }>();
 
-const message = useMessage();
 const instance = getCurrentInstance();
 
 // 重试配置
@@ -252,40 +238,13 @@ const initAllCharts = async () => {
 
       chart.setOption(distConfig);
     }),
-
-    // 3. 折线图 - 近 7 日总能耗趋势
-    safeInitChart("trend", trendChartRef, () => {
-      const chart = echarts.init(trendChartRef.value!);
-      chartInstances.set("trend", chart);
-
-      const hasData = props.trendData && props.trendData.length > 0;
-
-      const trendConfig = getLineChartConfig(
-        hasData ? props.trendData.map((item) => item.date) : [],
-        [
-          {
-            name: "总能耗",
-            data: hasData ? props.trendData.map((item) => item.energy) : [],
-            areaStyle: true,
-            smooth: true,
-            color: CHART_COLORS.primary,
-          },
-        ],
-        {
-          yAxisName: "能耗 (MWh)",
-          tooltipFormatter: "{b}: {c} MWh",
-        },
-      );
-
-      chart.setOption(trendConfig);
-    }),
   ]);
 };
 
 // 监听 props 变化，重新初始化图表
 watch(
-  () => [props.loading, props.buildingEnergy, props.distributionData, props.trendData],
-  async ([loading, buildingEnergy, distributionData, trendData]) => {
+  () => [props.loading, props.buildingEnergy, props.distributionData],
+  async ([loading, buildingEnergy, distributionData]) => {
     if (loading) {
       return;
     }

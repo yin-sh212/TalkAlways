@@ -284,10 +284,24 @@ export interface AlarmAnalysisResponse {
   message: string
   data: {
     alarm_id: number
-    analysis: string
-    cause: string
-    suggestion: string
-    related_data?: any
+    building_id: string
+    alarm_type: string
+    alarm_level: number
+    description: string
+    start_time: string
+    main_cause: string
+    top_factors: Array<{
+      factor: string
+      value: number
+      normal?: number
+      impact: 'high' | 'medium' | 'low'
+      description: string
+    }>
+    quick_solution: string
+    related_knowledge?: Array<{
+      title: string
+      url: string
+    }>
   }
 }
 

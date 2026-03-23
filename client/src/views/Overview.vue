@@ -38,8 +38,8 @@ import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { useBuildingStore } from '@/store/building'
-import { getKPIData, getChartData, getAnomalyList } from '@/api/dashboard'
-import { getSummary, detectAnomaly } from '@/api/statistics'
+import { getKPIData, getChartData, getAnomalyList, getTrendData, MOCK_TODAY } from '@/api/dashboard'
+import { getSummary, detectAnomaly, getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings, getDeviceStatus } from '@/api/query'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
@@ -84,7 +84,8 @@ const kpiData = ref<KPIData>({
   weekChange: 0,
   deviceOnlineRate: 0,
   abnormalDeviceCount: 0,
-  co2Reduction: 0
+  cop: 0 // COP(能效比)
+  // co2Reduction: 0 // 已注释，不再使用
 })
 
 const chartData = ref({
@@ -105,11 +106,8 @@ const deviceStats = ref({
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
 
-// 有效数据时间范围常量
-const VALID_DATE_START = '2016-07-01'
-const VALID_DATE_END = '2016-08-31'
-// 使用有效范围内的一个固定日期作为"今天"
-const MOCK_TODAY = '2016-07-15'
+// 有效数据时间范围常量（已从 dashboard.ts 导入）
+// MOCK_TODAY 已在 dashboard.ts 中定义并导入
 
 // 生成能耗排名数据
 const generateRankingData = (buildingEnergy: any[]) => {
@@ -168,23 +166,58 @@ const updateDeviceStats = async () => {
   }
 }
 
-// 更新今日 CO₂减排
-const updateCO2Reduction = async () => {
+// // 更新今日 CO₂减排
+// const updateCO2Reduction = async () => {
+//   try {
+//     // 获取今日总能耗（使用有效数据范围内的日期）
+//     const summaryResponse = await getSummary({
+//       building_id: currentBuildingId.value,
+//       start_date: MOCK_TODAY,
+//       end_date: MOCK_TODAY,
+//       time_unit: 'day'
+//     })
+    
+//     const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    
+//     // 更新 KPI 数据中的 CO₂减排量
+//     kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
+//   } catch (error) {
+//     console.error('更新 CO₂减排失败:', error)
+//   }
+// }
+
+// 更新 COP(能效比)
+const updateCOP = async () => {
   try {
-    // 获取今日总能耗（使用有效数据范围内的日期）
-    const summaryResponse = await getSummary({
+    // 基于 MOCK_TODAY 动态计算日期范围（近 7 天）
+    const mockDate = new Date(MOCK_TODAY)
+    const lastWeek = new Date(mockDate)
+    lastWeek.setDate(lastWeek.getDate() - 7)
+    
+    // 格式化为 YYYY-MM-DD
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+    
+    // 调用 COP计算接口
+    const response = await calculateCOP({
       building_id: currentBuildingId.value,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
-      time_unit: 'day'
+      start_date: formatDate(lastWeek),
+      end_date: MOCK_TODAY
     })
     
-    const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
-    
-    // 更新 KPI 数据中的 CO₂减排量
-    kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
+    // 后端返回格式：{ avg_cop_cooling, avg_cop_heating }
+    const copData = response.data.data
+    // 优先使用制冷 COP，如果没有则使用供热 COP，最后使用默认值
+    const cop = copData.avg_cop_cooling || copData.avg_cop_heating || 3.5
+    kpiData.value.cop = Number(cop.toFixed(2))
   } catch (error) {
-    console.error('更新 CO₂减排失败:', error)
+    console.error('更新 COP 失败:', error)
+    // 使用默认值
+    kpiData.value.cop = 3.5 // 典型 COP 值
   }
 }
 
@@ -205,37 +238,42 @@ const updateAbnormalDeviceCount = async () => {
   }
 }
 
-// 更新日环比和周同比
+// 更新日环比和周同比 - 使用批量接口
 const updateDayAndWeekChange = async () => {
   try {
-    // 获取今日数据（使用有效数据范围内的日期）
-    const todayResponse = await getSummary({
-      building_id: currentBuildingId.value,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
-      time_unit: 'day'
-    })
-    const todayEnergy = (todayResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    // 基于 MOCK_TODAY 动态计算昨日和上周同期
+    const mockDate = new Date(MOCK_TODAY)
+    const yesterday = new Date(mockDate)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const lastWeek = new Date(mockDate)
+    lastWeek.setDate(lastWeek.getDate() - 7)
     
-    // 获取昨日数据
-    const yesterday = '2016-07-14'
-    const yesterdayResponse = await getSummary({
-      building_id: currentBuildingId.value,
-      start_date: yesterday,
-      end_date: yesterday,
-      time_unit: 'day'
-    })
-    const yesterdayEnergy = (yesterdayResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    // 格式化为 YYYY-MM-DD
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
     
-    // 获取上周同期数据
-    const lastWeek = '2016-07-08'
-    const lastWeekResponse = await getSummary({
+    const dates = [MOCK_TODAY, formatDate(yesterday), formatDate(lastWeek)]
+    const response = await getDailyComparison({
       building_id: currentBuildingId.value,
-      start_date: lastWeek,
-      end_date: lastWeek,
-      time_unit: 'day'
+      dates: dates
     })
-    const lastWeekEnergy = (lastWeekResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
+    
+    const dailyData = response.data.data.daily_data || []
+    
+    // 按日期映射数据
+    const dataMap = new Map()
+    dailyData.forEach((item: any) => {
+      dataMap.set(item.date, item.total_elec || 0)
+    })
+    
+    // 获取各日期的数据（如果没有数据则为 0）
+    const todayEnergy = (dataMap.get(MOCK_TODAY) || 0) / 1000
+    const yesterdayEnergy = (dataMap.get(formatDate(yesterday)) || 0) / 1000
+    const lastWeekEnergy = (dataMap.get(formatDate(lastWeek)) || 0) / 1000
     
     // 更新日环比和周同比
     kpiData.value.dayChange = yesterdayEnergy > 0 ? ((todayEnergy - yesterdayEnergy) / yesterdayEnergy) * 100 : 0
@@ -245,46 +283,40 @@ const updateDayAndWeekChange = async () => {
   }
 }
 
-// 更新建筑能耗占比数据
+// 更新建筑能耗占比数据 - 使用批量接口
 const updateBuildingEnergyData = async () => {
   try {
     // 获取建筑列表
     const buildingsResponse = await getBuildings()
     const buildings = buildingsResponse.data.data || []
     
-    // 为每个建筑获取汇总数据
-    const buildingEnergyPromises = buildings.map((building: any) => {
-      // 提取 building_id，可能是字符串或对象
-      const buildingId = typeof building === 'string' ? building : (building.id || building.building_id)
-      
-      return (async () => {
-        try {
-          // 使用有效数据范围内的日期
-          const response = await getSummary({
-            building_id: buildingId, // 传递字符串 ID
-            start_date: MOCK_TODAY,
-            end_date: MOCK_TODAY,
-            time_unit: 'day'
-          })
-          
-          // 获取建筑名称
-          const buildingName = typeof building === 'string' ? building : (building.name || `建筑${buildingId}`)
-          
-          return {
-            name: buildingName,
-            value: (response.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
-          }
-        } catch (error) {
-          console.error(`获取建筑 ${buildingId} 数据失败:`, error)
-          return {
-            name: typeof building === 'string' ? building : (building.name || `建筑${buildingId}`),
-            value: 0
-          }
-        }
-      })()
+    // 提取所有建筑 ID
+    const buildingIds = buildings.map((building: any) => 
+      typeof building === 'string' ? building : (building.id || building.building_id)
+    )
+    
+    // 批量获取所有建筑的能耗数据
+    const response = await getBuildingsSummary({
+      start_date: MOCK_TODAY,
+      end_date: MOCK_TODAY,
+      time_unit: 'day',
+      building_ids: buildingIds
     })
     
-    const buildingEnergyResults = await Promise.all(buildingEnergyPromises)
+    const buildingsData = response.data.data.buildings || []
+    
+    // 按建筑 ID 汇总
+    const buildingEnergyMap = new Map()
+    buildingsData.forEach((item: any) => {
+      const buildingId = item.building_id
+      const energy = (item.total_elec || 0) / 1000
+      const current = buildingEnergyMap.get(buildingId) || { name: item.building_name || `建筑${buildingId}`, value: 0 }
+      current.value += energy
+      buildingEnergyMap.set(buildingId, current)
+    })
+    
+    // 转换为数组并排序
+    const buildingEnergyResults = Array.from(buildingEnergyMap.values())
     
     // 过滤掉值为 0 的建筑，并按能量值排序
     const filteredBuildingEnergy = buildingEnergyResults
@@ -348,32 +380,22 @@ const loadData = async () => {
   
   loading.value = true
   try {
-    // 并行调用：KPI 数据 + 分布图数据 + 异常列表
-    const [kpiRes, distributionRes, anomalyRes] = await Promise.all([
+    // 并行调用：KPI 数据 + 分布图数据（24 小时）+ 趋势数据（近 7 日）+ 异常列表
+    const [kpiRes, distributionRes, trendRes, anomalyRes] = await Promise.all([
       getKPIData(),
       getChartData(),
+      getTrendData(),
       getAnomalyList(5)
     ])
 
     // 填充 KPI 数据
     kpiData.value = kpiRes
     
-    // 填充图表数据
+    // 填充图表数据 - 分别使用不同的数据源
     chartData.value = {
       ...chartData.value,
-      distributionData: distributionRes // 新增：保存分布图数据
-    }
-    
-    // 从分布图中提取趋势数据（如果没有独立的 trend 接口）
-    if (distributionRes.categories && distributionRes.series) {
-      // 使用第一个 series 的数据作为趋势数据
-      const firstSeries = distributionRes.series[0]
-      if (firstSeries) {
-        chartData.value.trendData = distributionRes.categories.map((date: string, index: number) => ({
-          date: date,
-          energy: firstSeries.data[index] || 0
-        }))
-      }
+      distributionData: distributionRes, // 24 小时能耗分布
+      trendData: trendRes                // 近 7 日总能耗趋势（独立数据）
     }
     
     // 填充异常列表
@@ -399,7 +421,8 @@ const loadData = async () => {
     
     // 并行调用其他更新函数
     await Promise.all([
-      updateCO2Reduction(),
+      // updateCO2Reduction(),
+      updateCOP(),
       updateAbnormalDeviceCount(),
       updateDayAndWeekChange()
     ])
@@ -416,9 +439,9 @@ const loadData = async () => {
 
 // 处理建筑点击事件（图表联动）
 const handleBuildingClick = (buildingName: string) => {
-  if (energyChartsRef.value) {
-    energyChartsRef.value.updateChartsWithBuilding(buildingName)
-  }
+  // EnergyCharts 组件内部已经通过 emit 事件处理了联动逻辑
+  // 这里不需要额外操作
+  console.log('建筑联动:', buildingName)
 }
 
 // 刷新数据

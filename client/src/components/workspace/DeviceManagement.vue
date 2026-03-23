@@ -174,7 +174,7 @@
         <n-descriptions-item label="安装位置">{{ currentDevice.location }}</n-descriptions-item>
         <n-descriptions-item label="投运日期">{{ currentDevice.commissionDate }}</n-descriptions-item>
         <n-descriptions-item label="运行状态">
-          <n-tag :type="getStatusType(currentDevice.status)">
+          <n-tag :type="getStatusType(currentDevice.status) as any">
             {{ getStatusText(currentDevice.status) }}
           </n-tag>
         </n-descriptions-item>
@@ -186,23 +186,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, h } from 'vue'
+import { ref, reactive, computed, h, onMounted } from 'vue'
 import { Search, AddCircle, Settings, Warning, CheckmarkCircle, CloseCircle } from '@vicons/ionicons5'
 import { NTag, NButton, NIcon, useMessage, useDialog } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
+import { getDeviceList, addDevice, deleteDevice, getDeviceStats } from '@/api/device'
+import { getBuildings } from '@/api/query'
 
-interface Device {
+interface ApiDevice {
   id: string
   name: string
   type: string
+  building_id: string
+  status: string
+  created_at?: string
+}
+
+interface Device extends ApiDevice {
   typeName: string
-  building: string
   buildingName: string
   location: string
   commissionDate: string
-  status: string
   lastMaintenance: string
   remark: string
+}
+
+interface ApiDeviceStats {
+  total_devices: number
+  status_stats: Record<string, number>
 }
 
 const message = useMessage()
@@ -226,99 +237,142 @@ const deviceTypeOptions = [
 ]
 
 const statusOptions = [
-  { label: '运行中', value: 'running', style: { color: '#52c41a' } },
-  { label: '待机', value: 'standby', style: { color: '#1890ff' } },
-  { label: '故障', value: 'fault', style: { color: '#f5222d' } },
-  { label: '维修中', value: 'maintenance', style: { color: '#fa8c16' } },
-  { label: '停用', value: 'offline', style: { color: '#999' } }
+  { label: '运行中', value: 'online' },
+  { label: '离线', value: 'offline' },
+  { label: '故障', value: 'fault' },
+  { label: '维护中', value: 'maintenance' }
 ]
 
-const buildingOptions = [
-  { label: '行政楼', value: 'building-001' },
-  { label: '教学楼 A', value: 'building-002' },
-  { label: '教学楼 B', value: 'building-003' },
-  { label: '图书馆', value: 'building-004' },
-  { label: '实验楼', value: 'building-005' }
-]
+const buildingOptions = ref<any[]>([])
 
-// Mock 设备数据
-const devices = ref<Device[]>([
-  {
-    id: 'DEV001',
-   name: '1#空调机组',
-   type: 'hvac',
-    typeName: '空调机组',
-    building: 'building-001',
-    buildingName: '行政楼',
-    location: '屋顶机房',
-   commissionDate: '2023-01-15',
-    status: 'running',
-   lastMaintenance: '2024-02-20',
-   remark: '定期更换滤网'
-  },
-  {
-    id: 'DEV002',
-   name: '2#循环水泵',
-   type: 'pump',
-    typeName: '水泵',
-    building: 'building-002',
-    buildingName: '教学楼 A',
-    location: '地下泵房',
-   commissionDate: '2023-03-10',
-    status: 'running',
-   lastMaintenance: '2024-01-15',
-   remark: '注意检查密封性'
-  },
-  {
-    id: 'DEV003',
-   name: '温湿度传感器 -301',
-   type: 'sensor',
-    typeName: '传感器',
-    building: 'building-003',
-    buildingName: '教学楼 B',
-    location: '301 教室',
-   commissionDate: '2023-06-01',
-    status: 'fault',
-   lastMaintenance: '2024-02-28',
-   remark: '需要校准'
-  }
-])
+// 设备数据
+const devices = ref<Device[]>([])
+const loading = ref(false)
 
-// 设备统计
-const deviceStats = computed(() => [
-  {
-   title: '设备总数',
-    value: devices.value.length,
-    icon: Settings,
-   color: '#1890ff'
-  },
-  {
-   title: '运行中',
-    value: devices.value.filter(d => d.status === 'running').length,
-    icon: CheckmarkCircle,
-   color: '#52c41a'
-  },
-  {
-   title: '故障',
-    value: devices.value.filter(d => d.status === 'fault').length,
-    icon: CloseCircle,
-   color: '#f5222d'
-  },
-  {
-   title: '维修中',
-    value: devices.value.filter(d => d.status === 'maintenance').length,
-    icon: Warning,
-   color: '#fa8c16'
+// 设备统计数据
+const deviceStatsData = ref<ApiDeviceStats | null>(null)
+
+// 加载建筑列表
+const loadBuildings = async () => {
+  try {
+    const res = await getBuildings()
+    if (res.data.code === 200 && res.data.data) {
+      buildingOptions.value = res.data.data.map((b: any) => ({
+        label: b.name || b.building_name || `建筑${b.id}`,
+        value: b.id
+      }))
+    }
+  } catch (error) {
+    console.error('加载建筑列表失败:', error)
   }
-])
+}
+
+// 加载设备列表
+const loadDevices = async () => {
+  loading.value = true
+  try {
+    const res = await getDeviceList(queryForm.deviceType || undefined)
+    
+    if (res.data.code === 200 && res.data.data) {
+      // 将后端返回的数据转换为前端格式
+      devices.value = res.data.data.items.map((item: any) => ({
+        id: item.id || '',
+        name: item.deviceName || '-',
+        type: item.deviceType || '',
+        building_id: item.building || '',
+        status: item.deviceStatus || 'offline',
+        typeName: getTypeName(item.deviceType),
+        buildingName: getBuildingName(item.building),
+        location: '-',
+        commissionDate: '-',
+        lastMaintenance: '-',
+        remark: ''
+      }))
+    }
+  } catch (error) {
+    console.error('加载设备列表失败:', error)
+    message.error('加载设备列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 加载设备统计
+const loadDeviceStats = async () => {
+  try {
+    const res = await getDeviceStats()
+    if (res.data.code === 200 && res.data.data) {
+      deviceStatsData.value = res.data.data
+    }
+  } catch (error) {
+    console.error('加载设备统计失败:', error)
+  }
+}
+
+// 辅助函数
+const getTypeName = (type: string): string => {
+  const map: Record<string, string> = {
+    hvac: '空调机组',
+    pump: '水泵',
+    fan: '风机',
+    sensor: '传感器',
+    meter: '电表',
+    other: '其他'
+  }
+  return map[type] || type
+}
+
+const getBuildingName = (buildingId: string): string => {
+  const building = buildingOptions.value.find(b => b.value === buildingId)
+  return building?.label || buildingId
+}
+
+// 设备统计卡片
+const deviceStats = computed(() => {
+  if (!deviceStatsData.value) {
+    return [
+      { title: '设备总数', value: devices.value.length, icon: Settings, color: '#1890ff' },
+      { title: '运行中', value: devices.value.filter(d => d.status === 'online').length, icon: CheckmarkCircle, color: '#52c41a' },
+      { title: '故障', value: devices.value.filter(d => d.status === 'fault').length, icon: CloseCircle, color: '#f5222d' },
+      { title: '维护中', value: devices.value.filter(d => d.status === 'maintenance').length, icon: Warning, color: '#fa8c16' }
+    ]
+  }
+  
+  return [
+    { 
+      title: '设备总数', 
+      value: deviceStatsData.value.total_devices, 
+      icon: Settings, 
+      color: '#1890ff' 
+    },
+    { 
+      title: '运行中', 
+      value: deviceStatsData.value.status_stats['online'] || 0, 
+      icon: CheckmarkCircle, 
+      color: '#52c41a' 
+    },
+    { 
+      title: '故障', 
+      value: deviceStatsData.value.status_stats['fault'] || 0, 
+      icon: CloseCircle, 
+      color: '#f5222d' 
+    },
+    { 
+      title: '维护中', 
+      value: deviceStatsData.value.status_stats['maintenance'] || 0, 
+      icon: Warning, 
+      color: '#fa8c16' 
+    }
+  ]
+})
 
 // 过滤后的设备列表
 const filteredDevices = computed(() => {
   return devices.value.filter(device => {
     if (queryForm.deviceType && device.type !== queryForm.deviceType) return false
     if (queryForm.status && device.status !== queryForm.status) return false
-    if (queryForm.building && device.building !== queryForm.building) return false
-   return true
+    if (queryForm.building && device.building_id !== queryForm.building) return false
+    return true
   })
 })
 
@@ -347,44 +401,38 @@ const columns: DataTableColumns = [
     width: 120
   },
   {
-   title: '安装位置',
-   key: 'location',
-    width: 150,
-    ellipsis: { tooltip: true }
-  },
-  {
-   title: '状态',
-   key: 'status',
+    title: '状态',
+    key: 'status',
     width: 100,
-   render: (row: Device) => {
-     return h(NTag, {
-        type: getStatusType(row.status) as any,
+    render: (row: any) => {
+      return h(NTag, {
+        type: getStatusType(row.status as string) as any,
         size: 'small',
         bordered: false
-      }, { default: () => getStatusText(row.status) })
+      }, { default: () => getStatusText(row.status as string) })
     }
   },
   {
-   title: '投运日期',
-   key: 'commissionDate',
-    width: 120
-  },
-  {
-   title: '操作',
-   key: 'actions',
-    width: 180,
+    title: '操作',
+    key: 'actions',
+    width: 200,
     fixed: 'right',
-   render: (row: Device) => {
-     return h('div', { style: { display: 'flex', gap: '8px' } }, [
+    render: (row: any) => {
+      return h('div', { style: { display: 'flex', gap: '8px' } }, [
         h(NButton, {
           size: 'small',
-          onClick: () => showDeviceDetail(row)
+          onClick: () => showDeviceDetail(row as Device)
         }, { default: () => '详情' }),
         h(NButton, {
           size: 'small',
-         type: 'warning',
-          onClick: () => message.info('编辑功能开发中')
-        }, { default: () => '编辑' })
+          type: 'warning',
+          onClick: () => handleEditDevice(row as Device)
+        }, { default: () => '编辑' }),
+        h(NButton, {
+          size: 'small',
+          type: 'error',
+          onClick: () => handleDeleteDevice(row as Device)
+        }, { default: () => '删除' })
       ])
     }
   }
@@ -434,93 +482,112 @@ const currentDevice = ref<Device | null>(null)
 // 辅助函数
 function getStatusType(status: string): string {
   const map: Record<string, string> = {
-    running: 'success',
-    standby: 'info',
+    online: 'success',
+    offline: 'default',
     fault: 'error',
-    maintenance: 'warning',
-    offline: 'default'
+    maintenance: 'warning'
   }
   return map[status] || 'default'
 }
 
 function getStatusText(status: string): string {
   const map: Record<string, string> = {
-    running: '运行中',
-    standby: '待机',
+    online: '运行中',
+    offline: '离线',
     fault: '故障',
-    maintenance: '维修中',
-    offline: '停用'
+    maintenance: '维护中'
   }
   return map[status] || '未知'
 }
 
-// 事件处理
-const loading = ref(false)
-
 const handleQuery = () => {
-  loading.value = true
-  setTimeout(() => {
-    loading.value = false
-   message.success('查询成功')
-  }, 500)
+  loadDevices()
 }
 
 const handleReset = () => {
   queryForm.deviceType = ''
   queryForm.status = ''
   queryForm.building = ''
+  loadDevices()
 }
 
 const handleAddDevice = async () => {
   try {
-   await addFormRef.value?.validate()
+    await addFormRef.value?.validate()
     adding.value = true
     
-    // TODO: 调用后端接口
-   setTimeout(() => {
-     const newDevice: Device = {
-        id: `DEV${String(devices.value.length + 1).padStart(3, '0')}`,
-       name: addForm.name,
-       type: addForm.type,
-        typeName: deviceTypeOptions.find(o => o.value === addForm.type)?.label || '',
-        building: addForm.building,
-        buildingName: buildingOptions.find(o => o.value === addForm.building)?.label || '',
-        location: addForm.location,
-       commissionDate: String(addForm.commissionDate),
-        status: addForm.status,
-       lastMaintenance: '-',
-       remark: addForm.remark
-      }
-      
-      devices.value.push(newDevice)
-     message.success('添加成功')
+    const res = await addDevice({
+      name: addForm.name,
+      type: addForm.type,
+      building_id: addForm.building,
+      status: addForm.status
+    })
+    
+    if (res.data.code === 200) {
+      message.success('添加成功')
       showAddModal.value = false
-      adding.value = false
+      loadDevices()
+      loadDeviceStats()
       
       // 重置表单
       Object.assign(addForm, {
-       name: '',
-       type: '',
+        name: '',
+        type: '',
         building: '',
         location: '',
-       commissionDate: null,
-        status: 'standby',
-       remark: ''
+        commissionDate: null,
+        status: 'online',
+        remark: ''
       })
-    }, 1000)
-  } catch (e) {
-   console.error(e)
+    } else {
+      message.error(res.data.message || '添加失败')
+    }
+  } catch (error: any) {
+    console.error('添加设备失败:', error)
+    message.error(error.response?.data?.message || '添加失败')
+  } finally {
+    adding.value = false
   }
+}
+
+const handleEditDevice = async (row: Device) => {
+  message.info('编辑功能开发中')
+  // TODO: 实现编辑功能
+}
+
+const handleDeleteDevice = async (row: Device) => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除设备"${row.name}"吗？此操作为软删除，可在数据库中恢复。`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await deleteDevice(row.id)
+        if (res.data.code === 200) {
+          message.success('删除成功')
+          loadDevices()
+          loadDeviceStats()
+        } else {
+          message.error(res.data.message || '删除失败')
+        }
+      } catch (error: any) {
+        console.error('删除设备失败:', error)
+        message.error(error.response?.data?.message || '删除失败')
+      }
+    }
+  })
 }
 
 const showDeviceDetail = (device: Device) => {
   currentDevice.value = device
   showDetailModal.value = true
 }
-</script>
 
-<style scoped>
-.device-management {
-  min-height: 100%;
-}
-</style>
+// 生命周期
+onMounted(() => {
+  loadBuildings()
+  loadDevices()
+  loadDeviceStats()
+})
+</script>

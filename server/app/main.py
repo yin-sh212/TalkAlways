@@ -20,6 +20,7 @@ from app.api import alarm_api
 from app.api import device_api
 from app.api import energy_api
 from app.api import knowledge_api
+from app.api import analysis_api  # 新增：导入能耗分析模块
 
 from datetime import datetime
 import os
@@ -152,6 +153,7 @@ app.include_router(alarm_api.router)  # 新增：注册告警管理路由
 app.include_router(device_api.router)
 app.include_router(energy_api.router)
 app.include_router(knowledge_api.router)
+app.include_router(analysis_api.router)  # 新增：注册能耗分析路由
 
 
 @app.get("/")

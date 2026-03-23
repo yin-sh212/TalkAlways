@@ -41,9 +41,10 @@ async def list_devices(
 
     where_clause = " AND ".join(conditions)
 
-    # SQL查询 - 严格按照要求的出参
+    # SQL 查询 - 严格按照要求的出参
     sql = f"""
         SELECT 
+            d.id as id,
             d.name as deviceName,
             d.type as deviceType,
             d.building_id as building,

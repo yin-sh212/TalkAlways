@@ -27,12 +27,12 @@ export const CHART_COLORS = {
 };
 
 /**
- * 通用网格配置（带右侧图例空间）
+ * 通用网格配置（底部图例空间）
  */
 export const DEFAULT_GRID = {
   left: '3%',
-  right: '15%',
-  bottom: '3%',
+  right: '3%',
+  bottom: '15%',
   containLabel: true,
 };
 
@@ -47,12 +47,12 @@ export const DEFAULT_TOOLTIP = {
 };
 
 /**
- * 标准图例配置（避免与图表重合）
+ * 标准图例配置（底部居中）
  */
 export const DEFAULT_LEGEND = {
-  orient: 'vertical' as const,
-  right: '8%',
-  top: 'center',
+  orient: 'horizontal' as const,
+  bottom: 10,
+  left: 'center',
   itemWidth: 12,
   itemHeight: 12,
   textStyle: {
@@ -80,6 +80,7 @@ export function getLineChartConfig(
     yAxisName?: string;
     tooltipFormatter?: string;
     grid?: any;
+    showLegend?: boolean;
   } = {},
 ): EChartsOption {
   const {
@@ -87,6 +88,7 @@ export function getLineChartConfig(
     yAxisName = '数值',
     tooltipFormatter = '{b}: {c}',
     grid = DEFAULT_GRID,
+    showLegend = true,
   } = options;
 
   return {
@@ -95,6 +97,7 @@ export function getLineChartConfig(
       trigger: 'axis' as const,
       formatter: tooltipFormatter,
     },
+    legend: showLegend ? DEFAULT_LEGEND : undefined,
     grid,
     xAxis: {
       type: 'category' as const,
@@ -116,13 +119,13 @@ export function getLineChartConfig(
         },
       },
     },
-    series: seriesData.map((series) => ({
+    series: seriesData.map((series, index) => ({
       name: series.name,
       type: 'line' as const,
       smooth: series.smooth ?? true,
       data: series.data,
       itemStyle: {
-        color: series.color || CHART_COLORS.primary,
+        color: series.color || CHART_COLORS.palette[index % CHART_COLORS.palette.length],
       },
       areaStyle: series.areaStyle
         ? { opacity: 0.3 }
@@ -153,6 +156,7 @@ export function getBarChartConfig(
     tooltipFormatter?: string;
     grid?: any;
     barWidth?: string | number;
+    showLegend?: boolean;
   } = {},
 ): EChartsOption {
   const {
@@ -161,6 +165,7 @@ export function getBarChartConfig(
     tooltipFormatter = '{b}: {c}',
     grid = DEFAULT_GRID,
     barWidth = '60%',
+    showLegend = true,
   } = options;
 
   return {
@@ -169,12 +174,14 @@ export function getBarChartConfig(
       trigger: 'axis' as const,
       formatter: tooltipFormatter,
     },
+    legend: showLegend ? DEFAULT_LEGEND : undefined,
     grid,
     xAxis: {
       type: 'category' as const,
       data: xAxisData,
       axisLabel: {
-        rotate: 45,
+        rotate: 0,
+        interval: 'auto',
       },
     },
     yAxis: {
@@ -222,7 +229,7 @@ export function getPieChartConfig(
 ): EChartsOption {
   const {
     title = '',
-    center = ['50%', '50%'],
+    center = ['20%', '50%'],
     radius = ['40%', '70%'],
     tooltipFormatter = '{b}: {c} ({d}%)',
     showLegend = true,
@@ -251,7 +258,7 @@ export function getPieChartConfig(
         name: title || '数据分布',
         type: 'pie' as const,
         radius,
-        center: ['45%', '50%'],
+        center,
         avoidLabelOverlap: true,
         itemStyle: {
           borderRadius: 10,
@@ -294,10 +301,16 @@ export function getDonutChartConfig(
   }>,
   options: {
     title?: string;
+    center?: string[];
+    radius?: string[];
     onItemSelect?: (itemName: string) => void;
   } = {},
 ): EChartsOption {
-  const { title = '' } = options;
+  const { 
+    title = '',
+    center = ['50%', '35%'],
+    radius = ['40%', '65%'],
+  } = options;
 
   return {
     tooltip: {
@@ -309,8 +322,8 @@ export function getDonutChartConfig(
       {
         name: title || '占比',
         type: 'pie' as const,
-        radius: ['40%', '70%'],
-        center: ['33%', '50%'],
+        radius,
+        center,
         avoidLabelOverlap: true,
         itemStyle: {
           borderRadius: 10,
@@ -344,7 +357,7 @@ export function getDonutChartConfig(
 }
 
 /**
- * 基础饼图配置（通用版本，支持左右图例）
+ * 基础饼图配置（通用版本）
  * @param data - 饼图数据
  * @param options - 可选配置项
  */
@@ -359,16 +372,14 @@ export function getBasePieChartConfig(
     center?: string[];
     tooltipFormatter?: string;
     showLegend?: boolean;
-    legendPosition?: 'left' | 'right';
   } = {},
 ): EChartsOption {
   const {
     title = '',
     radius = ['40%', '70%'],
-    center = ['45%', '50%'],
+    center = ['50%', '45%'],
     tooltipFormatter = '{b}: {c} ({d}%)',
     showLegend = true,
-    legendPosition = 'right',
   } = options;
 
   return {
@@ -377,13 +388,7 @@ export function getBasePieChartConfig(
       trigger: 'item' as const,
       formatter: tooltipFormatter,
     },
-    legend: showLegend
-      ? {
-          ...DEFAULT_LEGEND,
-          right: legendPosition === 'right' ? '8%' : 'auto',
-          left: legendPosition === 'left' ? '8%' : 'auto',
-        }
-      : undefined,
+    legend: showLegend ? DEFAULT_LEGEND : undefined,
     series: [
       {
         name: title || '数据分布',
@@ -415,6 +420,88 @@ export function getBasePieChartConfig(
           show: false,
         },
         data,
+      },
+    ],
+  };
+}
+
+/**
+ * 雷达图配置（用于多建筑综合对比）
+ * @param indicators - 雷达图指标（轴）
+ * @param seriesData - 系列数据（每个建筑一个系列）
+ * @param options - 可选配置项
+ */
+export function getRadarChartConfig(
+  indicators: Array<{
+    name: string;
+    max: number;
+  }>,
+  seriesData: Array<{
+    name: string;
+    value: number[];
+    color?: string;
+  }>,
+  options: {
+    title?: string;
+    shape?: 'circle' | 'polygon';
+    splitNumber?: number;
+    showLegend?: boolean;
+  } = {},
+): EChartsOption {
+  const {
+    title = '',
+    shape = 'circle',
+    splitNumber = 5,
+    showLegend = true,
+  } = options;
+
+  return {
+    title: title ? { text: title, left: 'center' } : undefined,
+    tooltip: {
+      trigger: 'item' as const,
+      formatter: '{b}: {c}',
+    },
+    legend: showLegend ? DEFAULT_LEGEND : undefined,
+    radar: {
+      indicator: indicators,
+      shape,
+      splitNumber,
+      axisName: {
+        color: '#333',
+        fontSize: 12,
+        fontWeight: 'bold',
+      },
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(127, 127, 127, 0.3)',
+        },
+      },
+      splitArea: {
+        show: false,
+      },
+      axisLine: {
+        lineStyle: {
+          color: 'rgba(127, 127, 127, 0.5)',
+        },
+      },
+    },
+    series: [
+      {
+        type: 'radar' as const,
+        data: seriesData.map((series, index) => ({
+          name: series.name,
+          value: series.value,
+          itemStyle: {
+            color: series.color || CHART_COLORS.palette[index % CHART_COLORS.palette.length],
+          },
+          areaStyle: {
+            opacity: 0.2,
+          },
+          lineStyle: {
+            width: 2,
+          },
+          symbolSize: 8,
+        })),
       },
     ],
   };

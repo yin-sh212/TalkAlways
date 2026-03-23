@@ -17,9 +17,17 @@ export const useBuildingStore = defineStore('building', () => {
   
   // 当前选中的建筑 ID（只存字符串 ID）
   const currentBuildingId = ref<string>('')
+  
+  // 缓存标记：是否已加载过建筑数据
+  const isLoaded = ref<boolean>(false)
 
-  // 获取建筑列表
-  const fetchBuildings = async () => {
+  // 获取建筑列表（带缓存）
+  const fetchBuildings = async (forceRefresh: boolean = false) => {
+    // 如果已加载且不需要强制刷新，直接返回
+    if (isLoaded.value && !forceRefresh) {
+      return { success: true, cached: true }
+    }
+    
     try {
       const response = await queryApi.getBuildings()
       const data = response.data.data || []
@@ -39,10 +47,13 @@ export const useBuildingStore = defineStore('building', () => {
         currentBuildingId.value = buildings.value[0].id
       }
       
-      return { success: true }
+      // 标记已加载
+      isLoaded.value = true
+      
+      return { success: true, cached: false }
     } catch (error: any) {
-      console.error('获取建筑列表失败:', error)
-      return { success: false, message: error.message || '获取建筑列表失败' }
+      console.error('[BuildingStore] 获取建筑列表失败:', error)
+      return { success: false, message: error.message || '获取建筑列表失败', cached: false }
     }
   }
 
@@ -51,17 +62,25 @@ export const useBuildingStore = defineStore('building', () => {
     currentBuildingId.value = buildingId
   }
 
-  // 重置建筑信息
+  // 重置建筑信息（包括缓存状态）
   const resetBuildings = () => {
     buildings.value = []
     currentBuildingId.value = ''
+    isLoaded.value = false
+  }
+  
+  // 清除缓存（用于用户登出等场景）
+  const clearCache = () => {
+    isLoaded.value = false
   }
 
   return {
     buildings,
     currentBuildingId,
+    isLoaded,
     fetchBuildings,
     setCurrentBuildingId,
-    resetBuildings
+    resetBuildings,
+    clearCache
   }
 })

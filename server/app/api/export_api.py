@@ -311,8 +311,12 @@ async def export_pdf(
         )
 
     except Exception as e:
+        import traceback
+        print(f"\n❌ PDF 导出错误：{e}")
+        traceback.print_exc()
+        # 返回 JSON 错误而不是 Response，这样前端能正确解析
         return {
             "code": 500,
-            "message": f"PDF生成失败: {str(e)}",
+            "message": f"PDF 生成失败：{str(e)}",
             "data": None
         }

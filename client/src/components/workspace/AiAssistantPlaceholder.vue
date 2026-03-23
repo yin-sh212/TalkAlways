@@ -1,7 +1,7 @@
 <template>
   <div class="ai-assistant">
     <!-- 智能对话界面 -->
-    <n-card :bordered="false" style="height: calc(100vh - 200px);">
+    <n-card :bordered="false" class="chat-card">
       <div class="chat-container">
         <!-- 消息列表 -->
         <div ref="messagesContainerRef" class="messages-container">
@@ -47,7 +47,7 @@
               </n-button>
             </template>
           </n-input>
-          
+
           <n-space class="quick-questions" :wrap="true">
             <n-tag
               v-for="(q, idx) in quickQuestions"
@@ -183,20 +183,31 @@ function handleQuickQuestion(question: string) {
 
 <style scoped>
 .ai-assistant {
-  min-height: 100%;
+  height: 100%;
+}
+
+.chat-card {
+  height: calc(100vh - 180px);
+  min-height: 500px;
+}
+
+.chat-card :deep(.n-card__content) {
+  padding: 0;
+  height: 100%;
 }
 
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 200px);
+  height: 100%;
 }
 
 .messages-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
-  background: #f5f7f9;
+  background: var(--n-color-modal);
   border-radius: 8px;
   margin-bottom: 16px;
   min-height: 0;
@@ -217,14 +228,14 @@ function handleQuickQuestion(question: string) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #e6f7ff;
+  background: rgba(24, 144, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .message-item.user .message-avatar {
-  background: #f6ffed;
+  background: rgba(82, 196, 26, 0.1);
 }
 
 .message-content {
@@ -239,9 +250,9 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-bubble {
-  padding: 4px 12px;
+  padding: 12px 16px;
   border-radius: 12px;
-  background: white;
+  background: var(--n-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -255,7 +266,7 @@ function handleQuickQuestion(question: string) {
 
 .message-time {
   font-size: 12px;
-  color: #999;
+  color: var(--n-text-color-placeholder);
   padding: 0 8px;
 }
 
@@ -263,7 +274,6 @@ function handleQuickQuestion(question: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex-shrink: 0;
 }
 
 .quick-questions {
@@ -297,6 +307,7 @@ function handleQuickQuestion(question: string) {
   margin-top: 16px;
   margin-bottom: 8px;
   font-weight: 600;
+  color: var(--n-text-color);
 }
 
 :deep(.markdown-body ul),
@@ -306,17 +317,45 @@ function handleQuickQuestion(question: string) {
 }
 
 :deep(.markdown-body code) {
-  background: #f5f5f5;
+  background: var(--n-color-modal);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'Courier New', monospace;
+  color: var(--n-text-color);
 }
 
 :deep(.markdown-body pre) {
-  background: #f5f5f5;
+  background: var(--n-color-modal);
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
   margin: 8px 0;
+}
+
+:deep(.markdown-body pre code) {
+  background: transparent;
+  padding: 0;
+}
+
+:deep(.markdown-body blockquote) {
+  border-left: 4px solid var(--n-border-color);
+  padding-left: 16px;
+  margin: 8px 0;
+  color: var(--n-text-color-placeholder);
+}
+
+:deep(.markdown-body a) {
+  color: #1890ff;
+}
+
+/* 深色模式优化 */
+@media (prefers-color-scheme: dark) {
+  .message-bubble {
+    box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
+  }
+  
+  .message-item.user .message-bubble {
+    background: #177ddc;
+  }
 }
 </style>

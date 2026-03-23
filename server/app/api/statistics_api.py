@@ -138,7 +138,7 @@ async def calculate_cop(
         end_date: str = Query(..., description="结束日期"),
         cop_type: str = Query("cooling", pattern="^(cooling|heating|both)$", description="COP类型：制冷/供热/两者")
 ):
-    """计算能效比(COP) - 使用新数据集的实际数据"""
+    """计算能效比(COP) - 单位：cooling_load 为 W，electricity 为 kWh"""
 
     # 基础SQL
     base_sql = """
@@ -181,15 +181,26 @@ async def calculate_cop(
             "ambient_temp": row['ambient_temp']
         }
 
-        # 制冷COP = 冷冻水冷量 / 耗电量
+        # 制冷COP计算
+        # cooling_load 单位: W → 转换为 kW: 除以 1000
+        # electricity 单位: kWh → 该小时平均功率 = 数值 (kW)
+        # COP = 冷量(kW) / 电功率(kW) = (cooling_load / 1000) / electricity
         if cop_type in ["cooling", "both"] and row['cooling_load'] and row['cooling_load'] > 0:
-            cop_cooling = row['cooling_load'] / row['electricity']
+            # 冷量转换为 kW
+            cooling_load_kw = row['cooling_load'] / 1000
+            # 电功率（kW）在数值上等于 kWh（因为是1小时累计）
+            electricity_kw = row['electricity']
+            cop_cooling = cooling_load_kw / electricity_kw
             item['cop_cooling'] = round(cop_cooling, 2)
             cooling_cops.append(cop_cooling)
 
-        # 供热COP = 供热能耗 / 耗电量
+        # 供热COP计算（如果供热能耗也是 W，同样需要换算）
+        # 如果 heating_load 单位也是 W，同样需要除以 1000
         if cop_type in ["heating", "both"] and row['heating_load'] and row['heating_load'] > 0:
-            cop_heating = row['heating_load'] / row['electricity']
+            # 假设 heating_load 单位也是 W，转换为 kW
+            heating_load_kw = row['heating_load'] / 1000
+            electricity_kw = row['electricity']
+            cop_heating = heating_load_kw / electricity_kw
             item['cop_heating'] = round(cop_heating, 2)
             heating_cops.append(cop_heating)
 
@@ -211,7 +222,6 @@ async def calculate_cop(
             "details": result
         }
     }
-
 
 @router.get("/anomaly")
 async def detect_anomaly(
@@ -319,6 +329,116 @@ async def detect_anomaly(
 
 # 辅助函数
 def detect_anomalies_moving_average(values, timestamps, window=3, threshold=3):
+    """移动平均法异常检测"""
+    anomalies = []
+    for i in range(len(values)):
+        start = max(0, i - window)
+        end = min(len(values), i + window + 1)
+        window_values = values[start:end]
+        mean = sum(window_values) / len(window_values)
+        std = (sum((x - mean) ** 2 for x in window_values) / len(window_values)) ** 0.5
+        if std > 0 and abs(values[i] - mean) > threshold * std:
+            anomalies.append({
+                "index": i,
+                "timestamp": timestamps[i],
+                "value": float(values[i]),
+                "mean": float(mean),
+                "z_score": float(abs(values[i] - mean) / std),
+                "deviation": f"{((values[i] - mean) / mean * 100):.1f}%" if mean > 0 else "N/A"
+            })
+    return anomalies
+
+
+@router.get("/summary/buildings")
+async def get_buildings_summary(
+        start_date: str,
+        end_date: str,
+        time_unit: str = Query("day", pattern="^(hour|day|week|month)$"),
+        building_ids: Optional[List[str]] = Query(None, description="建筑 ID 列表，不传则查询所有建筑")
+):
+    """批量获取多个建筑的能耗汇总 - 用于建筑能耗对比"""
+    group_by = time_unit
+
+    # 根据 group_by 确定 SQL
+    if group_by == "day":
+        group_sql = "DATE(e.timestamp) as period"
+    elif group_by == "week":
+        group_sql = "DATE_FORMAT(e.timestamp, '%Y-%u') as period"
+    elif group_by == "month":
+        group_sql = "DATE_FORMAT(e.timestamp, '%Y-%m') as period"
+    else:
+        group_sql = "DATE(e.timestamp) as period"
+
+    # 构建 WHERE 条件
+    where_conditions = ["DATE(e.timestamp) BETWEEN %s AND %s"]
+    params = [start_date, end_date]
+
+    if building_ids:
+        placeholders = ",".join(["%s"] * len(building_ids))
+        where_conditions.append(f"e.building_id IN ({placeholders})")
+        params.extend(building_ids)
+
+    where_clause = " AND ".join(where_conditions)
+
+    # 简化版本：不关联 buildings 表，直接使用 building_id
+    sql = f"""
+        SELECT 
+            {group_sql},
+            e.building_id,
+            SUM(e.electricity) as total_elec,
+            AVG(e.electricity) as avg_elec,
+            COUNT(*) as data_points
+        FROM energy_consumption e
+        WHERE {where_clause}
+        GROUP BY period, e.building_id
+        ORDER BY period, e.building_id
+    """
+
+    data = await Database.fetch_all(sql, tuple(params))
+
+    return {
+        "code": 200,
+        "data": {
+            "buildings": data
+        }
+    }
+
+
+@router.get("/summary/daily-comparison")
+async def get_daily_comparison(
+        building_id: str,
+        dates: List[str] = Query(..., description="日期列表，例如：['2016-07-15', '2016-07-14', '2016-07-08']")
+):
+    """批量获取多日的能耗数据 - 用于日环比、周同比计算"""
+    if not dates:
+        raise HTTPException(status_code=400, detail="dates 参数不能为空")
+
+    placeholders = ",".join(["%s"] * len(dates))
+    sql = f"""
+        SELECT 
+            DATE(timestamp) as date,
+            SUM(electricity) as total_elec,
+            AVG(electricity) as avg_elec,
+            COUNT(*) as data_points
+        FROM energy_consumption
+        WHERE building_id = %s 
+            AND DATE(timestamp) IN ({placeholders})
+        GROUP BY DATE(timestamp)
+        ORDER BY DATE(timestamp)
+    """
+
+    params = [building_id] + list(dates)
+    data = await Database.fetch_all(sql, tuple(params))
+
+    return {
+        "code": 200,
+        "data": {
+            "daily_data": data
+        }
+    }
+
+
+async def get_table_columns():
     """移动平均法异常检测"""
     anomalies = []
     for i in range(len(values)):

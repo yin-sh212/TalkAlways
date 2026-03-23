@@ -8,7 +8,7 @@ export const getRawData = (params: { building_id?: string; start_date?: string; 
 
 // 获取建筑列表
 export const getBuildings = () => {
-  return http.get<ApiResponse<string[]>>('/query/buildings')
+  return http.get<ApiResponse<any[]>>('/query/buildings')
 }
 
 // 获取监测点列表

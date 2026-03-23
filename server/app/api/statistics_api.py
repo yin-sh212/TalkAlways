@@ -222,7 +222,6 @@ async def calculate_cop(
             "details": result
         }
     }
-
 @router.get("/anomaly")
 async def detect_anomaly(
         building_id: str = Query(..., description="建筑编号"),

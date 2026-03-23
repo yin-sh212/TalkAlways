@@ -138,7 +138,7 @@ async def calculate_cop(
         end_date: str = Query(..., description="结束日期"),
         cop_type: str = Query("cooling", pattern="^(cooling|heating|both)$", description="COP类型：制冷/供热/两者")
 ):
-    """计算能效比(COP) - 使用新数据集的实际数据"""
+    """计算能效比(COP) - 单位：cooling_load 为 W，electricity 为 kWh"""
 
     # 基础SQL
     base_sql = """
@@ -181,15 +181,26 @@ async def calculate_cop(
             "ambient_temp": row['ambient_temp']
         }
 
-        # 制冷COP = 冷冻水冷量 / 耗电量
+        # 制冷COP计算
+        # cooling_load 单位: W → 转换为 kW: 除以 1000
+        # electricity 单位: kWh → 该小时平均功率 = 数值 (kW)
+        # COP = 冷量(kW) / 电功率(kW) = (cooling_load / 1000) / electricity
         if cop_type in ["cooling", "both"] and row['cooling_load'] and row['cooling_load'] > 0:
-            cop_cooling = row['cooling_load'] / row['electricity']
+            # 冷量转换为 kW
+            cooling_load_kw = row['cooling_load'] / 1000
+            # 电功率（kW）在数值上等于 kWh（因为是1小时累计）
+            electricity_kw = row['electricity']
+            cop_cooling = cooling_load_kw / electricity_kw
             item['cop_cooling'] = round(cop_cooling, 2)
             cooling_cops.append(cop_cooling)
 
-        # 供热COP = 供热能耗 / 耗电量
+        # 供热COP计算（如果供热能耗也是 W，同样需要换算）
+        # 如果 heating_load 单位也是 W，同样需要除以 1000
         if cop_type in ["heating", "both"] and row['heating_load'] and row['heating_load'] > 0:
-            cop_heating = row['heating_load'] / row['electricity']
+            # 假设 heating_load 单位也是 W，转换为 kW
+            heating_load_kw = row['heating_load'] / 1000
+            electricity_kw = row['electricity']
+            cop_heating = heating_load_kw / electricity_kw
             item['cop_heating'] = round(cop_heating, 2)
             heating_cops.append(cop_heating)
 
@@ -211,7 +222,6 @@ async def calculate_cop(
             "details": result
         }
     }
-
 
 @router.get("/anomaly")
 async def detect_anomaly(

@@ -29,7 +29,7 @@
           <n-input
             v-model:value="inputValue"
             type="textarea"
-            placeholder="请输入问题，例如：'B001 建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
+            placeholder="请输入问题，例如：'xxx建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
             :rows="3"
             :disabled="loading"
             @keydown.enter.exact.prevent="handleSend"
@@ -85,7 +85,7 @@ const loading = ref(false)
 const messages = ref<Message[]>([
   {
     type: 'assistant',
-    content: '你好！我是 AI 智能运维助手，可以回答以下问题：\n\n1. **能耗查询**：如 "B001 昨天用电量"\n2. **运维知识**：如 "冷水机组故障处理"\n3. **异常分析**：如 "分析最近能耗异常"\n\n请问有什么可以帮您？',
+    content: '👋 您好！我是 AI 智能运维助手，很高兴为您服务～\n我可以帮您：\n- 📊 **能耗查询**：建筑用电量统计\n- 🔧 **故障诊断**：设备异常分析\n- 📚 **运维知识**：行业规范咨询\n请随时向我提问！',
     time: getCurrentTime()
   }
 ])
@@ -135,9 +135,7 @@ async function handleSend() {
   scrollToBottom()
 
   try {
-    const response = await askQuestion({
-      query
-    })
+    const response = await askQuestion(query)
 
     // 移除加载消息
     messages.value.splice(loadingIndex, 1)
@@ -150,7 +148,7 @@ async function handleSend() {
     // 添加助手回复 - 直接从 response.data 获取答案（扁平化结构）
     messages.value.push({
       type: 'assistant',
-      content: response.data.answer,
+      content: response.data.data.answer,
       time: getCurrentTime()
     })
 

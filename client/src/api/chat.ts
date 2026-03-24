@@ -10,9 +10,9 @@ export const getModelStatus = () => {
   return http.get('/chat/model-status')
 }
 
-// 智能问答
-export const askQuestion = (data: { query: string; session_id?: string; context?: any }) => {
-  return http.post('/chat/ask', data)
+// 智能问答 - 入参只有用户输入的文字
+export const askQuestion = (query: string) => {
+  return http.post('/chat/ask', { query })
 }
 
 // 健康检查

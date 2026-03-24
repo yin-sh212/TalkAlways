@@ -1,17 +1,65 @@
 # app/api/chat_api.py
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 import traceback
 from app.services.rag_pipeline import rag_pipeline
 from app.services.llm_client import llm_client
 import datetime
+import json
 
 router = APIRouter(prefix="/api/chat", tags=["智能问答"])
 
 
 class QuestionRequest(BaseModel):
     query: str = Field(..., description="用户输入的问题文字")
+
+
+class StreamQuestionRequest(BaseModel):
+    query: str = Field(..., description="用户输入的问题文字")
+
+
+async def stream_generator(full_prompt: str):
+    """SSE 流式生成器"""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    try:
+        # 在线程池中运行同步的生成器
+        executor = ThreadPoolExecutor(max_workers=1)
+        loop = asyncio.get_event_loop()
+        
+        # 获取生成器
+        generator = await loop.run_in_executor(
+            executor, 
+            lambda: llm_client.generate_stream(full_prompt)
+        )
+        
+        # 遍历生成器并输出 SSE 格式
+        for chunk in generator:
+            sse_data = json.dumps({
+                "code": 200,
+                "data": {
+                    "content": chunk
+                }
+            }, ensure_ascii=False)
+            yield f"data: {sse_data}\n\n"
+        
+        # 发送结束标记
+        yield "data: [DONE]\n\n"
+        
+    except Exception as e:
+        print(f"流式生成失败：{e}")
+        traceback.print_exc()
+        error_data = json.dumps({
+            "code": 500,
+            "message": str(e),
+            "data": {
+                "content": ""
+            }
+        }, ensure_ascii=False)
+        yield f"data: {error_data}\n\n"
 
 
 @router.post(
@@ -75,6 +123,51 @@ async def ask_question(question: QuestionRequest):
 
     except Exception as e:
         print(f"处理失败：{e}")
+        traceback.print_exc()
+        return {
+            "code": 500,
+            "message": f"处理失败：{str(e)}",
+            "data": {
+                "answer": "抱歉，服务器内部错误，请稍后再试。"
+            }
+        }
+
+
+@router.post(
+    "/ask/stream",
+    summary="智能问答（流式输出）",
+    description="使用 SSE 流式输出 AI 回答"
+)
+async def ask_question_stream(question: StreamQuestionRequest):
+    """智能问答接口 - 流式版本"""
+    print(f"收到流式问题：{question.query}")
+
+    try:
+        # 构建提示词
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
+注意：
+1. 直接回答问题，不要重复自我介绍
+2. 如果是查询类问题，说明需要的数据维度
+3. 如果是故障处理，给出具体的排查步骤
+4. 保持回答在 200-500 字之间"""
+
+        full_prompt = f"{system_prompt}\n\n当前时间：{current_time}\n\n用户问题：{question.query}"
+        
+        # 返回 SSE 流
+        return StreamingResponse(
+            stream_generator(full_prompt),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+
+    except Exception as e:
+        print(f"流式接口失败：{e}")
         traceback.print_exc()
         return {
             "code": 500,

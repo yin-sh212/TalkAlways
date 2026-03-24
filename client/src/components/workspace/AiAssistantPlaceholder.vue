@@ -125,47 +125,92 @@ async function handleSend() {
   loading.value = true
   scrollToBottom()
 
-  // 添加加载中消息
-  const loadingIndex = messages.value.length
+  // 添加助手回复占位（用于流式显示）
+  const assistantMessageIndex = messages.value.length
   messages.value.push({
-    type: 'loading',
+    type: 'assistant',
     content: '',
     time: getCurrentTime()
   })
   scrollToBottom()
 
   try {
-    const response = await askQuestion(query)
-
-    // 移除加载消息
-    messages.value.splice(loadingIndex, 1)
-
-    // 检查响应码
-    if (response.data.code !== 200) {
-      throw new Error(response.data.message || '请求失败')
-    }
-
-    // 添加助手回复 - 直接从 response.data 获取答案（扁平化结构）
-    messages.value.push({
-      type: 'assistant',
-      content: response.data.data.answer,
-      time: getCurrentTime()
+    // 使用 fetch API 进行流式请求
+    const response = await fetch('/api/chat/ask/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query })
     })
 
-    scrollToBottom()
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    // 读取流式数据
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('ReadableStream not supported')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) {
+        break
+      }
+
+      // 解码数据
+      const chunk = decoder.decode(value, { stream: true })
+      buffer += chunk
+
+      // 解析 SSE 格式的数据行
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // 保留最后一个不完整的行
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim()
+          
+          if (data === '[DONE]') {
+            break
+          }
+
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.code === 200 && parsed.data?.content) {
+              // 逐字追加内容
+              messages.value[assistantMessageIndex].content += parsed.data.content
+              scrollToBottom()
+            } else if (parsed.code === 500) {
+              throw new Error(parsed.message || '服务器错误')
+            }
+          } catch (e) {
+            console.error('解析 SSE 数据失败:', e, line)
+          }
+        }
+      }
+    }
+
+    // 确保最终内容有正确的换行
+    if (messages.value[assistantMessageIndex].content) {
+      messages.value[assistantMessageIndex].content = messages.value[assistantMessageIndex].content.trim()
+    }
+
   } catch (error: any) {
     console.error('提问失败:', error)
     message.error('提问失败，请稍后重试')
     
-    // 移除加载消息
-    messages.value.splice(loadingIndex, 1)
-    
-    // 添加错误消息
-    messages.value.push({
+    // 替换错误消息
+    messages.value[assistantMessageIndex] = {
       type: 'assistant',
       content: `抱歉，处理您的问题时出现错误：${error.message || '未知错误'}`,
       time: getCurrentTime()
-    })
+    }
     
     scrollToBottom()
   } finally {
@@ -240,7 +285,7 @@ function handleQuickQuestion(question: string) {
   max-width: 70%;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .message-item.user .message-content {
@@ -248,13 +293,13 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-bubble {
-  padding: 12px 16px;
+  padding: 6px 12px;
   border-radius: 12px;
   background: var(--n-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.6;
+  line-height: 1.4;
 }
 
 .message-item.user .message-bubble {
@@ -296,14 +341,14 @@ function handleQuickQuestion(question: string) {
 /* Markdown 样式 */
 :deep(.markdown-body) {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.4;
 }
 
 :deep(.markdown-body h1),
 :deep(.markdown-body h2),
 :deep(.markdown-body h3) {
-  margin-top: 16px;
-  margin-bottom: 8px;
+  margin-top: 10px;
+  margin-bottom: 6px;
   font-weight: 600;
   color: var(--n-text-color);
 }
@@ -311,23 +356,23 @@ function handleQuickQuestion(question: string) {
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
   padding-left: 20px;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 
 :deep(.markdown-body code) {
   background: var(--n-color-modal);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
   font-family: 'Courier New', monospace;
   color: var(--n-text-color);
 }
 
 :deep(.markdown-body pre) {
   background: var(--n-color-modal);
-  padding: 12px;
+  padding: 10px;
   border-radius: 4px;
   overflow-x: auto;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 :deep(.markdown-body pre code) {
@@ -336,9 +381,9 @@ function handleQuickQuestion(question: string) {
 }
 
 :deep(.markdown-body blockquote) {
-  border-left: 4px solid var(--n-border-color);
-  padding-left: 16px;
-  margin: 8px 0;
+  border-left: 3px solid var(--n-border-color);
+  padding-left: 12px;
+  margin: 6px 0;
   color: var(--n-text-color-placeholder);
 }
 

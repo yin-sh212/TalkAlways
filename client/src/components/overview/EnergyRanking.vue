@@ -1,6 +1,6 @@
 <template>
-  <n-card title="能耗排名 TOP5" :bordered="false" content-style="padding: 20px;" class="ranking-card">
-    <n-space vertical :size="16">
+  <n-card title="能耗排名 TOP5" :bordered="false" content-style="padding: 14px;" class="ranking-card">
+    <n-space vertical :size="10">
       <div v-for="(item, index) in rankingList" :key="item.buildingId" class="ranking-item">
         <div class="ranking-info">
           <n-tag :type="getRankingTagType(index)" size="small" class="ranking-tag">
@@ -12,6 +12,7 @@
             :color="getRankingColor(index)"
             :show-indicator="false"
             class="ranking-progress"
+            :height="6"
           />
           <span class="ranking-value">{{ item.energy.toFixed(2) }} MWh</span>
         </div>
@@ -55,7 +56,7 @@ const getRankingColor = (index: number) => {
 <style scoped lang="scss">
 .ranking-card {
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
   
   .ranking-item {
     .ranking-info {
@@ -69,7 +70,7 @@ const getRankingColor = (index: number) => {
       }
       
       .ranking-building {
-        width: 100px;
+        width: 180px;
         font-size: 14px;
         color: #333;
       }

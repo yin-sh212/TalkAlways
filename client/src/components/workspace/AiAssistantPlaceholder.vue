@@ -125,92 +125,47 @@ async function handleSend() {
   loading.value = true
   scrollToBottom()
 
-  // 添加助手回复占位（用于流式显示）
-  const assistantMessageIndex = messages.value.length
+  // 添加加载中消息
+  const loadingIndex = messages.value.length
   messages.value.push({
-    type: 'assistant',
+    type: 'loading',
     content: '',
     time: getCurrentTime()
   })
   scrollToBottom()
 
   try {
-    // 使用 fetch API 进行流式请求
-    const response = await fetch('/api/chat/ask/stream', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query })
+    const response = await askQuestion(query)
+
+    // 移除加载消息
+    messages.value.splice(loadingIndex, 1)
+
+    // 检查响应码
+    if (response.data.code !== 200) {
+      throw new Error(response.data.message || '请求失败')
+    }
+
+    // 添加助手回复 - 直接从 response.data 获取答案（扁平化结构）
+    messages.value.push({
+      type: 'assistant',
+      content: response.data.data.answer,
+      time: getCurrentTime()
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    // 读取流式数据
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('ReadableStream not supported')
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      
-      if (done) {
-        break
-      }
-
-      // 解码数据
-      const chunk = decoder.decode(value, { stream: true })
-      buffer += chunk
-
-      // 解析 SSE 格式的数据行
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || '' // 保留最后一个不完整的行
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6).trim()
-          
-          if (data === '[DONE]') {
-            break
-          }
-
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.code === 200 && parsed.data?.content) {
-              // 逐字追加内容
-              messages.value[assistantMessageIndex].content += parsed.data.content
-              scrollToBottom()
-            } else if (parsed.code === 500) {
-              throw new Error(parsed.message || '服务器错误')
-            }
-          } catch (e) {
-            console.error('解析 SSE 数据失败:', e, line)
-          }
-        }
-      }
-    }
-
-    // 确保最终内容有正确的换行
-    if (messages.value[assistantMessageIndex].content) {
-      messages.value[assistantMessageIndex].content = messages.value[assistantMessageIndex].content.trim()
-    }
-
+    scrollToBottom()
   } catch (error: any) {
     console.error('提问失败:', error)
     message.error('提问失败，请稍后重试')
     
-    // 替换错误消息
-    messages.value[assistantMessageIndex] = {
+    // 移除加载消息
+    messages.value.splice(loadingIndex, 1)
+    
+    // 添加错误消息
+    messages.value.push({
       type: 'assistant',
       content: `抱歉，处理您的问题时出现错误：${error.message || '未知错误'}`,
       time: getCurrentTime()
-    }
+    })
     
     scrollToBottom()
   } finally {

@@ -814,9 +814,7 @@ onMounted(async () => {
     filters.buildingId = buildingOptions.value[0].value
   }
   
-  // 加载分析数据（包括所有建筑的对比数据）
-  await loadAnalysisData()
-  
+ 
   // 监听窗口大小变化
   window.addEventListener('resize', () => {
     trendChart?.resize()

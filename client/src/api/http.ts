@@ -4,9 +4,8 @@ import type { ApiResponse } from '@/types/user'
 
 // 创建 axios 实例
 const http: AxiosInstance = axios.create({
-  // baseURL: 'https://kellen-warty-kurt.ngrok-free.dev/api',
-  baseURL: 'http://127.0.0.1:3000/api',
-  timeout: 15000,
+  baseURL: '/api',
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
   },

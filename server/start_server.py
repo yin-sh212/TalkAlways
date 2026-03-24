@@ -30,7 +30,6 @@ IS_TIDB_CLOUD = "tidbcloud.com" in DB_HOST.lower()
 
 print(f"🚀 正在启动服务器...")
 print(f"📍 地址：http://localhost:{PORT}")
-print(f"📚 接口文档：http://localhost:{PORT}/docs")
 
 if IS_TIDB_CLOUD:
     print(f"☁️  数据库：TiDB Cloud (远程)")

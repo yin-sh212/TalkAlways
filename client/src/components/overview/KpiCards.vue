@@ -1,11 +1,11 @@
 <template>
-  <n-grid :cols="3" :x-gap="16" :y-gap="16" class="kpi-grid">
+  <n-grid :cols="3" :x-gap="12" :y-gap="12" class="kpi-grid">
     <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
+      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">今日总能耗</span>
-            <n-icon size="24" color="#18a058">
+            <n-icon size="20" color="#18a058">
               <EnergyIcon />
             </n-icon>
           </n-space>
@@ -18,12 +18,12 @@
           </div>
           <div class="kpi-changes">
             <div class="kpi-change" :class="{ 'is-up': kpiData.dayChange >= 0 }">
-              <n-icon :component="kpiData.dayChange >= 0 ? ArrowUpward : ArrowDownward" />
+              <n-icon :component="kpiData.dayChange >= 0 ? ArrowUpward : ArrowDownward" size="14" />
               {{ Math.abs(kpiData.dayChange).toFixed(1) }}%
               <span class="change-label">较昨日</span>
             </div>
             <div class="kpi-change" :class="{ 'is-up': kpiData.weekChange >= 0 }">
-              <n-icon :component="kpiData.weekChange >= 0 ? ArrowUpward : ArrowDownward" />
+              <n-icon :component="kpiData.weekChange >= 0 ? ArrowUpward : ArrowDownward" size="14" />
               {{ Math.abs(kpiData.weekChange).toFixed(1) }}%
               <span class="change-label">较上周</span>
             </div>
@@ -33,11 +33,11 @@
     </n-grid-item>
 
     <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
+      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">在线设备率</span>
-            <n-icon size="24" color="#1890ff">
+            <n-icon size="20" color="#1890ff">
               <Device />
             </n-icon>
           </n-space>
@@ -58,11 +58,11 @@
     </n-grid-item>
 
     <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
+      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">能效比 (COP)</span>
-            <n-icon size="24" color="#52c41a">
+            <n-icon size="20" color="#52c41a">
               <Leaf />
             </n-icon>
           </n-space>
@@ -80,11 +80,11 @@
     </n-grid-item>
     
     <!-- <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 20px;">
+      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">今日 CO₂减排</span>
-            <n-icon size="24" color="#52c41a">
+            <n-icon size="20" color="#52c41a">
               <Leaf />
             </n-icon>
           </n-space>
@@ -125,22 +125,22 @@ const props = defineProps<Props>()
 .kpi-grid {
   .kpi-card {
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
     
     .card-title {
-      font-size: 14px;
+      font-size: 13px;
       color: #666;
       font-weight: 500;
     }
 
     .kpi-value {
-      font-size: 32px;
+      font-size: 26px;
       font-weight: bold;
       color: #333;
-      margin: 16px 0;
+      margin: 10px 0;
 
       .unit {
-        font-size: 14px;
+        font-size: 12px;
         color: #999;
         margin-left: 4px;
       }
@@ -148,14 +148,14 @@ const props = defineProps<Props>()
 
     .kpi-changes {
       display: flex;
-      gap: 16px;
-      margin-top: 8px;
+      gap: 12px;
+      margin-top: 6px;
 
       .kpi-change {
         display: flex;
         align-items: center;
-        gap: 4px;
-        font-size: 14px;
+        gap: 3px;
+        font-size: 12px;
         
         &.is-up {
           color: #f5222d;
@@ -166,18 +166,18 @@ const props = defineProps<Props>()
         }
 
         .change-label {
-          font-size: 12px;
+          font-size: 11px;
           color: #999;
-          margin-left: 4px;
+          margin-left: 3px;
         }
       }
     }
 
     .kpi-subtitle {
-      margin-top: 8px;
+      margin-top: 6px;
 
       .sub-text {
-        font-size: 12px;
+        font-size: 11px;
         color: #999;
       }
     }

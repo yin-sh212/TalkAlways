@@ -4,12 +4,11 @@ import { getSummary, detectAnomaly } from './statistics'
 import { getDistributionData, getTrendData as getTrendDataFromCharts } from './charts'
 import { getDeviceStatus } from './query'
 import { useBuildingStore } from '@/store/building'
+import { useAppStore } from '@/store/app'
 
 // 有效数据时间范围常量
 export const VALID_DATE_START = '2016-07-01'
 export const VALID_DATE_END = '2016-08-31'
-// 使用有效范围内的一个固定日期作为"今天"
-export const MOCK_TODAY = '2016-08-15'
 
 // 获取当前建筑 ID
 const getBuildingId = () => {
@@ -18,10 +17,17 @@ const getBuildingId = () => {
   return buildingId
 }
 
+// 获取 Mock 日期
+const getMockToday = () => {
+  const appStore = useAppStore()
+  return appStore.MOCK_TODAY
+}
+
 // 获取 KPI 数据 - 对接真实接口
 export const getKPIData = async () => {
   // 后端接口：GET /api/statistics/summary?building_id=xxx&start_date=xxx&end_date=xxx&time_unit=day
   const buildingId = getBuildingId()
+  const mockToday = getMockToday()
   
   if (!buildingId) {
     console.warn('未设置建筑 ID，返回默认数据')
@@ -40,8 +46,8 @@ export const getKPIData = async () => {
   try {
     const response = await getSummary({
       building_id: buildingId,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
+      start_date: mockToday,
+      end_date: mockToday,
       time_unit: 'day'
     })
     
@@ -94,6 +100,7 @@ export const getKPIData = async () => {
 export const getChartData = async () => {
   // 后端接口：GET /api/charts/distribution?building_id=xxx&date=xxx
   const buildingId = getBuildingId()
+  const mockToday = getMockToday()
   
   if (!buildingId) {
     console.warn('未设置建筑 ID，返回默认数据')
@@ -106,7 +113,7 @@ export const getChartData = async () => {
   try {
     const response = await getDistributionData({
       building_id: buildingId,
-      date: MOCK_TODAY
+      date: mockToday
     })
     
     const distributionData = response.data.data
@@ -165,6 +172,7 @@ export const getTrendData = async () => {
 export const getAnomalyList = async (limit = 5) => {
   // 后端接口：GET /api/statistics/anomaly?building_id=xxx&start_date=xxx&end_date=xxx
   const buildingId = getBuildingId()
+  const mockToday = getMockToday()
   
   if (!buildingId) {
     console.warn('未设置建筑 ID，返回默认数据')
@@ -174,7 +182,7 @@ export const getAnomalyList = async (limit = 5) => {
         message: '成功',
         data: {
           building_id: '',
-          period: `${MOCK_TODAY} 至 ${MOCK_TODAY}`,
+          period: `${mockToday} 至 ${mockToday}`,
           total_points: 0,
           anomaly_count: 0,
           anomalies: []
@@ -186,8 +194,8 @@ export const getAnomalyList = async (limit = 5) => {
   try {
     const response = await detectAnomaly({
       building_id: buildingId,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
+      start_date: mockToday,
+      end_date: mockToday,
       threshold: 2.0
     })
     
@@ -201,7 +209,7 @@ export const getAnomalyList = async (limit = 5) => {
         message: '成功',
         data: {
           building_id: '',
-          period: `${MOCK_TODAY} 至 ${MOCK_TODAY}`,
+          period: `${mockToday} 至 ${mockToday}`,
           total_points: 0,
           anomaly_count: 0,
           anomalies: []

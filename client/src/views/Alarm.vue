@@ -180,9 +180,10 @@ import type {
   BuildingEnergyDetail,
   EnergySummary,
 } from "@/types/analysis";
-import { MOCK_TODAY } from "@/api/dashboard";
+import { useAppStore } from '@/store/app'
 
-const message = useMessage();
+const message = useMessage()
+const appStore = useAppStore()
 
 // 状态
 const queryLoading = ref(false);
@@ -318,41 +319,29 @@ const loadAlarmTypes = async () => {
   }
 };
 
-// 设置快捷时间 - 基于 MOCK_TODAY 动态计算
+// 设置快捷时间 - 基于 app store 的方法
 const setQuickTime = (type: "today" | "week" | "month") => {
-  // 使用 MOCK_TODAY 作为基准日期
-  const mockDate = new Date(MOCK_TODAY);
   let start: Date;
   let end: Date;
 
   switch (type) {
     case "today":
-      // 今日：MOCK_TODAY 的 00:00:00 至 23:59:59
-      start = new Date(mockDate.setHours(0, 0, 0, 0));
-      end = new Date(mockDate.setHours(23, 59, 59, 999));
+      // 今日
+      const todayRange = appStore.getTodayRange()
+      start = new Date(todayRange.start)
+      end = new Date(todayRange.end)
       break;
     case "week":
-      // 本周：根据 MOCK_TODAY 所在周的周一和周日确定
-      const dayOfWeek = mockDate.getDay() || 7; // 将周日转换为 7
-      const monday = new Date(mockDate);
-      monday.setDate(mockDate.getDate() - (dayOfWeek - 1));
-      monday.setHours(0, 0, 0, 0);
-
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      sunday.setHours(23, 59, 59, 999);
-
-      start = monday;
-      end = sunday;
+      // 本周
+      const weekRange = appStore.getWeekRange()
+      start = new Date(weekRange.start)
+      end = new Date(weekRange.end)
       break;
     case "month":
-      // 本月：MOCK_TODAY 往前推 30 天
-      start = new Date(mockDate);
-      start.setDate(mockDate.getDate() - 29);
-      start.setHours(0, 0, 0, 0);
-      
-      end = new Date(mockDate);
-      end.setHours(23, 59, 59, 999);
+      // 本月
+      const monthRange = appStore.getMonthRange()
+      start = new Date(monthRange.start)
+      end = new Date(monthRange.end)
       break;
   }
 

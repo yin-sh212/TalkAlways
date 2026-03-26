@@ -38,12 +38,14 @@ import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { useBuildingStore } from '@/store/building'
-import { getKPIData, getChartData, getAnomalyList, getTrendData, MOCK_TODAY } from '@/api/dashboard'
-import { getSummary, detectAnomaly, getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
-import { getBuildings, getDeviceStatus } from '@/api/query'
+import { useAppStore } from '@/store/app'
+import { getKPIData, getChartData, getAnomalyList, getTrendData } from '@/api/dashboard'
 import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
+import { getDeviceStatus } from '@/api/query'
+import { detectAnomaly, getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
+import { getBuildings } from '@/api/query'
 
 // 声明全局 Window 类型
 declare global {
@@ -58,6 +60,7 @@ const message = useMessage()
 const dialog = useDialog()
 const userStore = useUserStore()
 const buildingStore = useBuildingStore()
+const appStore = useAppStore()
 
 // 当前建筑 ID - 从 buildingStore 获取
 const currentBuildingId = computed(() => {
@@ -105,9 +108,6 @@ const deviceStats = ref({
 })
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
-
-// 有效数据时间范围常量（已从 dashboard.ts 导入）
-// MOCK_TODAY 已在 dashboard.ts 中定义并导入
 
 // 生成能耗排名数据
 const generateRankingData = (buildingEnergy: any[]) => {
@@ -166,47 +166,18 @@ const updateDeviceStats = async () => {
   }
 }
 
-// // 更新今日 CO₂减排
-// const updateCO2Reduction = async () => {
-//   try {
-//     // 获取今日总能耗（使用有效数据范围内的日期）
-//     const summaryResponse = await getSummary({
-//       building_id: currentBuildingId.value,
-//       start_date: MOCK_TODAY,
-//       end_date: MOCK_TODAY,
-//       time_unit: 'day'
-//     })
-    
-//     const totalEnergy = (summaryResponse.data.data.summary.total_elec || 0) / 1000 // kWh to MWh
-    
-//     // 更新 KPI 数据中的 CO₂减排量
-//     kpiData.value.co2Reduction = Number((totalEnergy * 0.5).toFixed(1)) // 每 MWh 减排 0.5 吨 CO₂
-//   } catch (error) {
-//     console.error('更新 CO₂减排失败:', error)
-//   }
-// }
-
 // 更新 COP(能效比)
 const updateCOP = async () => {
   try {
-    // 基于 MOCK_TODAY 动态计算日期范围（近 7 天）
-    const mockDate = new Date(MOCK_TODAY)
-    const lastWeek = new Date(mockDate)
-    lastWeek.setDate(lastWeek.getDate() - 7)
+    const appStore = useAppStore()
+    const mockToday = appStore.getMockToday()
+    const lastWeek = appStore.getLastWeek()
     
-    // 格式化为 YYYY-MM-DD
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-    }
-    
-    // 调用 COP计算接口
+    // 调用 COP 计算接口
     const response = await calculateCOP({
       building_id: currentBuildingId.value,
-      start_date: formatDate(lastWeek),
-      end_date: MOCK_TODAY
+      start_date: lastWeek,
+      end_date: mockToday
     })
     
     // 后端返回格式：{ avg_cop_cooling, avg_cop_heating }
@@ -224,10 +195,13 @@ const updateCOP = async () => {
 // 更新异常设备数量
 const updateAbnormalDeviceCount = async () => {
   try {
+    const appStore = useAppStore()
+    const mockToday = appStore.MOCK_TODAY
+    
     const anomalyResponse = await detectAnomaly({
       building_id: currentBuildingId.value,
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
+      start_date: mockToday,
+      end_date: mockToday,
       threshold: 2.0
     })
     
@@ -241,22 +215,12 @@ const updateAbnormalDeviceCount = async () => {
 // 更新日环比和周同比 - 使用批量接口
 const updateDayAndWeekChange = async () => {
   try {
-    // 基于 MOCK_TODAY 动态计算昨日和上周同期
-    const mockDate = new Date(MOCK_TODAY)
-    const yesterday = new Date(mockDate)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const lastWeek = new Date(mockDate)
-    lastWeek.setDate(lastWeek.getDate() - 7)
+    const appStore = useAppStore()
+    const mockToday = appStore.getMockToday()
+    const yesterday = appStore.getYesterday()
+    const lastWeek = appStore.getLastWeek()
     
-    // 格式化为 YYYY-MM-DD
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-    }
-    
-    const dates = [MOCK_TODAY, formatDate(yesterday), formatDate(lastWeek)]
+    const dates = [mockToday, yesterday, lastWeek]
     const response = await getDailyComparison({
       building_id: currentBuildingId.value,
       dates: dates
@@ -270,10 +234,9 @@ const updateDayAndWeekChange = async () => {
       dataMap.set(item.date, item.total_elec || 0)
     })
     
-    // 获取各日期的数据（如果没有数据则为 0）
-    const todayEnergy = (dataMap.get(MOCK_TODAY) || 0) / 1000
-    const yesterdayEnergy = (dataMap.get(formatDate(yesterday)) || 0) / 1000
-    const lastWeekEnergy = (dataMap.get(formatDate(lastWeek)) || 0) / 1000
+    const todayEnergy = (dataMap.get(mockToday) || 0) / 1000
+    const yesterdayEnergy = (dataMap.get(yesterday) || 0) / 1000
+    const lastWeekEnergy = (dataMap.get(lastWeek) || 0) / 1000
     
     // 更新日环比和周同比
     kpiData.value.dayChange = yesterdayEnergy > 0 ? ((todayEnergy - yesterdayEnergy) / yesterdayEnergy) * 100 : 0
@@ -286,6 +249,8 @@ const updateDayAndWeekChange = async () => {
 // 更新建筑能耗占比数据 - 使用批量接口
 const updateBuildingEnergyData = async () => {
   try {
+    const mockToday = appStore.getMockToday()
+    
     // 获取建筑列表
     const buildingsResponse = await getBuildings()
     const buildings = buildingsResponse.data.data || []
@@ -297,8 +262,8 @@ const updateBuildingEnergyData = async () => {
     
     // 批量获取所有建筑的能耗数据
     const response = await getBuildingsSummary({
-      start_date: MOCK_TODAY,
-      end_date: MOCK_TODAY,
+      start_date: mockToday,
+      end_date: mockToday,
       time_unit: 'day',
       building_ids: buildingIds
     })

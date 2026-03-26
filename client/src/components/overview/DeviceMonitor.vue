@@ -193,19 +193,19 @@ onUnmounted(() => {
     .stat-header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 6px;
       
       .stat-label {
-        font-size: 14px;
+        font-size: 13px;
         color: #666;
       }
     }
     
     .stat-value {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: bold;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       
       &.success {
         color: #52c41a;
@@ -222,7 +222,7 @@ onUnmounted(() => {
   }
   
   .device-chart-container {
-    height: 250px;
+    height: 200px;
     width: 100%;
   }
 }

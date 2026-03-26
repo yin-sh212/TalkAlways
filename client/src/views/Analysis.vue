@@ -244,10 +244,11 @@ import { getTrendData, getDistributionData, getComparisonData } from '@/api/char
 import { detectAnomaly, getSummary } from '@/api/statistics'
 import { getAnalysisInsights } from '@/api/analysis'
 import { addDocument } from '@/api/admin'
-import { MOCK_TODAY } from '@/api/dashboard'
+import { useAppStore } from '@/store/app'
 
 const router = useRouter()
 const message = useMessage()
+const appStore = useAppStore()
 
 // 状态
 const loading = ref(false)
@@ -343,7 +344,8 @@ const getTimeRangeParams = () => {
     }
   } else {
     const days = filters.timeRange === 'today' ? 1 : filters.timeRange === 'week' ? 7 : 30
-    const endDate = new Date(MOCK_TODAY)
+    const mockToday = appStore.getMockToday()
+    const endDate = new Date(mockToday)
     const startDate = new Date(endDate)
     startDate.setDate(startDate.getDate() - (days - 1))
     

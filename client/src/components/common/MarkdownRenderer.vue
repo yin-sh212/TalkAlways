@@ -14,10 +14,7 @@ const props = defineProps<Props>()
 
 const renderedContent = computed(() => {
   try {
-    return marked.parse(props.content, {
-      breaks: true,
-      gfm: true
-    })
+    return marked.parse(props.content)
   } catch (error) {
     console.error('Markdown 渲染失败:', error)
     return props.content
@@ -37,7 +34,7 @@ const renderedContent = computed(() => {
   margin-top: 12px;
   margin-bottom: 6px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--n-text-color);
 }
 
 .markdown-renderer :deep(h1) {
@@ -64,21 +61,20 @@ const renderedContent = computed(() => {
 }
 
 .markdown-renderer :deep(code) {
-  background: #f5f7f9;
+  background: var(--n-color-modal);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'Courier New', Consolas, monospace;
   font-size: 0.9em;
-  color: #e83e8c;
+  color: var(--n-text-color);
 }
 
 .markdown-renderer :deep(pre) {
-  background: #f6f8fa;
+  background: var(--n-color-modal);
   padding: 10px;
   border-radius: 6px;
   overflow-x: auto;
   margin: 6px 0;
-  border: 1px solid #eaecef;
   line-height: 1.4;
 }
 
@@ -95,7 +91,7 @@ const renderedContent = computed(() => {
 
 .markdown-renderer :deep(strong) {
   font-weight: 600;
-  color: #1890ff;
+  color: var(--n-text-color);
 }
 
 .markdown-renderer :deep(em) {
@@ -103,18 +99,9 @@ const renderedContent = computed(() => {
 }
 
 .markdown-renderer :deep(blockquote) {
-  border-left: 4px solid #1890ff;
+  border-left: 4px solid var(--n-border-color);
   padding-left: 12px;
   margin: 6px 0;
-  color: #666;
-  line-height: 1.5;
-}
-
-.markdown-renderer :deep(li > p) {
-  margin: 2px 0;
-}
-
-.markdown-renderer :deep(p + p) {
-  margin-top: 6px;
+  color: var(--n-text-color-placeholder);
 }
 </style>

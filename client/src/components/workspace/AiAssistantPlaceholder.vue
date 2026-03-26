@@ -69,7 +69,7 @@
 import { ref, nextTick } from 'vue'
 import { Person, Sparkles, Send } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { askQuestion } from '@/api/chat'
+import { askQuestionStream } from '@/api/chat'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue'
 
 interface Message {
@@ -110,6 +110,9 @@ function scrollToBottom() {
   })
 }
 
+// 用于取消流式请求的控制器
+let streamController: AbortController | null = null
+
 async function handleSend() {
   const query = inputValue.value.trim()
   if (!query || loading.value) return
@@ -135,24 +138,31 @@ async function handleSend() {
   scrollToBottom()
 
   try {
-    const response = await askQuestion(query)
-
-    // 移除加载消息
+    // 使用流式输出
+    streamController = new AbortController()
+    let fullContent = ''
+    
+    // 创建助手消息占位（先移除加载消息）
     messages.value.splice(loadingIndex, 1)
-
-    // 检查响应码
-    if (response.data.code !== 200) {
-      throw new Error(response.data.message || '请求失败')
-    }
-
-    // 添加助手回复 - 直接从 response.data 获取答案（扁平化结构）
+    const assistantMessageIndex = messages.value.length
     messages.value.push({
       type: 'assistant',
-      content: response.data.data.answer,
+      content: '',
       time: getCurrentTime()
     })
 
-    scrollToBottom()
+    await askQuestionStream(query, (chunk) => {
+      fullContent += chunk
+      // 更新助手消息内容
+      if (messages.value[assistantMessageIndex]) {
+        messages.value[assistantMessageIndex].content = fullContent
+        scrollToBottom()
+      }
+    })
+
+    // 流式输出完成
+    streamController = null
+
   } catch (error: any) {
     console.error('提问失败:', error)
     message.error('提问失败，请稍后重试')
@@ -170,6 +180,7 @@ async function handleSend() {
     scrollToBottom()
   } finally {
     loading.value = false
+    streamController = null
   }
 }
 

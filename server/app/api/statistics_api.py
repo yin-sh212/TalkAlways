@@ -136,11 +136,33 @@ async def calculate_cop(
         building_id: str = Query(..., description="建筑编号"),
         start_date: str = Query(..., description="开始日期"),
         end_date: str = Query(..., description="结束日期"),
-        cop_type: str = Query("cooling", pattern="^(cooling|heating|both)$", description="COP类型：制冷/供热/两者")
+        cop_type: str = Query("cooling", pattern="^(cooling|heating|both)$", description="COP 类型：制冷/供热/两者")
 ):
-    """计算能效比(COP) - 使用新数据集的实际数据"""
+    """计算能效比 (COP) - 单位：cooling_load 为 W，electricity 为 kWh"""
 
-    # 基础SQL
+    # COP 评估标准
+    COP_STANDARD = {
+        "normal_min": 2.2,      # 正常范围最小值
+        "normal_max": 3.5,      # 正常范围最大值
+        "low_min": 1.8,         # 偏低范围最小值
+        "low_max": 2.2,         # 偏低范围最大值
+        "abnormal_max": 1.8     # 异常范围最大值
+    }
+
+    def evaluate_cop(cop_value):
+        """评估 COP 值是否在正常范围"""
+        if cop_value is None:
+            return {"level": "unknown", "description": "无法评估"}
+        elif cop_value >= COP_STANDARD["normal_min"] and cop_value <= COP_STANDARD["normal_max"]:
+            return {"level": "normal", "description": "正常"}
+        elif cop_value >= COP_STANDARD["low_min"] and cop_value < COP_STANDARD["low_max"]:
+            return {"level": "low", "description": "偏低"}
+        elif cop_value < COP_STANDARD["abnormal_max"]:
+            return {"level": "abnormal", "description": "异常"}
+        else:  # cop_value > normal_max
+            return {"level": "excellent", "description": "优秀"}
+
+    # 基础 SQL
     base_sql = """
         SELECT 
             timestamp,
@@ -165,11 +187,12 @@ async def calculate_cop(
                 "period": f"{start_date} 至 {end_date}",
                 "avg_cop_cooling": None,
                 "avg_cop_heating": None,
+                "evaluation": None,
                 "details": []
             }
         }
 
-    # 计算COP
+    # 计算 COP
     result = []
     cooling_cops = []
     heating_cops = []
@@ -181,16 +204,29 @@ async def calculate_cop(
             "ambient_temp": row['ambient_temp']
         }
 
-        # 制冷COP = 冷冻水冷量 / 耗电量
+        # 制冷 COP 计算
+        # cooling_load 单位：W → 转换为 kW: 除以 1000
+        # electricity 单位：kWh → 该小时平均功率 = 数值 (kW)
+        # COP = 冷量 (kW) / 电功率 (kW) = (cooling_load / 1000) / electricity
         if cop_type in ["cooling", "both"] and row['cooling_load'] and row['cooling_load'] > 0:
-            cop_cooling = row['cooling_load'] / row['electricity']
+            # 冷量转换为 kW
+            cooling_load_kw = row['cooling_load'] / 1000
+            # 电功率（kW）在数值上等于 kWh（因为是 1 小时累计）
+            electricity_kw = row['electricity']
+            cop_cooling = cooling_load_kw / electricity_kw
             item['cop_cooling'] = round(cop_cooling, 2)
+            item['evaluation_cooling'] = evaluate_cop(cop_cooling)
             cooling_cops.append(cop_cooling)
 
-        # 供热COP = 供热能耗 / 耗电量
+        # 供热 COP 计算（如果供热能耗也是 W，同样需要换算）
+        # 如果 heating_load 单位也是 W，同样需要除以 1000
         if cop_type in ["heating", "both"] and row['heating_load'] and row['heating_load'] > 0:
-            cop_heating = row['heating_load'] / row['electricity']
+            # 假设 heating_load 单位也是 W，转换为 kW
+            heating_load_kw = row['heating_load'] / 1000
+            electricity_kw = row['electricity']
+            cop_heating = heating_load_kw / electricity_kw
             item['cop_heating'] = round(cop_heating, 2)
+            item['evaluation_heating'] = evaluate_cop(cop_heating)
             heating_cops.append(cop_heating)
 
         result.append(item)
@@ -198,6 +234,15 @@ async def calculate_cop(
     # 计算平均值
     avg_cooling = sum(cooling_cops) / len(cooling_cops) if cooling_cops else None
     avg_heating = sum(heating_cops) / len(heating_cops) if heating_cops else None
+
+    # 评估整体 COP 水平
+    evaluation = {}
+    if avg_cooling is not None:
+        evaluation['cooling'] = evaluate_cop(avg_cooling)
+        evaluation['cooling']['avg_cop'] = round(avg_cooling, 2)
+    if avg_heating is not None:
+        evaluation['heating'] = evaluate_cop(avg_heating)
+        evaluation['heating']['avg_cop'] = round(avg_heating, 2)
 
     return {
         "code": 200,
@@ -208,6 +253,8 @@ async def calculate_cop(
             "cop_type": cop_type,
             "avg_cop_cooling": round(avg_cooling, 2) if avg_cooling else None,
             "avg_cop_heating": round(avg_heating, 2) if avg_heating else None,
+            "evaluation": evaluation if evaluation else None,
+            "standard": COP_STANDARD,
             "details": result
         }
     }

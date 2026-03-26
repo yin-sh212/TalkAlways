@@ -286,8 +286,8 @@ onUnmounted(() => {
 
 .chart-container {
   width: 100%;
-  min-height: 300px; /* 最小高度确保图表能正常显示 */
-  height: 400px; /* 固定高度避免布局问题 */
+  min-height: 200px;
+  height: 280px;
 }
 
 </style>

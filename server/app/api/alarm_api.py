@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
 from typing import List, Optional, Dict,Any
 from app.database.db import Database
+from app.services.anomaly_detector import detect_combined_alarm
 from datetime import datetime
 
 router = APIRouter(prefix="/api/alarm", tags=["告警管理"])
@@ -959,10 +960,10 @@ async def batch_analyze_alarms(request: BatchAnalysisRequest):
 
 async def search_related_knowledge(alarm_type: str, cause: str) -> List[Dict]:
     """
-    搜索相关知识库条目（需要接入RAG）
+    搜索相关知识库条目（需要接入 RAG）
     """
     try:
-        # 这里可以调用你的RAG服务
+        # 这里可以调用你的 RAG 服务
         # 暂时返回模拟数据
         knowledge_base = {
             "energy": [
@@ -983,5 +984,219 @@ async def search_related_knowledge(alarm_type: str, cause: str) -> List[Dict]:
         return knowledge_base.get(alarm_type, [])
 
     except Exception as e:
-        print(f"知识库搜索失败: {e}")
+        print(f"知识库搜索失败：{e}")
         return []
+
+
+# ========== 实时告警检测接口（动态基线 + 趋势下降） ==========
+
+class AlarmDetectionRequest(BaseModel):
+    """告警检测请求"""
+    building_id: str
+    start_date: str
+    end_date: str
+    metric: str = Query("electricity", pattern="^(electricity|cooling_load|heating_load)$", 
+                        description="检测指标")
+    # 动态基线参数
+    dynamic_window: int = Query(24, ge=6, le=168, description="动态基线窗口大小（小时）")
+    dynamic_threshold: float = Query(2.5, ge=1.5, le=4.0, description="动态基线阈值倍数")
+    # 趋势下降参数
+    trend_window: int = Query(6, ge=3, le=24, description="趋势检测窗口大小")
+    trend_threshold: float = Query(0.3, ge=0.1, le=1.0, description="趋势下降阈值")
+    min_trend_decline: float = Query(0.15, ge=0.05, le=0.5, description="最小下降率")
+
+
+@router.post("/detect")
+async def detect_real_alarms(request: AlarmDetectionRequest):
+    """
+    实时告警检测 - 基于动态基线 + 趋势下降算法
+    
+    与数据集异常点的区别：
+    1. 数据集异常点（is_anomaly）：用于标记历史数据中的统计异常，适合数据分析
+    2. 真实告警：基于业务规则的动态检测，考虑时间序列特征和趋势变化，直接触发告警流程
+    
+    算法特点：
+    - 动态基线：根据滑动窗口自动调整阈值，适应数据的周期性变化
+    - 趋势下降：检测持续下降趋势，预防设备性能衰退
+    """
+    try:
+        # 1. 查询能耗数据
+        sql = """
+            SELECT 
+                timestamp,
+                electricity,
+                cooling_load,
+                heating_load
+            FROM energy_consumption
+            WHERE building_id = %s 
+                AND DATE(timestamp) BETWEEN %s AND %s
+            ORDER BY timestamp
+        """
+        
+        data = await Database.fetch_all(sql, (request.building_id, request.start_date, request.end_date))
+        
+        if not data:
+            return {
+                "code": 200,
+                "message": "未找到数据",
+                "data": {
+                    "building_id": request.building_id,
+                    "period": f"{request.start_date} 至 {request.end_date}",
+                    "total_alarms": 0,
+                    "alarms": []
+                }
+            }
+        
+        # 2. 提取指定指标的数据
+        metric = request.metric
+        values = [row[metric] for row in data if row[metric] is not None]
+        timestamps = [str(row['timestamp']) for row in data if row[metric] is not None]
+        
+        if len(values) < 10:
+            return {
+                "code": 200,
+                "message": "数据量不足，无法检测",
+                "data": {
+                    "building_id": request.building_id,
+                    "period": f"{request.start_date} 至 {request.end_date}",
+                    "metric": metric,
+                    "data_points": len(values),
+                    "total_alarms": 0,
+                    "alarms": []
+                }
+            }
+        
+        # 3. 执行综合告警检测
+        detection_result = detect_combined_alarm(
+            values=values,
+            timestamps=timestamps,
+            dynamic_window=request.dynamic_window,
+            dynamic_threshold=request.dynamic_threshold,
+            trend_window=request.trend_window,
+            trend_threshold=request.trend_threshold,
+            min_trend_decline=request.min_trend_decline
+        )
+        
+        # 4. 构建告警列表
+        alarms = []
+        
+        # 添加动态基线告警
+        for anomaly in detection_result['baseline_anomalies']:
+            alarm_type = "过高" if anomaly['type'] == "过高" else "过低"
+            severity_map = {
+                "critical": {"level": 1, "name": "严重"},
+                "high": {"level": 2, "name": "警告"},
+                "medium": {"level": 3, "name": "中等"},
+                "low": {"level": 4, "name": "提示"}
+            }
+            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "中等"})
+            
+            alarms.append({
+                "alarm_type": "dynamic_baseline",
+                "alarm_level": severity_info["level"],
+                "alarm_level_name": severity_info["name"],
+                "timestamp": anomaly['timestamp'],
+                "metric": metric,
+                "value": anomaly['value'],
+                "baseline_mean": anomaly['baseline_mean'],
+                "baseline_std": anomaly['baseline_std'],
+                "upper_bound": anomaly['upper_bound'],
+                "lower_bound": anomaly['lower_bound'],
+                "deviation": anomaly['deviation'],
+                "description": f"{metric} {alarm_type}，值为{anomaly['value']:.2f}，超出动态基线范围[{anomaly['lower_bound']:.2f}, {anomaly['upper_bound']:.2f}]",
+                "detection_method": "动态基线",
+                "severity": anomaly['severity']
+            })
+        
+        # 添加趋势下降告警
+        for anomaly in detection_result['trend_anomalies']:
+            severity_map = {
+                "critical": {"level": 1, "name": "严重"},
+                "high": {"level": 2, "name": "警告"},
+                "medium": {"level": 3, "name": "中等"},
+                "low": {"level": 4, "name": "提示"}
+            }
+            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "中等"})
+            
+            alarms.append({
+                "alarm_type": "trend_decline",
+                "alarm_level": severity_info["level"],
+                "alarm_level_name": severity_info["name"],
+                "start_timestamp": anomaly['start_timestamp'],
+                "end_timestamp": anomaly['end_timestamp'],
+                "metric": metric,
+                "start_value": anomaly['start_value'],
+                "end_value": anomaly['end_value'],
+                "decline_amount": anomaly['decline_amount'],
+                "decline_rate": anomaly['decline_rate'],
+                "continuous_points": anomaly['continuous_points'],
+                "description": f"{metric} 持续下降{anomaly['continuous_points']}个点，从{anomaly['start_value']:.2f}降至{anomaly['end_value']:.2f}，累计下降{anomaly['decline_rate']}",
+                "detection_method": "趋势下降",
+                "severity": anomaly['severity']
+            })
+        
+        # 按时间排序
+        alarms.sort(key=lambda x: x.get('timestamp', x.get('end_timestamp', '')), reverse=True)
+        
+        return {
+            "code": 200,
+            "message": "成功",
+            "data": {
+                "building_id": request.building_id,
+                "period": f"{request.start_date} 至 {request.end_date}",
+                "metric": metric,
+                "algorithm_params": {
+                    "dynamic_window": request.dynamic_window,
+                    "dynamic_threshold": request.dynamic_threshold,
+                    "trend_window": request.trend_window,
+                    "trend_threshold": request.trend_threshold,
+                    "min_trend_decline": request.min_trend_decline
+                },
+                "summary": detection_result['summary'],
+                "total_alarms": len(alarms),
+                "severity_distribution": {
+                    "critical": len([a for a in alarms if a['severity'] == 'critical']),
+                    "high": len([a for a in alarms if a['severity'] == 'high']),
+                    "medium": len([a for a in alarms if a['severity'] == 'medium']),
+                    "low": len([a for a in alarms if a['severity'] == 'low'])
+                },
+                "method_distribution": {
+                    "dynamic_baseline": len(detection_result['baseline_anomalies']),
+                    "trend_decline": len(detection_result['trend_anomalies'])
+                },
+                "alarms": alarms
+            }
+        }
+        
+    except Exception as e:
+        print(f"告警检测错误：{e}")
+        return {
+            "code": 500,
+            "message": f"检测失败：{str(e)}",
+            "data": None
+        }
+
+
+@router.get("/detect/quick")
+async def quick_detect_alarm(
+    building_id: str = Query(..., description="建筑编号"),
+    start_date: str = Query(..., description="开始日期"),
+    end_date: str = Query(..., description="结束日期"),
+    metric: str = Query("electricity", pattern="^(electricity|cooling_load|heating_load)$", 
+                        description="检测指标")
+):
+    """
+    快速告警检测 - 使用默认参数的简化版本
+    
+    适用于前端快速展示或定时任务批量检测
+    """
+    # 构造默认参数的请求
+    request = AlarmDetectionRequest(
+        building_id=building_id,
+        start_date=start_date,
+        end_date=end_date,
+        metric=metric
+    )
+    
+    # 调用完整的检测接口
+    return await detect_real_alarms(request)

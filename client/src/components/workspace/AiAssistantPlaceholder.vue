@@ -29,7 +29,7 @@
           <n-input
             v-model:value="inputValue"
             type="textarea"
-            placeholder="请输入问题，例如：'B001 建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
+            placeholder="请输入问题，例如：'xxx建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
             :rows="3"
             :disabled="loading"
             @keydown.enter.exact.prevent="handleSend"
@@ -85,7 +85,7 @@ const loading = ref(false)
 const messages = ref<Message[]>([
   {
     type: 'assistant',
-    content: '你好！我是 AI 智能运维助手，可以回答以下问题：\n\n1. **能耗查询**：如 "B001 昨天用电量"\n2. **运维知识**：如 "冷水机组故障处理"\n3. **异常分析**：如 "分析最近能耗异常"\n\n请问有什么可以帮您？',
+    content: '👋 您好！我是 AI 智能运维助手，很高兴为您服务～\n我可以帮您：\n- 📊 **能耗查询**：建筑用电量统计\n- 🔧 **故障诊断**：设备异常分析\n- 📚 **运维知识**：行业规范咨询\n请随时向我提问！',
     time: getCurrentTime()
   }
 ])
@@ -135,9 +135,7 @@ async function handleSend() {
   scrollToBottom()
 
   try {
-    const response = await askQuestion({
-      query
-    })
+    const response = await askQuestion(query)
 
     // 移除加载消息
     messages.value.splice(loadingIndex, 1)
@@ -150,7 +148,7 @@ async function handleSend() {
     // 添加助手回复 - 直接从 response.data 获取答案（扁平化结构）
     messages.value.push({
       type: 'assistant',
-      content: response.data.answer,
+      content: response.data.data.answer,
       time: getCurrentTime()
     })
 
@@ -242,7 +240,7 @@ function handleQuickQuestion(question: string) {
   max-width: 70%;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .message-item.user .message-content {
@@ -250,13 +248,13 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-bubble {
-  padding: 12px 16px;
+  padding: 6px 12px;
   border-radius: 12px;
   background: var(--n-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.6;
+  line-height: 1.4;
 }
 
 .message-item.user .message-bubble {
@@ -298,14 +296,14 @@ function handleQuickQuestion(question: string) {
 /* Markdown 样式 */
 :deep(.markdown-body) {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.4;
 }
 
 :deep(.markdown-body h1),
 :deep(.markdown-body h2),
 :deep(.markdown-body h3) {
-  margin-top: 16px;
-  margin-bottom: 8px;
+  margin-top: 10px;
+  margin-bottom: 6px;
   font-weight: 600;
   color: var(--n-text-color);
 }
@@ -313,23 +311,23 @@ function handleQuickQuestion(question: string) {
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
   padding-left: 20px;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 
 :deep(.markdown-body code) {
   background: var(--n-color-modal);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
   font-family: 'Courier New', monospace;
   color: var(--n-text-color);
 }
 
 :deep(.markdown-body pre) {
   background: var(--n-color-modal);
-  padding: 12px;
+  padding: 10px;
   border-radius: 4px;
   overflow-x: auto;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 :deep(.markdown-body pre code) {
@@ -338,9 +336,9 @@ function handleQuickQuestion(question: string) {
 }
 
 :deep(.markdown-body blockquote) {
-  border-left: 4px solid var(--n-border-color);
-  padding-left: 16px;
-  margin: 8px 0;
+  border-left: 3px solid var(--n-border-color);
+  padding-left: 12px;
+  margin: 6px 0;
   color: var(--n-text-color-placeholder);
 }
 

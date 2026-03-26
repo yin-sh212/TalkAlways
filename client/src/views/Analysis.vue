@@ -55,7 +55,8 @@
                   同图展示电力/冷量/供热曲线 + 气温次 Y 轴，标注异常点
                 </n-tooltip>
               </div>
-              <div ref="trendChartRef" class="chart-container"></div>
+              <n-skeleton v-if="loading" :rows="3" :height="120" />
+              <div v-show="!loading" ref="trendChartRef" class="chart-container"></div>
             </n-grid-item>
 
             <!-- 图表 2：建筑综合评分对比 -->
@@ -69,7 +70,8 @@
                   雷达图展示多建筑在节能性、稳定性、健康度、能效比四个维度的综合表现
                 </n-tooltip>
               </div>
-              <div ref="compareChartRef" class="chart-container"></div>
+              <n-skeleton v-if="loading" :rows="3" :height="120" />
+              <div v-show="!loading" ref="compareChartRef" class="chart-container"></div>
             </n-grid-item>
           </n-grid>
         </n-card>
@@ -81,49 +83,52 @@
           header-style="padding: 16px 24px;"
           content-style="padding: 0 24px 24px;"
         >
-          <n-alert 
-            v-if="currentAnomaly.type !== '无异常'"
-            type="warning" 
-            :title="`今日最严重异常：${currentAnomaly.type}`"
-            closable
-            style="margin-bottom: 16px;"
-          >
-            <template #default>
-              <n-space vertical :size="12">
-                <div><strong>异常表现：</strong>{{ currentAnomaly.description }}</div>
-                <div><strong>关联因素：</strong>{{ currentAnomaly.factors }}</div>
-                <div><strong>影响评估：</strong>{{ currentAnomaly.impact }}</div>
-                <div>
-                  <strong>优化建议：</strong>{{ currentAnomaly.suggestion }}
-                  <n-button 
-                    text 
-                    type="primary" 
-                    size="small"
-                    style="margin-left: 8px;"
-                    @click="saveSuggestionToKnowledge"
-                  >
-                    保存到知识库
-                  </n-button>
-                </div>
-              </n-space>
-            </template>
-          </n-alert>
-          
-          <!-- 无异常时的友好提示 -->
-          <n-alert 
-            v-else
-            type="success" 
-            title="设备运行正常"
-            closable
-            style="margin-bottom: 16px;"
-          >
-            <template #default>
-              <n-space vertical :size="12">
-                <div>当前未检测到明显能耗异常，设备运行平稳。</div>
-                <div>建议：继续保持当前运行策略，定期巡检设备。</div>
-              </n-space>
-            </template>
-          </n-alert>
+          <n-skeleton v-if="loading" :rows="4" :height="60" />
+          <template v-else>
+            <n-alert 
+              v-if="currentAnomaly.type !== '无异常'"
+              type="warning" 
+              :title="`今日最严重异常：${currentAnomaly.type}`"
+              closable
+              style="margin-bottom: 16px;"
+            >
+              <template #default>
+                <n-space vertical :size="12">
+                  <div><strong>异常表现：</strong>{{ currentAnomaly.description }}</div>
+                  <div><strong>关联因素：</strong>{{ currentAnomaly.factors }}</div>
+                  <div><strong>影响评估：</strong>{{ currentAnomaly.impact }}</div>
+                  <div>
+                    <strong>优化建议：</strong>{{ currentAnomaly.suggestion }}
+                    <n-button 
+                      text 
+                      type="primary" 
+                      size="small"
+                      style="margin-left: 8px;"
+                      @click="saveSuggestionToKnowledge"
+                    >
+                      保存到知识库
+                    </n-button>
+                  </div>
+                </n-space>
+              </template>
+            </n-alert>
+            
+            <!-- 无异常时的友好提示 -->
+            <n-alert 
+              v-else
+              type="success" 
+              title="设备运行正常"
+              closable
+              style="margin-bottom: 16px;"
+            >
+              <template #default>
+                <n-space vertical :size="12">
+                  <div>当前未检测到明显能耗异常，设备运行平稳。</div>
+                  <div>建议：继续保持当前运行策略，定期巡检设备。</div>
+                </n-space>
+              </template>
+            </n-alert>
+          </template>
         </n-card>
 
         <!-- 模块 3：能耗优化洞察 -->
@@ -133,46 +138,49 @@
           header-style="padding: 16px 24px;"
           content-style="padding: 0 24px 24px;"
         >
-          <n-list hoverable clickable>
-            <template #header>
-              <div v-if="insights.length === 0" style="padding: 20px; text-align: center; color: var(--text-color-secondary);">
-                <n-empty description="暂无优化洞察数据" />
-              </div>
-            </template>
-            <n-list-item 
-              v-for="(insight, index) in insights" 
-              :key="index"
-              @click="handleInsightClick(insight)"
-            >
-              <template #prefix>
-                <n-icon size="20" :color="insight.color" :component="Bulb" />
+          <n-skeleton v-if="loading" :rows="5" :height="80" />
+          <template v-else>
+            <n-list hoverable clickable>
+              <template #header>
+                <div v-if="insights.length === 0" style="padding: 20px; text-align: center; color: var(--text-color-secondary);">
+                  <n-empty description="暂无优化洞察数据" />
+                </div>
               </template>
-              <n-thing :description="insight.description">
-                <template #header>
-                  <n-space :size="8" align="center">
-                    <span>{{ insight.title }}</span>
-                    <n-tag :type="insight.type" size="small">{{ insight.category }}</n-tag>
-                  </n-space>
+              <n-list-item 
+                v-for="(insight, index) in insights" 
+                :key="index"
+                @click="handleInsightClick(insight)"
+              >
+                <template #prefix>
+                  <n-icon size="20" :color="insight.color" :component="Bulb" />
                 </template>
-                <template #action>
-                  <n-space :size="8">
-                    <n-button text size="small" @click.stop="copyInsight(insight)">
-                      <template #icon>
-                        <n-icon :component="Copy" />
-                      </template>
-                      复制
-                    </n-button>
-                    <n-button text size="small" @click.stop="saveInsightToWorkspace(insight)">
-                      <template #icon>
-                        <n-icon :component="Save" />
-                      </template>
-                      保存
-                    </n-button>
-                  </n-space>
-                </template>
-              </n-thing>
-            </n-list-item>
-          </n-list>
+                <n-thing :description="insight.description">
+                  <template #header>
+                    <n-space :size="8" align="center">
+                      <span>{{ insight.title }}</span>
+                      <n-tag :type="insight.type" size="small">{{ insight.category }}</n-tag>
+                    </n-space>
+                  </template>
+                  <template #action>
+                    <n-space :size="8">
+                      <n-button text size="small" @click.stop="copyInsight(insight)">
+                        <template #icon>
+                          <n-icon :component="Copy" />
+                        </template>
+                        复制
+                      </n-button>
+                      <n-button text size="small" @click.stop="saveInsightToWorkspace(insight)">
+                        <template #icon>
+                          <n-icon :component="Save" />
+                        </template>
+                        保存
+                      </n-button>
+                    </n-space>
+                  </template>
+                </n-thing>
+              </n-list-item>
+            </n-list>
+          </template>
         </n-card>
 
       </n-space>
@@ -241,6 +249,9 @@ import { MOCK_TODAY } from '@/api/dashboard'
 const router = useRouter()
 const message = useMessage()
 
+// 状态
+const loading = ref(false)
+
 // 筛选条件
 const filters = reactive({
   buildingId: '',
@@ -251,9 +262,6 @@ const filters = reactive({
 
 // 自定义日期范围
 const customDateRange = ref<[number, number] | null>(null)
-
-// 固定使用雷达图模式显示综合评分
-const compareDimension = ref('radar')
 
 // 建筑选项
 const buildingOptions = ref<any[]>([])
@@ -278,6 +286,8 @@ const compareChartRef = ref<HTMLElement | null>(null)
 
 // 加载建筑列表
 const loadBuildings = async () => {
+  loading.value = true
+  
   try {
     const response = await getBuildings()
     const buildings: any[] = response.data.data || []
@@ -294,14 +304,10 @@ const loadBuildings = async () => {
     }
   } catch (error) {
     console.error('获取建筑列表失败:', error)
-    // 使用 Mock 数据
-    buildingOptions.value = [
-      { label: '行政楼', value: 'B001' },
-      { label: '教学楼 A', value: 'B002' },
-      { label: '教学楼 B', value: 'B003' }
-    ]
-    filters.buildingId = 'B001'
-    handleFilterChange()
+    message.error('获取建筑列表失败，请检查后端服务')
+    buildingOptions.value = []
+  } finally {
+    loading.value = false
   }
 }
 
@@ -364,6 +370,8 @@ const handleFilterChange = async () => {
 const loadAnalysisData = async () => {
   if (!filters.buildingId) return
   
+  loading.value = true
+  
   try {
     // 获取时间范围参数
     const timeParams = getTimeRangeParams()
@@ -391,6 +399,24 @@ const loadAnalysisData = async () => {
         end_date: timeParams.end_date,
         threshold: 2.0
       })
+      // 更新异常数据
+      if (anomalyRes?.data?.data?.anomaly_type && anomalyRes.data.data.anomaly_type !== '无异常') {
+        currentAnomaly.value = {
+          type: anomalyRes.data.data.anomaly_type || '未知异常',
+          description: anomalyRes.data.data.description || '未描述',
+          factors: anomalyRes.data.data.factors || '未分析',
+          impact: anomalyRes.data.data.impact || '未评估',
+          suggestion: anomalyRes.data.data.suggestion || '无建议'
+        }
+      } else {
+        currentAnomaly.value = {
+          type: '无异常',
+          description: '当前未检测到明显能耗异常',
+          factors: '设备运行平稳',
+          impact: '无额外能耗损失',
+          suggestion: '继续保持当前运行策略，定期巡检设备'
+        }
+      }
     } catch (error) {
       console.error('加载异常检测数据失败:', error)
     }
@@ -398,11 +424,6 @@ const loadAnalysisData = async () => {
     // 3. 加载分析洞察数据
     let insightsRes: any = null
     try {
-      console.log('[Analysis] 请求洞察数据，参数:', {
-        building_id: filters.buildingId,
-        days: timeParams.days,
-        end_date: timeParams.end_date
-      })
       insightsRes = await getAnalysisInsights({
         building_id: filters.buildingId,
         days: timeParams.days,
@@ -427,6 +448,8 @@ const loadAnalysisData = async () => {
   } catch (error) {
     console.error('加载分析数据失败:', error)
     message.error('加载数据失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -435,178 +458,122 @@ const loadComparisonData = async (startDate?: string, endDate?: string) => {
   await loadAllBuildingsComparison()
 }
 
-// 使用 Mock 数据更新对比图表
-const updateCompareChartWithMock = () => {
-  if (!compareChartRef.value) return
-  
-  if (!compareChart) {
-    compareChart = echarts.init(compareChartRef.value)
-  }
-  
-  const mockData = {
-    categories: ['行政楼', '教学楼 A', '教学楼 B', '图书馆', '实验楼'],
-    series: [{
-      name: '总用电量 (kWh)',
-      data: [120, 132, 101, 134, 90]
-    }]
-  }
-  
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: (params: any) => {
-        const point = params[0]
-        return `<div style="font-weight: bold;">${point.name}</div>
-                <div>${point.marker} 能耗：${point.value} MWh</div>`
-      }
-    },
-    legend: {
-      orient: 'horizontal',
-      bottom: 10,
-      left: 'center',
-      itemWidth: 12,
-      itemHeight: 12,
-      textStyle: {
-        fontSize: 12,
-      },
-      data: mockData.series.map((s: any) => s.name),
-    },
-    grid: {
-      left: '3%',
-      right: '3%',
-      bottom: '15%',
-      containLabel: true,
-    },
-    xAxis: {
-      type: 'category',
-      data: mockData.categories
-    },
-    yAxis: {
-      type: 'value',
-      name: '能耗 (MWh)'
-    },
-    series: [{
-      name: mockData.series[0].name,
-      type: 'bar',
-      data: mockData.series[0].data,
-      itemStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#83bff6' },
-          { offset: 1, color: '#188df0' }
-        ])
-      }
-    }]
-  }
-  
-  compareChart.setOption(option)
-}
-
 // 更新趋势图表 - 支持小时/天粒度切换
 const updateTrendChart = (data: any, isSingleDay: boolean = false) => {
-  if (!trendChartRef.value) return
-  
-  if (!trendChart) {
-    trendChart = echarts.init(trendChartRef.value)
+  if (!trendChartRef.value) {
+    console.error('[Analysis] 趋势图表容器不存在')
+    return
   }
   
-  const categories = data.categories || []
-  const series = data.series || []
-  
-  // 根据是否为单天设置不同的 X 轴标签
-  const xAxisConfig = isSingleDay ? {
-    type: 'category' as const,
-    name: '时间',
-    axisLabel: {
-      formatter: '{value}:00',
-      rotate: 45
+  // 确保在 DOM 渲染完成后执行
+  nextTick(() => {
+    if (!trendChartRef.value) return
+    
+    if (!trendChart) {
+      trendChart = echarts.init(trendChartRef.value)
     }
-  } : {
-    type: 'category' as const,
-    name: '日期',
-    axisLabel: {
-      formatter: (value: string) => {
-        // 简化日期显示
-        const date = new Date(value)
-        return `${date.getMonth() + 1}/${date.getDate()}`
-      },
-      rotate: 45
-    }
-  }
-  
-  const option: EChartsOption = {
-    ...getLineChartConfig(categories, series.map((s: any) => ({
-      name: s.name,
-      data: s.data,
-      areaStyle: !!s.areaStyle,
-      smooth: true
-    })), {
-      yAxisName: isSingleDay ? '功率 (kW)' : '能耗 (MWh)',
-      tooltipFormatter: isSingleDay 
-        ? '{b}:00 - {c} kW' 
-        : '{b}: {c} MWh',
-      grid: {
-        left: '3%',
-        right: '3%',
-        bottom: '15%',
-        containLabel: true,
+    
+    const categories = data.categories || []
+    const series = data.series || []
+    
+    // 根据是否为单天设置不同的 X 轴标签
+    const xAxisConfig = isSingleDay ? {
+      type: 'category' as const,
+      name: '时间',
+      axisLabel: {
+        formatter: '{value}:00',
+        rotate: 45
       }
-    }),
-    legend: {
-      orient: 'horizontal',
-      bottom: 10,
-      left: 'center',
-      itemWidth: 12,
-      itemHeight: 12,
-      textStyle: {
-        fontSize: 12,
-      },
-      data: series.map((s: any) => s.name),
-    },
-    xAxis: {
-      ...xAxisConfig,
-      data: categories
+    } : {
+      type: 'category' as const,
+      name: '日期',
+      axisLabel: {
+        formatter: (value: string) => {
+          // 简化日期显示
+          const date = new Date(value)
+          return `${date.getMonth() + 1}/${date.getDate()}`
+        },
+        rotate: 45
+      }
     }
-  }
-  
-  trendChart.setOption(option)
+    
+    const option: EChartsOption = {
+      ...getLineChartConfig(categories, series.map((s: any) => ({
+        name: s.name,
+        data: s.data,
+        areaStyle: !!s.areaStyle,
+        smooth: true
+      })), {
+        yAxisName: isSingleDay ? '功率 (kW)' : '能耗 (MWh)',
+        tooltipFormatter: isSingleDay 
+          ? '{b}:00 - {c} kW' 
+          : '{b}: {c} MWh',
+        grid: {
+          left: '3%',
+          right: '3%',
+          bottom: '15%',
+          containLabel: true,
+        }
+      }),
+      legend: {
+        orient: 'horizontal',
+        bottom: 10,
+        left: 'center',
+        itemWidth: 12,
+        itemHeight: 12,
+        textStyle: {
+          fontSize: 12,
+        },
+        data: series.map((s: any) => s.name),
+      },
+      xAxis: {
+        ...xAxisConfig,
+        data: categories
+      }
+    }
+    
+    trendChart.setOption(option)
+  })
 }
 
 // 更新对比图表 - 支持多维度切换和雷达图
 const updateCompareChartWithDimension = (data: any) => {
-  if (!compareChartRef.value) {
-    console.error('[Analysis] 图表容器不存在')
-    return
-  }
-  
-  if (!compareChart) {
-    compareChart = echarts.init(compareChartRef.value)
-  }
-  
-  // 后端直接返回 radar_data，不需要再访问 data.radar_data
-  const radarData = data
-  
-  if (!radarData || !radarData.buildings || radarData.buildings.length === 0) {
-    console.error('[Analysis] 警告：没有有效的雷达图数据')
-    return
-  }
-  
-  // 固定使用雷达图模式 - 每个建筑一个多边形，多个指标作为轴
-  const seriesData = radarData.buildings.map((b: any, index: number) => {
-    return {
-      name: b.building_name,
-      value: b.values,
-      color: CHART_COLORS.palette[index % CHART_COLORS.palette.length]
+  // 确保在 DOM 渲染完成后执行
+  nextTick(() => {
+    if (!compareChartRef.value) {
+      console.error('[Analysis] 对比图表容器不存在')
+      return
     }
+    
+    if (!compareChart) {
+      compareChart = echarts.init(compareChartRef.value)
+    }
+    
+    // 后端直接返回 radar_data，不需要再访问 data.radar_data
+    const radarData = data
+    
+    if (!radarData || !radarData.buildings || radarData.buildings.length === 0) {
+      console.error('[Analysis] 警告：没有有效的雷达图数据')
+      return
+    }
+    
+    // 固定使用雷达图模式 - 每个建筑一个多边形，多个指标作为轴
+    const seriesData = radarData.buildings.map((b: any, index: number) => {
+      return {
+        name: b.building_name,
+        value: b.values,
+        color: CHART_COLORS.palette[index % CHART_COLORS.palette.length]
+      }
+    })
+    
+    const option = getRadarChartConfig(radarData.indicators, seriesData, {
+      title: '建筑综合评分对比',
+      shape: 'circle',
+      splitNumber: 5
+    })
+    
+    compareChart.setOption(option)
   })
-  
-  const option = getRadarChartConfig(radarData.indicators, seriesData, {
-    title: '建筑综合评分对比',
-    shape: 'circle',
-    splitNumber: 5
-  })
-  
-  compareChart.setOption(option)
 }
 
 
@@ -695,6 +662,11 @@ const handleRefresh = async () => {
 
 // 导出分析报告
 const handleExport = async () => {
+  if (loading.value) {
+    message.warning('数据加载中，请稍后再试')
+    return
+  }
+  
   try {
     message.loading('正在生成分析报告...')
     
@@ -770,6 +742,7 @@ const loadAllBuildingsComparison = async () => {
     
     if (allBuildingIds.length === 0) {
       console.warn('[Analysis] 没有可用的建筑')
+      message.warning('暂无建筑数据')
       return
     }
     
@@ -782,14 +755,14 @@ const loadAllBuildingsComparison = async () => {
     
     if (!response.data?.data) {
       console.error('[Analysis] 错误：后端返回的数据为空')
-      updateCompareChartWithMock()
+      message.error('加载对比数据失败')
       return
     }
     
     updateCompareChartWithDimension(response.data.data)
   } catch (error) {
     console.error('[Analysis] ❌ 加载多建筑对比数据失败:', error)
-    updateCompareChartWithMock()
+    message.error('加载对比数据失败')
   }
 }
 
@@ -814,9 +787,7 @@ onMounted(async () => {
     filters.buildingId = buildingOptions.value[0].value
   }
   
-  // 加载分析数据（包括所有建筑的对比数据）
-  await loadAnalysisData()
-  
+ 
   // 监听窗口大小变化
   window.addEventListener('resize', () => {
     trendChart?.resize()

@@ -1,192 +1,178 @@
 # app/api/chat_api.py
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
-import os
+from typing import Dict, Any
 import traceback
 from app.services.rag_pipeline import rag_pipeline
 from app.services.llm_client import llm_client
-from app.database.db import Database
 import datetime
+import json
 
 router = APIRouter(prefix="/api/chat", tags=["智能问答"])
 
 
-class Question(BaseModel):
-    """问答请求模型"""
-    query: str = Field(
-        ...,
-        description="用户问题（必填）",
-        example="冷水机组故障怎么处理"
-    )
+class QuestionRequest(BaseModel):
+    query: str = Field(..., description="用户输入的问题文字")
 
 
-class ApiResponse(BaseModel):
-    """统一 API 响应结构"""
-    code: int = Field(..., description="状态码：200 成功，其他表示失败")
-    message: str = Field(..., description="响应消息")
-    data: Optional[Dict] = Field(None, description="响应数据")
+class StreamQuestionRequest(BaseModel):
+    query: str = Field(..., description="用户输入的问题文字")
 
 
-# RAG 初始化标志
-_rag_initialized = False
-
-
-async def init_rag():
-    """初始化 RAG（在首次使用时）"""
-    global _rag_initialized
-    if not _rag_initialized:
-        count = rag_pipeline.initialize_knowledge_base()
-        print(f"✅ RAG 初始化完成，加载 {count} 个文档块")
-        _rag_initialized = True
+async def stream_generator(full_prompt: str):
+    """SSE 流式生成器"""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    try:
+        # 在线程池中运行同步的生成器
+        executor = ThreadPoolExecutor(max_workers=1)
+        loop = asyncio.get_event_loop()
+        
+        # 获取生成器
+        generator = await loop.run_in_executor(
+            executor, 
+            lambda: llm_client.generate_stream(full_prompt)
+        )
+        
+        # 遍历生成器并输出 SSE 格式
+        for chunk in generator:
+            sse_data = json.dumps({
+                "code": 200,
+                "data": {
+                    "content": chunk
+                }
+            }, ensure_ascii=False)
+            yield f"data: {sse_data}\n\n"
+        
+        # 发送结束标记
+        yield "data: [DONE]\n\n"
+        
+    except Exception as e:
+        print(f"流式生成失败：{e}")
+        traceback.print_exc()
+        error_data = json.dumps({
+            "code": 500,
+            "message": str(e),
+            "data": {
+                "content": ""
+            }
+        }, ensure_ascii=False)
+        yield f"data: {error_data}\n\n"
 
 
 @router.post(
     "/ask",
-    response_model=ApiResponse,
     summary="智能问答",
     description="所有问题都通过 RAGFlow 助手回答"
 )
-async def ask_question(question: Question):
-    """
-    RAG 问答接口 - 统一调用 ML 同学的 RAGFlow 助手
-
-    ## 使用示例
-
-    ### 基础问答
-    ```json
-    {
-        "query": "冷水机组故障怎么处理"
-    }
-    ```
-    """
-    # 确保 RAG 已初始化
-    await init_rag()
-
-    print(f"📝 收到问题：{question.query}")
+async def ask_question(question: QuestionRequest):
+    """智能问答接口 - 调用真实 AI API"""
+    print(f"收到问题：{question.query}")
 
     try:
-        # 获取原始问题
-        original_query = question.query
-        building_id = "B001"  # 默认建筑编号
+        # 构建更有针对性的提示词
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 优化提示词，让 AI 更好地理解问题
+        system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
+注意：
+1. 直接回答问题，不要重复自我介绍
+2. 如果是查询类问题，说明需要的数据维度
+3. 如果是故障处理，给出具体的排查步骤
+4. 保持回答在 200-500 字之间"""
 
-        # ========== 步骤 1：处理数据查询类问题 ==========
-        # 检查问题是否涉及数据查询
-        data_keywords = ['用电', '电量', '能耗', '多少', '统计', 'kwh', '度', '水耗', '用水',
-                         '7 月', '8 月', '9 月', '昨天', '今天', '上周', '本月', '上月',
-                         '日能耗', '月能耗', '年能耗', '用电量', '用水量']
-        is_data_query = any(keyword in original_query for keyword in data_keywords)
+        full_prompt = f"{system_prompt}\n\n当前时间：{current_time}\n\n用户问题：{question.query}"
+        
+        # 调用 LLM 客户端生成回答（先尝试主助手）
+        answer = llm_client.generate(full_prompt, use_alt=False)
 
-        enhanced_query = original_query
+        # 如果主助手返回 None（表示失败或标准欢迎语），尝试使用备用助手
+        if answer is None or (len(answer) > 300 and ("中建八局二建" in answer or "擎翼数字中枢" in answer)):
+            print("⚠️ 主助手无效，尝试使用备用助手...")
+            answer = llm_client.generate(full_prompt, use_alt=True)
+        
+        # 如果备用助手还是返回标准欢迎语或 None，提供一个通用的友好回答
+        if answer is None or (len(answer) > 300 and ("中建八局二建" in answer or "擎翼数字中枢" in answer)):
+            print("⚠️ 备用助手也无效，使用通用回答模板...")
+            answer = f"""您好！关于"{question.query}"这个问题，我需要更多上下文信息才能给您准确的回答。
 
-        if is_data_query:
-            # 查询数据库获取实时数据
-            try:
-                # 查询总用电量
-                sql_total = "SELECT SUM(electricity) as total FROM energy_consumption WHERE building_id = %s"
-                result_total = await Database.fetch_one(sql_total, (building_id,))
-                total_value = result_total['total'] if result_total else 0
+建议您：
+1. **明确建筑/设备编号**：如"A 栋教学楼"、"3 号配电箱"
+2. **指定时间范围**：如"昨天"、"最近一周"、"2024 年 10 月"
+3. **描述具体问题**：如"用电量异常偏高"、"设备频繁报警"
 
-                # 查询最近 7 天趋势
-                sql_trend = """
-                    SELECT 
-                        DATE(timestamp) as date,
-                        SUM(electricity) as daily_total
-                    FROM energy_consumption 
-                    WHERE building_id = %s 
-                        AND timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                    GROUP BY DATE(timestamp)
-                    ORDER BY date DESC
-                """
-                trend_data = await Database.fetch_all(sql_trend, (building_id,))
+示例提问：
+- "A 栋教学楼昨天的单位建筑面积能耗是多少？"
+- "冷水机组高压报警怎么处理？请给出具体步骤"
+- "分析最近一周 3 号配电箱的用电异常"
 
-                # 构建数据上下文
-                data_context = f"""
-【实时数据】
-- 建筑编号：{building_id}
-- 总用电量：{float(total_value):.2f} kWh
-- 最近 7 天趋势：
-"""
-                for item in trend_data[:7]:
-                    data_context += f"  - {item['date']}: {float(item['daily_total']):.2f} kWh\n"
+我会根据您提供的详细信息，给出更精准的专业建议。"""
 
-                # 增强问题
-                enhanced_query = f"{original_query}\n\n{data_context}"
-                print(f"📊 数据查询增强完成")
+        print(f"✅ 回答成功，长度：{len(answer)} 字符")
+        
+        # 统一响应格式
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "answer": answer
+            }
+        }
 
-            except Exception as db_error:
-                print(f"⚠️ 数据库查询失败：{db_error}")
-                # 即使数据库查询失败，也继续处理
-                enhanced_query = f"{original_query}\n\n【提示】数据库查询失败，请检查数据源"
+    except Exception as e:
+        print(f"处理失败：{e}")
+        traceback.print_exc()
+        return {
+            "code": 500,
+            "message": f"处理失败：{str(e)}",
+            "data": {
+                "answer": "抱歉，服务器内部错误，请稍后再试。"
+            }
+        }
 
-        # ========== 步骤 2：调用 RAGFlow 助手 ==========
-        # 使用主助手回答问题
-        result = rag_pipeline.answer(enhanced_query, use_alt=False)
 
-        # ========== 步骤 3：返回结果 ==========
-        print(f"✅ 回答成功，长度：{len(result['answer'])} 字符")
+@router.post(
+    "/ask/stream",
+    summary="智能问答（流式输出）",
+    description="使用 SSE 流式输出 AI 回答"
+)
+async def ask_question_stream(question: StreamQuestionRequest):
+    """智能问答接口 - 流式版本"""
+    print(f"收到流式问题：{question.query}")
 
-        return ApiResponse(
-            code=200,
-            message="回答成功",
-            data={
-                "answer": result['answer'],
-                "type": "knowledge",
-                "sources": result.get('sources')
+    try:
+        # 构建提示词
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
+注意：
+1. 直接回答问题，不要重复自我介绍
+2. 如果是查询类问题，说明需要的数据维度
+3. 如果是故障处理，给出具体的排查步骤
+4. 保持回答在 200-500 字之间"""
+
+        full_prompt = f"{system_prompt}\n\n当前时间：{current_time}\n\n用户问题：{question.query}"
+        
+        # 返回 SSE 流
+        return StreamingResponse(
+            stream_generator(full_prompt),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
             }
         )
 
     except Exception as e:
-        # ========== 错误处理 ==========
-        print(f"❌ 处理失败：{e}")
+        print(f"流式接口失败：{e}")
         traceback.print_exc()
-
-        # 友好的错误提示
-        error_message = str(e)
-        if "ConnectionError" in error_message or "timeout" in error_message.lower():
-            user_message = "网络连接失败，请稍后重试。"
-        elif "404" in error_message:
-            user_message = "RAGFlow 服务未找到，请联系管理员检查服务状态。"
-        elif "500" in error_message:
-            user_message = "服务器内部错误，请稍后重试。"
-        elif "Unauthorized" in error_message or "401" in error_message:
-            user_message = "API 认证失败，请联系管理员检查配置。"
-        else:
-            user_message = f"处理失败：{error_message[:100]}"
-
-        return ApiResponse(
-            code=500,
-            message=f"抱歉，{user_message}",
-            data=None
-        )
-
-
-@router.get("/health")
-async def health():
-    """健康检查"""
-    stats = rag_pipeline.get_stats()
-    return {
-        "status": "ok",
-        "service": "chat_api",
-        "rag_stats": stats
-    }
-
-
-@router.get("/assistants")
-async def list_assistants():
-    """列出可用的聊天助手"""
-    return {
-        "assistants": [
-            {
-                "name": "main",
-                "description": "主聊天助手",
-                "chat_id": llm_client.chat_id_main
-            },
-            {
-                "name": "alt",
-                "description": "备用聊天助手",
-                "chat_id": llm_client.chat_id_alt
+        return {
+            "code": 500,
+            "message": f"处理失败：{str(e)}",
+            "data": {
+                "answer": "抱歉，服务器内部错误，请稍后再试。"
             }
-        ],
-        "default": "main"
-    }
+        }

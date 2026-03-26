@@ -33,7 +33,7 @@
     </n-grid-item>
 
     <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
+      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;" @click="handleDeviceClick" style="cursor: pointer;">
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">在线设备率</span>
@@ -62,9 +62,21 @@
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">能效比 (COP)</span>
-            <n-icon size="20" color="#52c41a">
-              <Leaf />
-            </n-icon>
+            <n-space align="center">
+              <n-tooltip placement="bottom">
+                <template #trigger>
+                  <n-icon size="18" color="#999" style="cursor: help;">
+                    <HelpCircleOutline />
+                  </n-icon>
+                </template>
+                COP = 制热量 / 输入功率<br/>
+                根据能耗与温差计算得出<br/>
+                数值越高表示能效越好
+              </n-tooltip>
+              <n-icon size="20" color="#52c41a">
+                <Leaf />
+              </n-icon>
+            </n-space>
           </n-space>
         </template>
         <n-skeleton v-if="loading" :rows="2" />
@@ -106,10 +118,16 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Flash, Leaf, TrendingUp, FlashOutline as Device, Flash as EnergyIcon } from '@vicons/ionicons5'
+import { useRouter } from 'vue-router'
 import { 
   ArrowUpOutline as ArrowUpward, 
-  ArrowDownOutline as ArrowDownward 
+  ArrowDownOutline as ArrowDownward,
+  Flash, 
+  Leaf, 
+  TrendingUp, 
+  FlashOutline as Device, 
+  Flash as EnergyIcon, 
+  HelpCircleOutline 
 } from '@vicons/ionicons5'
 import type { KPIData } from '@/types/dashboard'
 
@@ -119,6 +137,12 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const router = useRouter()
+
+const handleDeviceClick = () => {
+  router.push({ path: '/workspace', query: { tab: 'devices' } })
+}
 </script>
 
 <style scoped lang="scss">

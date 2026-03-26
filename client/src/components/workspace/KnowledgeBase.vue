@@ -464,7 +464,7 @@ const handleDeleteDocument = async (doc: Document) => {
   try {
     const response = await deleteKnowledgeDocument(doc.id);
     
-    if (response.data.code === 200 && response.data.data.success) {
+    if (response.data.code === 200 && response.data.data?.success) {
       message.success('文档删除成功');
       // 刷新文档列表
       await fetchDocuments();
@@ -629,7 +629,7 @@ const fetchDocuments = async () => {
     });
     
     // response 是 AxiosResponse，需要访问 .data 获取业务数据
-    if (response.data.code === 200) {
+    if (response.data.code === 200 && response.data.data?.list) {
       documents.value = response.data.data.list as Document[];
       console.log('[KnowledgeBase] 获取文档列表成功:', documents.value.length);
     } else {

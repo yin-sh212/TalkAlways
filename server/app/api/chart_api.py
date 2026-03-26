@@ -10,15 +10,23 @@ router = APIRouter(prefix="/api/charts", tags=["图表数据"])
 @router.get("/trend")
 async def get_trend_data(
         building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
-        days: int = Query(7, ge=1, le=30, description="天数，默认 7 天"),
-        end_date: str = Query(default="2016-08-15", description="截止日期，格式：YYYY-MM-DD，例如：2016-08-15")
+        start_date: Optional[str] = Query(default=None, description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
+        end_date: str = Query(default="2016-08-15", description="截止日期，格式：YYYY-MM-DD，例如：2016-08-15"),
+        days: Optional[int] = Query(default=None, ge=1, le=365, description="天数，可选，若未提供则根据 start_date 和 end_date 计算")
 ):
     """获取趋势图数据（ECharts 格式）- 根据时间范围动态调整粒度"""
     try:
-        # 计算开始日期
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        start_dt = end_dt - timedelta(days=days-1)
-        start_date = start_dt.strftime("%Y-%m-%d")
+        # 如果提供了 start_date，则根据 start_date 和 end_date 计算实际天数
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            days = (end_dt - start_dt).days + 1  # 包含首尾两天
+        else:
+            # 如果没有提供 start_date，使用 days 参数（默认 7 天）
+            days = days or 7
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            start_dt = end_dt - timedelta(days=days-1)
+            start_date = start_dt.strftime("%Y-%m-%d")
         
         # 根据天数决定时间粒度
         if days == 1:
@@ -27,7 +35,7 @@ async def get_trend_data(
             select_time = "DATE(timestamp) as date, HOUR(timestamp) as hour"
             format_time = lambda item: f"{item['date']} {item['hour']:02d}:00"
         else:
-            # 7 天/30 天：按天展示
+            # 多天：按天展示
             group_by = "DATE(timestamp)"
             select_time = "DATE(timestamp) as date"
             format_time = lambda item: str(item['date'])
@@ -232,60 +240,54 @@ async def get_comparison_data(
 
 
 @router.get("/distribution")
-async def get_distribution_data(
+async def get_alarm_distribution(
         building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
-        date: str = Query(default="2016-08-15", description="日期，格式：YYYY-MM-DD")
+        start_date: str = Query(default="2016-08-14", description="开始日期，格式：YYYY-MM-DD"),
+        end_date: str = Query(default="2016-08-15", description="结束日期，格式：YYYY-MM-DD")
 ):
-    """获取 24 小时能耗分布数据（按小时统计）"""
+    """获取告警类型分布数据（饼图）- 按告警类型统计数量"""
     try:
-        # 查询指定日期的 24 小时能耗数据
+        # 按告警类型统计数量
         sql = """
             SELECT 
-                HOUR(timestamp) as hour,
-                AVG(electricity) as avg_elec
-            FROM energy_consumption
+                alarm_type,
+                COUNT(*) as count
+            FROM alarms
             WHERE building_id = %s 
-                AND DATE(timestamp) = %s
-            GROUP BY HOUR(timestamp)
-            ORDER BY hour ASC
+                AND DATE(start_time) BETWEEN %s AND %s
+            GROUP BY alarm_type
+            ORDER BY count DESC
         """
         
-        data = await Database.fetch_all(sql, (building_id, date))
+        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
         
-        # 生成 24 小时的数据（0-23 点）
-        categories = [f"{h:02d}:00" for h in range(24)]
-        values = [0.0] * 24
-        
-        # 填充实际数据
+        # 转换为饼图数据格式
+        result = []
         for item in data:
-            hour = int(item['hour'])
-            if 0 <= hour < 24:
-                values[hour] = float(item['avg_elec']) if item['avg_elec'] is not None else 0.0
-        
-        series = [
-            {
-                "name": "平均用电量",
-                "type": "line",
-                "data": values,
-                "areaStyle": {"opacity": 0.2},
-                "smooth": True,
-                "lineStyle": {"width": 2}
+            alarm_type = item['alarm_type'] or '未知类型'
+            count = int(item['count']) if item['count'] else 0
+            
+            # 根据告警类型设置名称
+            type_names = {
+                'equipment': '设备告警',
+                'energy': '能耗告警',
+                'environment': '环境告警'
             }
-        ]
+            
+            result.append({
+                "name": type_names.get(alarm_type, alarm_type),
+                "value": count
+            })
         
         return {
             "code": 200,
-            "data": {
-                "categories": categories,
-                "series": series
-            }
+            "data": result
         }
+    
     except Exception as e:
+        print(f"❌ 获取告警分布失败：{e}")
         return {
             "code": 500,
-            "message": f"获取分布数据失败：{str(e)}",
-            "data": {
-                "categories": [],
-                "series": []
-            }
+            "message": f"获取告警分布失败：{str(e)}",
+            "data": []
         }

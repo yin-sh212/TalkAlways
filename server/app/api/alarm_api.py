@@ -367,6 +367,8 @@ async def get_alarm_list(
         status: Optional[str] = Query(None, description="过滤状态：pending/confirmed/resolved"),
         building_id: Optional[str] = Query(None, description="建筑编号"),
         alarm_level: Optional[int] = Query(None, description="告警级别"),
+        start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
+        end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）"),
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(20, ge=1, le=100, description="每页数量")
 ):
@@ -385,6 +387,14 @@ async def get_alarm_list(
         if alarm_level:
             conditions.append("alarm_level = %s")
             params.append(alarm_level)
+        
+        # 添加时间范围过滤
+        if start_date:
+            conditions.append("DATE(start_time) >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(start_time) <= %s")
+            params.append(end_date)
 
         where_clause = " AND ".join(conditions)
 

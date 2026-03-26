@@ -10,13 +10,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
 import { getLineChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+
+// 定义 props
+const props = defineProps<{
+  trendData?: any
+  loading?: boolean
+}>()
 
 interface AlarmDataItem {
   time: string
@@ -87,6 +93,13 @@ const updateChart = (data: any) => {
   chart.setOption(option)
 }
 
+// 监听 trendData 变化
+watch(() => props.trendData, (newData) => {
+  if (newData) {
+    updateChart(newData)
+  }
+}, { deep: true })
+
 // 处理 resize
 const handleResize = () => {
   if (chart && !chart.isDisposed()) {
@@ -124,9 +137,3 @@ defineExpose({
   clearChart
 })
 </script>
-
-<style scoped>
-.chart-container {
-  width: 100%;
-}
-</style>

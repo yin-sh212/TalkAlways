@@ -75,7 +75,8 @@ export const getAlarmTrend = (params: {
 // 获取告警分布数据
 export const getAlarmDistribution = (params: {
   building_id?: string
-  date?: string
+  start_date?: string
+  end_date?: string
 }) => {
   return http.get('/charts/distribution', { params })
 }
@@ -205,6 +206,8 @@ export interface AlarmListParams {
   status?: string
   building_id?: string
   alarm_level?: number
+  start_date?: string
+  end_date?: string
   page?: number
   page_size?: number
 }

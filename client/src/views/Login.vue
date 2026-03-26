@@ -18,10 +18,10 @@
             label-placement="left"
             label-width="auto"
           >
-            <n-form-item path="username" label="用户名">
+            <n-form-item path="account" label="用户名">
               <n-input
-                v-model:value="loginForm.username"
-                placeholder="请输入用户名"
+                v-model:value="loginForm.account"
+                placeholder="请输入用户名/手机号/邮箱"
                 size="large"
                 @keyup.enter="handleLogin"
               />
@@ -59,10 +59,18 @@
             label-placement="left"
             label-width="auto"
           >
-            <n-form-item path="username" label="用户名">
+            <n-form-item path="name" label="用户名">
               <n-input
-                v-model:value="registerForm.username"
+                v-model:value="registerForm.name"
                 placeholder="请输入用户名"
+                size="large"
+              />
+            </n-form-item>
+
+            <n-form-item path="phone" label="手机号">
+              <n-input
+                v-model:value="registerForm.phone"
+                placeholder="请输入手机号（与邮箱二选一）"
                 size="large"
               />
             </n-form-item>
@@ -70,7 +78,7 @@
             <n-form-item path="email" label="邮箱">
               <n-input
                 v-model:value="registerForm.email"
-                placeholder="请输入邮箱"
+                placeholder="请输入邮箱（与手机号二选一）"
                 size="large"
               />
             </n-form-item>
@@ -129,13 +137,13 @@ const activeTab = ref('login')
 const loginFormRef = ref<FormInst | null>(null)
 const loginLoading = ref(false)
 const loginForm = ref({
-  username: '',
+  account: '',
   password: ''
 })
 
 // 登录表单验证规则
 const loginRules: FormRules = {
-  username: [
+  account: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' }
   ],
@@ -149,7 +157,8 @@ const loginRules: FormRules = {
 const registerFormRef = ref<FormInst | null>(null)
 const registerLoading = ref(false)
 const registerForm = ref({
-  username: '',
+  name: '',
+  phone: '',
   email: '',
   password: '',
   confirmPassword: ''
@@ -157,13 +166,39 @@ const registerForm = ref({
 
 // 注册表单验证规则
 const registerRules: FormRules = {
-  username: [
+  name: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' }
   ],
+  phone: [
+    {
+      validator: (rule, value) => {
+        if (!value && !registerForm.value.email) {
+          return false
+        }
+        if (value && !/^1[3-9]\d{9}$/.test(value)) {
+          return false
+        }
+        return true
+      },
+      message: '手机号格式不正确',
+      trigger: 'blur'
+    }
+  ],
   email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+    {
+      validator: (rule, value) => {
+        if (!value && !registerForm.value.phone) {
+          return false
+        }
+        if (value && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) {
+          return false
+        }
+        return true
+      },
+      message: '请输入正确的邮箱格式',
+      trigger: 'blur'
+    }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -188,7 +223,7 @@ const handleLogin = async () => {
     loginLoading.value = true
 
     const result = await userStore.loginAction(
-      loginForm.value.username,
+      loginForm.value.account,
       loginForm.value.password
     )
 
@@ -214,10 +249,10 @@ const handleRegister = async () => {
     const result = await userStore.registerAction(registerForm.value)
 
     if (result.success) {
-      message.success('注册成功，即将跳转')
+      message.success('注册并登录成功')
       setTimeout(() => {
-        router.push('/overview')  // 修改为跳转到 Overview 页面
-      }, 1000)
+        router.push('/overview')
+      }, 500)
     } else {
       message.error(result.message || '注册失败')
     }

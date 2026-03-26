@@ -18,18 +18,13 @@
 
     <div class="navbar-right">
       <n-space align="center" :size="16">
-        <!-- 用户信息 -->
-        <n-dropdown
-          :options="userDropdownOptions"
-          @select="handleUserMenuSelect"
-        >
-          <div class="user-info">
-            <n-avatar round size="small" style="background-color: #18a058">
-              {{ userStore.userInfo?.username?.charAt(0).toUpperCase() }}
-            </n-avatar>
-            <span class="username">{{ userStore.userInfo?.username }}</span>
-          </div>
-        </n-dropdown>
+        <!-- 用户信息 - 点击跳转个人信息 -->
+        <div class="user-info" @click="router.push('/home')">
+          <n-avatar round size="small" style="background-color: #18a058">
+            {{ userStore.userInfo?.name?.charAt(0).toUpperCase() }}
+          </n-avatar>
+          <span class="username">{{ userStore.userInfo?.name }}</span>
+        </div>
 
         <!-- 退出登录按钮 -->
         <n-button text @click="handleLogout">
@@ -43,11 +38,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from "vue";
+import { ref, h } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "@/store/user";
 import { NIcon, NText } from "naive-ui";
-import type { MenuOption, DropdownOption } from "naive-ui";
+import type { MenuOption } from "naive-ui";
 import {
   Leaf,
   Home,
@@ -88,20 +83,6 @@ const menuOptions: MenuOption[] = [
   },
 ];
 
-// 用户下拉菜单选项
-const userDropdownOptions = computed(() => [
-  {
-    label: "个人信息",
-    key: "profile",
-    icon: () => h(NIcon, null, { default: () => h(Home) }),
-  },
-  {
-    label: "退出登录",
-    key: "logout",
-    icon: () => h(NIcon, null, { default: () => h(LogOutOutline) }),
-  },
-]);
-
 // 处理菜单选择
 const handleMenuSelect = (key: string) => {
   const routeMap: Record<string, string> = {
@@ -113,16 +94,6 @@ const handleMenuSelect = (key: string) => {
 
   if (routeMap[key]) {
     router.push(routeMap[key]);
-  }
-};
-
-// 处理用户菜单选择
-const handleUserMenuSelect = (key: string) => {
-  if (key === "logout") {
-    handleLogout();
-  } else if (key === "profile") {
-    // TODO: 跳转到个人中心
-    console.log("查看个人信息");
   }
 };
 
@@ -201,16 +172,6 @@ router.afterEach((to) => {
     font-size: 14px;
     color: var(--text-primary);
     transition: color 0.3s ease;
-  }
-}
-
-:deep(.n-menu) {
-  &.n-menu--horizontal {
-    .n-menu-item {
-      &:hover {
-        background: transparent;
-      }
-    }
   }
 }
 </style>

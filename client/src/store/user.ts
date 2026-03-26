@@ -22,14 +22,15 @@ export const useUserStore = defineStore('user', () => {
   const userInfo = ref<User | null>(storedUser)
 
   // 登录
-  const loginAction = async (username: string, password: string) => {
+  const loginAction = async (account: string, password: string) => {
     try {
-      const response = await userApi.login({ username, password })
-      const { access_token, user_info } = response.data.data
+      const response = await userApi.login({ account, password })
+      // ✅ 使用 response.data 获取扁平化的响应数据
+      const { access_token, user_info } = response.data
 
       // 保存 token 和用户信息
       token.value = access_token
-      userInfo.value = user_info
+      userInfo.value = user_info as User
       localStorage.setItem('token', access_token)
       localStorage.setItem('user', JSON.stringify(user_info))
 
@@ -41,18 +42,20 @@ export const useUserStore = defineStore('user', () => {
 
   // 注册
   const registerAction = async (params: {
-    username: string
-    email: string
+    name: string
+    phone?: string
+    email?: string
     password: string
-    confirmPassword: string
+    confirmPassword?: string
   }) => {
     try {
       const response = await userApi.register(params)
-      const { access_token, user_info } = response.data.data
+      // ✅ 使用 response.data 获取扁平化的响应数据
+      const { access_token, user_info } = response.data
 
-      // 保存 token 和用户信息
+      // 注册成功后直接使用返回的 token 和用户信息，无需再次登录
       token.value = access_token
-      userInfo.value = user_info
+      userInfo.value = user_info as User
       localStorage.setItem('token', access_token)
       localStorage.setItem('user', JSON.stringify(user_info))
 

@@ -4,17 +4,18 @@ import type {
   LoginParams,
   RegisterParams,
   LoginResponse,
+  RegisterResponse,
   ApiResponse,
 } from "@/types/user";
 
 // 用户登录
 export const login = (params: LoginParams) => {
-  return http.post<ApiResponse<LoginResponse>>("/auth/login", params);
+  return http.post<LoginResponse>("/auth/login", params);
 };
 
 // 用户注册
 export const register = (params: RegisterParams) => {
-  return http.post<ApiResponse<LoginResponse>>("/auth/register", params);
+  return http.post<RegisterResponse>("/auth/register", params);
 };
 
 // 获取用户信息

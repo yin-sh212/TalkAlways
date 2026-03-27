@@ -6,6 +6,7 @@ from typing import Optional, Dict
 import jwt
 import re
 from pydantic import BaseModel
+from app.database.db import Database
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
@@ -70,13 +71,26 @@ def validate_email(email: str) -> bool:
     return re.match(pattern, email) is not None
 
 
-def authenticate_user(account: str, password: str) -> Optional[Dict]:
-    if account in fake_users_db and fake_users_db[account]["password"] == password:
-        return fake_users_db[account]
-    for user in fake_users_db.values():
-        if (user["phone"] == account or user["email"] == account) and user["password"] == password:
-            return user
-    return None
+async def authenticate_user(account: str, password: str) -> Optional[Dict]:
+    """认证用户 - 从数据库查询"""
+    try:
+        # 先按手机号或邮箱查询
+        user = await Database.fetch_one("""
+            SELECT * FROM users 
+            WHERE phone = %s OR email = %s
+        """, (account, account))
+        
+        if user and user.get('password') == password:
+            return {
+                'user_id': user['user_id'],
+                'name': user['name'],
+                'phone': user['phone'] or '',
+                'email': user['email'] or ''
+            }
+        return None
+    except Exception as e:
+        print(f"❌ 认证失败：{e}")
+        return None
 
 
 def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -99,15 +113,23 @@ async def get_current_user(authorization: str = Header(None)) -> Dict:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="无效的token")
-        for user in fake_users_db.values():
-            if user["user_id"] == user_id:
-                return user
-        raise HTTPException(status_code=401, detail="用户不存在")
+            raise HTTPException(status_code=401, detail="无效的 token")
+        
+        # 从数据库查询用户
+        user = await Database.fetch_one("SELECT * FROM users WHERE user_id = %s", (user_id,))
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        
+        return {
+            'user_id': user['user_id'],
+            'name': user['name'],
+            'phone': user['phone'] or '',
+            'email': user['email'] or ''
+        }
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="token已过期")
+        raise HTTPException(status_code=401, detail="token 已过期")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="无效的token")
+        raise HTTPException(status_code=401, detail="无效的 token")
 
 
 # ==================== 统一响应模型（扁平化结构） ====================
@@ -223,7 +245,7 @@ async def login(request: LoginRequest):
         else:
             raise HTTPException(status_code=400, detail="账号格式不正确（应为手机号或邮箱）")
 
-    user = authenticate_user(request.account, request.password)
+    user = await authenticate_user(request.account, request.password)
     if not user:
         raise HTTPException(status_code=401, detail="账号或密码错误")
 
@@ -233,7 +255,7 @@ async def login(request: LoginRequest):
         expires_delta=access_token_expires
     )
 
-    # ✅ 返回扁平化的响应数据（不再使用 TokenResponse）
+    # 返回扁平化的响应数据
     return {
         "code": 200,
         "message": "登录成功",
@@ -361,11 +383,21 @@ async def register(request: RegisterRequest):
             "data": None
         }
 
-    # 演示版：直接返回成功，实际应该保存到数据库
-    # 这里为了配合前端，返回一个模拟的 token
+    # 检查手机号或邮箱是否已存在
+    existing_user = await Database.fetch_one("""
+        SELECT * FROM users 
+        WHERE phone = %s OR email = %s
+    """, (request.phone, request.email))
     
-    # ✅ 创建并保存新用户
-    user = create_user(
+    if existing_user:
+        return {
+            "code": 400,
+            "message": "该手机号或邮箱已被注册",
+            "data": None
+        }
+
+    # 创建新用户并保存到数据库
+    user = await create_user(
         name=request.name,
         phone=request.phone,
         email=request.email,
@@ -373,10 +405,10 @@ async def register(request: RegisterRequest):
     )
     
     access_token = create_access_token(
-        data={"sub": f"user_{request.phone or request.email}", "account": request.phone or request.email}
+        data={"sub": user['user_id'], "account": request.phone or request.email}
     )
     
-    # ✅ 返回扁平化的响应数据（不再使用 TokenResponse）
+    # 返回扁平化的响应数据
     return {
         "code": 200,
         "message": "注册成功",
@@ -384,34 +416,34 @@ async def register(request: RegisterRequest):
         "token_type": "bearer",
         "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         "user_info": {
-            "user_id": f"U{int(datetime.now().timestamp())}",
-            "name": request.name,
-            "phone": request.phone or "",
-            "email": request.email or ""
+            "user_id": user['user_id'],
+            "name": user['name'],
+            "phone": user['phone'] or '',
+            "email": user['email'] or ''
         }
     }
 
 
-def create_user(name: str, phone: str = None, email: str = None, password: str = None) -> Dict:
-    """创建新用户"""
-    user_id = f"U{int(datetime.now().timestamp())}"
-    user = {
-        "user_id": user_id,
-        "name": name,
-        "phone": phone or "",
-        "email": email or "",
-        "password": password or "",
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
+async def create_user(name: str, phone: str = None, email: str = None, password: str = None) -> Dict:
+    """创建新用户并保存到数据库"""
+    import uuid
     
-    # 保存到数据库（根据账号类型存储）
-    if phone:
-        fake_users_db[phone] = user
-    if email:
-        fake_users_db[email] = user
+    user_id = f"U{uuid.uuid4().hex[:12].upper()}"
+    
+    # 插入数据库
+    await Database.execute("""
+        INSERT INTO users (user_id, name, phone, email, password)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (user_id, name, phone, email, password))
     
     print(f"✅ 创建新用户：{name} ({phone or email}), ID: {user_id}")
-    return user
+    
+    return {
+        'user_id': user_id,
+        'name': name,
+        'phone': phone or '',
+        'email': email or ''
+    }
 
 
 async def store_code(phone: str, code: str):

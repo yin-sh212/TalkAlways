@@ -30,17 +30,20 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时执行
-    await Database.get_pool()
+    # 启动时执行 - 测试数据库连接
+    try:
+        await Database.fetch_one("SELECT 1 as test")
+        print("✅ 数据库连接成功")
+    except Exception as e:
+        print(f"❌ 数据库连接失败：{e}")
+    
     print(f"✅ {config.APP_NAME} v{config.APP_VERSION} 启动成功")
-    print(f"📚 接口文档: http://localhost:{PORT}/docs")
-    print(f"🔑 登录页面: http://localhost:{PORT}/static/login_final.html")
-    print(f"💬 聊天页面: http://localhost:{PORT}/static/chat.html")
+    print(f"📚 接口文档：http://localhost:{PORT}/docs")
+    print(f"💻 前端页面：http://localhost:{PORT}/")
 
     yield  # 这里会暂停，应用运行期间会保持
 
-    # 关闭时执行
-    await Database.close_pool()
+    # 关闭时执行 - PyMySQL 不需要显式关闭连接池
     print("👋 应用已关闭")
 
 app = FastAPI(

@@ -91,6 +91,20 @@ export const detectAnomaly = (params: {
   return http.get('/statistics/anomaly', { params })
 }
 
+// 使用真实算法生成告警 - 动态基线 + 趋势下降（新接口）
+export const generateRealAlarms = (params: {
+  start_date: string
+  end_date: string
+  building_ids?: string
+  metric?: 'electricity' | 'cooling_load' | 'heating_load'
+  dynamic_window?: number
+  dynamic_threshold?: number
+  trend_window?: number
+  min_trend_decline?: number
+}) => {
+  return http.post('/alarm/generate-real-alarms', null, { params })
+}
+
 // 确认告警（单个）
 export const acknowledgeAlarm = (data: {
   alarm_id: string

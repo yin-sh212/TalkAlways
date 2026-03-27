@@ -217,12 +217,11 @@ const getImpactType = (impact: string) => {
   return typeMap[impact] || 'default'
 }
 
-// 告警级别映射
+// 告警级别映射 - 数字格式（后端返回 alarm_level: 1, 2, 3）
 const severityMap: Record<string, any> = {
-  critical: { type: 'error', text: '紧急' },
-  major: { type: 'warning', text: '重要' },
-  minor: { type: 'info', text: '一般' },
-  warning: { type: 'success', text: '提示' }
+  '1': { type: 'error', text: '紧急' },
+  '2': { type: 'warning', text: '警告' },
+  '3': { type: 'info', text: '一般' },
 }
 
 // 状态映射
@@ -230,12 +229,6 @@ const statusMap: Record<string, any> = {
   unresolved: { type: 'error', text: '未解决' },
   acknowledged: { type: 'warning', text: '已确认' },
   resolved: { type: 'success', text: '已解决' }
-}
-
-// 获取当前告警级别的类型
-const getCurrentSeverityType = (severity?: string) => {
-  if (!severity) return 'default'
-  return severityMap[severity]?.type || 'default'
 }
 
 // 表格列定义

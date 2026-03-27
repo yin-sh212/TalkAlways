@@ -114,12 +114,15 @@ async def generate_sample_alarms():
     alarms = []
     status_list = ['pending', 'confirmed', 'resolved']
     types = ['equipment', 'energy', 'environment']
+    
+    # 使用 Mock 日期基准：2016-08-15
+    mock_today = datetime(2016, 8, 15)
 
     for building in buildings:
         building_id = building[0]  # 根据实际情况调整索引
-        # 每个建筑生成5-10条告警
+        # 每个建筑生成 5-10 条告警
         for _ in range(random.randint(5, 10)):
-            start_time = datetime.now() - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
+            start_time = mock_today - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
             status = random.choice(status_list)
 
             # 如果是resolved状态，设置结束时间

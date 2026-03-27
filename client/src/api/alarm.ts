@@ -75,7 +75,8 @@ export const getAlarmTrend = (params: {
 // 获取告警分布数据
 export const getAlarmDistribution = (params: {
   building_id?: string
-  date?: string
+  start_date?: string
+  end_date?: string
 }) => {
   return http.get('/charts/distribution', { params })
 }
@@ -88,6 +89,20 @@ export const detectAnomaly = (params: {
   threshold?: number
 }) => {
   return http.get('/statistics/anomaly', { params })
+}
+
+// 使用真实算法生成告警 - 动态基线 + 趋势下降（新接口）
+export const generateRealAlarms = (params: {
+  start_date: string
+  end_date: string
+  building_ids?: string
+  metric?: 'electricity' | 'cooling_load' | 'heating_load'
+  dynamic_window?: number
+  dynamic_threshold?: number
+  trend_window?: number
+  min_trend_decline?: number
+}) => {
+  return http.post('/alarm/generate-real-alarms', null, { params })
 }
 
 // 确认告警（单个）
@@ -205,6 +220,8 @@ export interface AlarmListParams {
   status?: string
   building_id?: string
   alarm_level?: number
+  start_date?: string
+  end_date?: string
   page?: number
   page_size?: number
 }

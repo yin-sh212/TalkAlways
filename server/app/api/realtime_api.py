@@ -7,11 +7,86 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
+import numpy as np
 from datetime import datetime, timedelta
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Dict, Any, List
 from app.database.db import Database
+from app.services.anomaly_detector import detect_anomalies_3sigma
 
 router = APIRouter(prefix="/api/realtime", tags=["实时数据回放"])
+
+
+async def detect_anomalies_for_batch(data: List[Dict]) -> List[Dict[str, Any]]:
+    """
+    对一批数据进行实时异常检测
+    
+    使用 3-sigma 算法检测电力消耗异常，并将异常插入到 alarms 表
+    """
+    if not data or len(data) < 3:
+        return []
+    
+    # 提取电力值和时间戳
+    electricity_values = []
+    timestamps = []
+    
+    for row in data:
+        if row.get('electricity') is not None:
+            electricity_values.append(row['electricity'])
+            timestamps.append(row['timestamp'])
+    
+    if len(electricity_values) < 3:
+        return []
+    
+    # 调用 3-sigma 异常检测算法
+    anomalies = detect_anomalies_3sigma(
+        values=electricity_values,
+        timestamps=timestamps,
+        threshold=2.5  # 2.5 倍标准差
+    )
+    
+    # 将检测结果插入到 alarms 表
+    if anomalies:
+        pool = await Database.get_pool()
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                for anomaly in anomalies:
+                    # 从数据中找到对应的记录，获取 building_id
+                    matching_records = [r for r in data if r['timestamp'] == anomaly['timestamp']]
+                    if matching_records:
+                        record = matching_records[0]
+                        building_id = record.get('building_id', 'unknown')
+                        meter_id = record.get('meter_id', f'{building_id}_meter')
+                        electricity_value = record.get('electricity', anomaly['value'])
+                        
+                        # 插入告警记录
+                        insert_sql = """
+                            INSERT INTO alarms 
+                            (building_id, meter_id, alarm_type, alarm_level, description, 
+                             start_time, value, threshold, status)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        
+                        description = f"能耗异常（3-sigma 检测），值为{electricity_value:.2f} kWh (Z-score: {anomaly['z_score']:.2f})"
+                        
+                        try:
+                            await cursor.execute(insert_sql, (
+                                building_id,
+                                meter_id,
+                                'energy',  # 告警类型
+                                2,  # 告警级别（警告）
+                                description,
+                                anomaly['timestamp'],
+                                electricity_value,
+                                anomaly['upper_bound'],  # 阈值
+                                'pending'  # 状态
+                            ))
+                        except Exception as e:
+                            print(f"❌ 插入告警失败：{e}")
+                            await conn.rollback()
+                        else:
+                            await conn.commit()
+    
+    return anomalies
 
 
 async def historical_data_stream(
@@ -44,6 +119,7 @@ async def historical_data_stream(
         current_time = start_time
         total_batches = int((end_time - start_time).total_seconds() / batch_seconds) + 1
         batch_count = 0
+        total_anomalies_detected = 0
         
         while current_time < end_time:
             # 计算本批次的时间范围
@@ -73,17 +149,35 @@ async def historical_data_stream(
             data_list = []
             for row in data:
                 row_dict = dict(row)
-                if 'timestamp' in row_dict and hasattr(row_dict['timestamp'], 'isoformat'):
+                if hasattr(row_dict['timestamp'], 'isoformat'):
                     row_dict['timestamp'] = row_dict['timestamp'].isoformat()
                 data_list.append(row_dict)
             
-            # 推送本批次数据
+            # 🔥 实时异常检测：对这批数据运行 3-sigma 算法
+            detected_anomalies = await detect_anomalies_for_batch(data_list)
+            
+            if detected_anomalies:
+                print(f"⚠️  检测到 {len(detected_anomalies)} 个异常点（{current_time} ~ {batch_end}）")
+                total_anomalies_detected += len(detected_anomalies)
+                
+                # 将检测结果标记到数据中（仅用于前端展示，不写入数据库）
+                anomaly_timestamps = {a['timestamp'] for a in detected_anomalies}
+                for row in data_list:
+                    if row['timestamp'] in anomaly_timestamps:
+                        row['is_anomaly'] = True
+                        row['anomaly_info'] = next(
+                            (a for a in detected_anomalies if a['timestamp'] == row['timestamp']), 
+                            None
+                        )
+            
+            # 推送本批次数据（包含实时检测的异常标记）
             data_msg = {
                 'type': 'data',
                 'records': data_list,
                 'batch_start': current_time.isoformat(),
                 'batch_end': batch_end.isoformat(),
-                'record_count': len(data_list)
+                'record_count': len(data_list),
+                'anomaly_count': len(detected_anomalies)
             }
             yield f"data: {json.dumps(data_msg, ensure_ascii=False)}\n\n"
             
@@ -96,24 +190,29 @@ async def historical_data_stream(
                 'current_batch': batch_count,
                 'total_batches': total_batches,
                 'progress_percent': round(progress, 2),
-                'current_time': current_time.isoformat()
+                'current_time': current_time.isoformat(),
+                'anomalies_detected_so_far': total_anomalies_detected
             }
             yield f"data: {json.dumps(progress_msg, ensure_ascii=False)}\n\n"
             
             # 移动到下一批次
             current_time = batch_end
             
-            # 根据速度计算延迟
-            # speed=1: 每 1 秒推送 1 小时数据
-            # speed=10: 每 0.1 秒推送 1 小时数据
-            delay = max(0.05, 1.0 / speed)
+            # 根据速度计算延迟 - 真正等待现实时间过去
+            # speed=1: 每批次间隔 = batch_hours * 3600 秒（真实等待）
+            # speed=10: 每批次间隔 = (batch_hours * 3600) / 10 秒（10 倍速）
+            # 例如：batch_hours=1 时，speed=1 需要真实等待 3600 秒（1 小时）
+            base_delay_seconds = batch_seconds  # 基础延迟 = 批次的小时数（秒）
+            delay = base_delay_seconds / speed
+            print(f"⏰ 等待 {delay:.1f} 秒后推送下一批数据（模拟时间跨度：{batch_seconds}秒，速度：{speed}x）")
             await asyncio.sleep(delay)
         
         # 发送完成消息
         complete_msg = {
             'type': 'complete',
             'message': '数据回放完成',
-            'total_batches': batch_count
+            'total_batches': batch_count,
+            'total_anomalies_detected': total_anomalies_detected
         }
         yield f"data: {json.dumps(complete_msg, ensure_ascii=False)}\n\n"
         

@@ -70,3 +70,18 @@ export interface KnowledgeDetailResponse {
 export const getKnowledgeDetail = (docId: number) => {
   return http.get<ApiResponse<KnowledgeDetailResponse>>(`/admin/knowledge/detail/${docId}`)
 }
+
+// 添加文档到知识库
+export interface AddDocumentParams {
+  title: string
+  category: string
+  tags: string[]
+  summary: string
+  description: string
+  solution: string
+  notes: string[]
+}
+
+export const addDocument = (data: AddDocumentParams) => {
+  return http.post<ApiResponse<{ id: number }>>('/admin/knowledge/add', data)
+}

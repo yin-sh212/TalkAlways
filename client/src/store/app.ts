@@ -15,15 +15,15 @@ export const useAppStore = defineStore('app', () => {
   const calculateMockToday = (): string => {
     const now = new Date() // 真实当前时间，如 2026-03-28 15:05:40
     
-    // 目标基准日期：2016-09-01（可以根据需要调整）
-    const targetBaseDate = new Date('2016-09-01T00:00:00')
+    // 目标基准日期：2016-09-03（可以根据需要调整）
+    const targetBaseDate = new Date('2016-09-03T00:00:00')
     
     // 计算当前时间与基准日期的天数差
     const oneDay = 24 * 60 * 60 * 1000 // 一天的毫秒数
     const daysDiff = Math.floor((now.getTime() - targetBaseDate.getTime()) / oneDay)
     
     // 用基准日期加上时分秒部分
-    const mockDate = new Date('2016-09-01T00:00:00')
+    const mockDate = new Date('2016-09-03T00:00:00')
     mockDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
     
     return formatDate(mockDate)
@@ -39,6 +39,22 @@ export const useAppStore = defineStore('app', () => {
   // 获取 Mock 日期
   const getMockToday = () => {
     return MOCK_TODAY.value
+  }
+  
+  // 获取完整的模拟时间（包含时分秒）- 用于实时数据流
+  const getMockDateTime = (): string => {
+    const now = new Date() // 真实当前时间
+    const mockDate = new Date('2016-09-03T00:00:00')
+    mockDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
+    
+    const year = mockDate.getFullYear()
+    const month = String(mockDate.getMonth() + 1).padStart(2, '0')
+    const day = String(mockDate.getDate()).padStart(2, '0')
+    const hours = String(mockDate.getHours()).padStart(2, '0')
+    const minutes = String(mockDate.getMinutes()).padStart(2, '0')
+    const seconds = String(mockDate.getSeconds()).padStart(2, '0')
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
   }
   
   // 计算昨日日期
@@ -111,6 +127,7 @@ export const useAppStore = defineStore('app', () => {
     MOCK_TODAY,
     setMockToday,
     getMockToday,
+    getMockDateTime,
     formatDate,
     getYesterday,
     getLastWeek,

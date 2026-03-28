@@ -3,6 +3,7 @@ import { getSummary as getStatisticsSummary, detectAnomaly as detectStatisticsAn
 import { getEnergyDistributionData, getTrendData as getTrendDataFromCharts } from './charts'
 import { useBuildingStore } from '@/store/building'
 import { useAppStore } from '@/store/app'
+import type { StatisticsSummaryResponse } from '@/types/statistics'
 
 // 有效数据时间范围常量
 export const VALID_DATE_START = '2016-07-01'
@@ -49,10 +50,14 @@ export const getKPIData = async (): Promise<KPIData> => {
     })
     
     // 将后端数据转换为前端需要的格式
-    const summaryData = response.data?.data
+    const apiData = response.data?.data as StatisticsSummaryResponse | undefined
+    
+    // 后端返回结构：{ building_id, summary: { total_elec, ... }, details: [] }
+    const summaryData = apiData?.summary
     
     // 如果没有数据，返回默认值
-    if (!summaryData || summaryData.total_elec === null) {
+    if (!summaryData || summaryData.total_elec === null || summaryData.total_elec === undefined) {
+      console.warn('[getKPIData] 没有数据，返回默认值')
       return {
         totalEnergy: 0,
         energyChange: 0,
@@ -187,29 +192,47 @@ export const getAnomalyList = async (limit = 5): Promise<DashboardResponse<Anoma
       threshold: 2.0
     })
     
+    console.log('📋 异常检测响应:', response.data)
+    
+    // 修复：后端返回格式是 { data: { results: { electricity: { anomalies: [] } } } }
+    const results = response.data?.data?.results
+    let anomalies: any[] = []
+    
+    if (results) {
+      // 如果是多指标（all），results 是对象；如果是单指标，results 可能就是对象
+      if (results.electricity) {
+        // 多指标情况
+        anomalies = results.electricity.anomalies || []
+      }
+    }
+    
+    console.log('🔍 解析后的异常数量:', anomalies?.length)
+    
     // 将响应转换为 DashboardResponse 格式
     return {
       code: response.data?.code || 200,
       message: response.data?.message || '成功',
-      data: response.data?.data?.anomalies?.map(anomaly => ({
+      data: anomalies.map(anomaly => ({
         id: anomaly.timestamp,
         time: anomaly.timestamp,
-        buildingName: '', // 需要通过 building_id 查询
-        type: '能耗异常',
-        status: 'pending',
-        buildingId: buildingId,
         timeRange: {
-          start: mockToday,
-          end: mockToday
-        }
-      })) || []
+          start: anomaly.timestamp,
+          end: anomaly.timestamp
+        },
+        buildingName: buildingId,
+        type: '能耗异常',
+        status: 'pending' as const,
+        buildingId: buildingId,
+        meterId: '',
+        electricity: anomaly.value,
+        description: `用电量 ${anomaly.value?.toFixed(2) || '0'} kWh`
+      }))
     }
   } catch (error) {
     console.error('获取异常列表失败:', error)
-    // 返回空响应
     return {
-      code: 200,
-      message: '成功',
+      code: 500,
+      message: '获取失败',
       data: []
     }
   }

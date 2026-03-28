@@ -86,14 +86,27 @@ export interface AnomalyAPIResponse {
   data: {
     building_id: string
     period: string
-    total_points: number
-    anomaly_count: number
-    anomalies: Array<{
-      timestamp: string
-      value: number
-      predicted: number
-      residual: number
-    }>
+    metric?: string
+    results?: {
+      electricity?: {
+        method: string
+        total: number
+        anomaly_count: number
+        anomalies: Array<{
+          timestamp: string
+          value: number
+          predicted?: number
+          residual?: number
+          is_anomaly?: boolean
+          mean?: number
+          std?: number
+          z_score?: number
+          upper_bound?: number
+          lower_bound?: number
+          deviation?: string
+        }>
+      }
+    }
   }
 }
 

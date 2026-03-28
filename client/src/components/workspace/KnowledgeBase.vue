@@ -89,7 +89,7 @@
                   {{ getCategoryName(doc.category) }}
                 </n-tag>
                 <n-text depth="3" style="font-size: 12px">{{
-                  doc.createDate
+                  doc.created_at
                 }}</n-text>
               </n-space>
               <h3 style="margin: 0; font-size: 16px">{{ doc.title }}</h3>
@@ -154,8 +154,8 @@
           <n-tag :type="getCategoryType(currentDoc.category)">
             {{ getCategoryName(currentDoc.category) }}
           </n-tag>
-          <n-text depth="3">{{ currentDoc.createDate }}</n-text>
-          <n-text depth="3">浏览 {{ currentDoc.views }} 次</n-text>
+          <n-text depth="3">{{ currentDoc.created_at }}</n-text>
+          <n-text depth="3">浏览 {{ currentDoc.views }}次</n-text>
         </n-space>
 
         <n-divider />
@@ -307,20 +307,18 @@ import {
   type AddDocumentParams 
 } from "@/api/admin";
 
-// 本地 Document 类型（兼容 API 返回和本地使用）
+// 本地 Document 类型（直接使用 API 返回的字段）
 interface Document extends ApiKnowledgeDocument {
   description: string;
   solution: string;
   notes: string[];
 }
 
-interface UploadResponse {
-  success: boolean;
-  filename: string;
-  message: string;
-  stats?: {
-    blocks_indexed: number;
-  };
+interface UploadFileRecord {
+  name: string;
+  savedName: string;
+  uploadTime: string;
+  blocksIndexed: number;
 }
 
 const message = useMessage();
@@ -464,7 +462,7 @@ const handleDeleteDocument = async (doc: Document) => {
   try {
     const response = await deleteKnowledgeDocument(doc.id);
     
-    if (response.data.code === 200 && response.data.data?.success) {
+    if (response.data.code === 200 && response.data.data?.is_success) {
       message.success('文档删除成功');
       // 刷新文档列表
       await fetchDocuments();
@@ -526,7 +524,7 @@ const handleAddDocument = async () => {
 
 // 文件上传事件处理
 const uploading = ref(false);
-const uploadedFiles = ref<any[]>([]);
+const uploadedFiles = ref<UploadFileRecord[]>([]);
 
 const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
   const validTypes = [
@@ -624,14 +622,13 @@ const fetchDocuments = async () => {
   try {
     const response = await getKnowledgeList({
       category: selectedCategory.value || undefined,
+      keyword: searchQuery.value || undefined,
       tag: selectedTag.value || undefined,
-      search: searchQuery.value || undefined,
     });
     
-    // response 是 AxiosResponse，需要访问 .data 获取业务数据
-    if (response.data.code === 200 && response.data.data?.list) {
-      documents.value = response.data.data.list as Document[];
-      console.log('[KnowledgeBase] 获取文档列表成功:', documents.value.length);
+    // 直接使用后端返回的数据，不做转换
+    if (response.data.code === 200 && response.data.data?.items) {
+      documents.value = response.data.data.items as Document[];
     } else {
       throw new Error(response.data.message || '获取失败');
     }
@@ -639,10 +636,6 @@ const fetchDocuments = async () => {
     console.error("[KnowledgeBase] 获取文档列表失败", error);
     message.error('获取文档列表失败');
   }
-};
-
-const refreshDocuments = () => {
-  fetchDocuments();
 };
 
 // 监听筛选条件变化

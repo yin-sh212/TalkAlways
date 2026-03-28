@@ -2,6 +2,9 @@
   <n-card title="实时异常/报警（最新 5 条）" :bordered="false" content-style="padding: 20px;">
     <template #header-extra>
       <n-space align="center">
+        <span v-if="currentSimulateTime" class="simulate-time">
+          📡 模拟时间：{{ currentSimulateTime }}
+        </span>
         <span class="refresh-time">最后更新：{{ lastUpdateTime }}</span>
         <n-button text size="small" @click="handleViewAll">
           查看全部
@@ -21,8 +24,21 @@
           :key="item.id"
           :type="getTypeTagType(item.type)"
           :time="item.time"
-          :content="`${item.buildingName} - ${item.type}`"
-        />
+        >
+          <div class="timeline-content">
+            <span class="timeline-text">{{ item.buildingName }} - {{ item.type }}</span>
+            <n-button 
+              text 
+              size="small" 
+              type="primary"
+              class="analyze-btn"
+              @click="handleAnalyze(item)"
+            >
+              分析
+            </n-button>
+          </div>
+          <div v-if="item.description" class="timeline-description">{{ item.description }}</div>
+        </n-timeline-item>
       </n-timeline>
     </template>
   </n-card>
@@ -30,6 +46,12 @@
 
 <script setup lang="ts">
 import { ChevronForwardOutline as ArrowRight } from '@vicons/ionicons5'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useMessage } from 'naive-ui'
+
+const router = useRouter()
+const message = useMessage()
 
 interface AnomalyItem {
   id: string
@@ -38,6 +60,10 @@ interface AnomalyItem {
   type: string
   status: 'pending' | 'processing' | 'resolved'
   buildingId?: string
+  meterId?: string
+  electricity?: number
+  ambientTemp?: number
+  description?: string
   timeRange?: {
     start: string
     end: string
@@ -48,9 +74,12 @@ interface Props {
   loading: boolean
   anomalyList: AnomalyItem[]
   lastUpdateTime: string
+  currentSimulateTime?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  currentSimulateTime: ''
+})
 
 // 定义事件
 const emit = defineEmits<{
@@ -70,15 +99,35 @@ const handleViewAll = () => {
   emit('view-all')
 }
 
+// 分析具体异常
+const handleAnalyze = (item: AnomalyItem) => {
+  const alarmId = item.id
+  const buildingId = item.buildingId || ''
+  const alarmTime = item.time
+  
+  // 跳转到告警页面，传递查询参数高亮指定告警
+  router.push({
+    path: '/alarm',
+    query: {
+      highlight_id: alarmId,
+      expand_detail: 'true',
+      building_id: buildingId,
+      alarm_time: alarmTime
+    }
+  })
+  
+  message.success(`正在查看告警详情`)
+}
+
 // 按时间倒序排列的异常列表
 const sortedAnomalyList = computed(() => {
   return [...props.anomalyList].sort((a, b) => {
-    // 将时间字符串转换为Date对象进行比较
+    // 将时间字符串转换为 Date 对象进行比较
     const dateA = new Date(a.time)
     const dateB = new Date(b.time)
     // 倒序排列，最新的在前面
     return dateB.getTime() - dateA.getTime()
-  }).slice(0, 5) // 只取前5条
+  }).slice(0, 5) // 只取前 5 条
 })
 </script>
 
@@ -86,5 +135,35 @@ const sortedAnomalyList = computed(() => {
 .refresh-time {
   font-size: 12px;
   color: #999;
+}
+
+.simulate-time {
+  font-size: 12px;
+  color: #999;
+  margin-right: 10px;
+}
+
+.timeline-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  
+  .timeline-text {
+    flex: 1;
+    font-weight: 500;
+  }
+  
+  .analyze-btn {
+    margin-left: 12px;
+    flex-shrink: 0;
+  }
+}
+
+.timeline-description {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
 }
 </style>

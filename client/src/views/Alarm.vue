@@ -158,7 +158,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, onMounted, nextTick } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import { Download, Alert } from "@vicons/ionicons5";
 import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
@@ -183,6 +184,8 @@ import { useAppStore } from "@/store/app";
 
 const message = useMessage();
 const appStore = useAppStore();
+const router = useRouter();
+const route = useRoute();
 
 // 状态
 const queryLoading = ref(false);
@@ -282,7 +285,7 @@ const loadBuildings = async () => {
       value: building.id || building.building_id,
     }));
   } catch (error: any) {
-    console.error("获取建筑列表失败:", error);
+    // 静默处理错误
   }
 };
 
@@ -298,7 +301,7 @@ const loadAlarmLevels = async () => {
       style: { color: level.color },
     }));
   } catch (error: any) {
-    console.error("获取告警级别失败:", error);
+    // 静默处理错误
   }
 };
 
@@ -313,7 +316,7 @@ const loadAlarmTypes = async () => {
       value: type.code,
     }));
   } catch (error: any) {
-    console.error("获取告警类型失败:", error);
+    // 静默处理错误
   }
 };
 
@@ -382,14 +385,12 @@ const handleQuery = async (skipValidation: boolean = false) => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : appStore.getMockToday();
 
-    // 验证时间范围（2016-07-01 至 2016-08-31）
+    // 验证时间范围（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
+    const validEndDate = "2016-09-30";
 
     if (
       startDate < validStartDate ||
-      startDate > validEndDate ||
-      endDate < validStartDate ||
       endDate > validEndDate
     ) {
       message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
@@ -529,7 +530,6 @@ const handleQuery = async (skipValidation: boolean = false) => {
 
     message.success("查询成功");
   } catch (error: any) {
-    console.error("查询失败:", error);
     message.error("查询失败：" + (error.message || "未知错误"));
   } finally {
     queryLoading.value = false;
@@ -627,7 +627,6 @@ const handleAcknowledge = async (alarmId: string) => {
     message.success("告警已确认");
     handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error("确认失败:", error);
     message.error("确认失败：" + (error.message || "未知错误"));
   }
 };
@@ -642,7 +641,6 @@ const handleResolve = async (alarmId: string) => {
     message.success("告警已解决");
     handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error("解决失败:", error);
     message.error("解决失败：" + (error.message || "未知错误"));
   }
 };
@@ -677,7 +675,6 @@ const handleBatchAcknowledge = async (alarmIds: string[]) => {
 
     handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error("批量确认失败:", error);
     message.error("批量确认失败：" + (error.message || "未知错误"));
   }
 };
@@ -712,7 +709,6 @@ const handleBatchResolve = async (alarmIds: string[]) => {
 
     handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    console.error("批量解决失败:", error);
     message.error("批量解决失败：" + (error.message || "未知错误"));
   }
 };
@@ -736,9 +732,9 @@ const handleGenerateAlarms = async () => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : appStore.getMockToday();
     
-    // 验证时间范围（2016-07-01 至 2016-08-31）
+    // 验证时间范围（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
+    const validEndDate = "2016-09-30";
     
     if (
       startDate < validStartDate ||
@@ -785,7 +781,6 @@ const handleGenerateAlarms = async () => {
       message.warning("没有检测到异常数据，无法生成告警");
     }
   } catch (error: any) {
-    console.error("生成告警失败:", error);
     message.error("生成告警失败：" + (error.message || "未知错误"));
   } finally {
     generateLoading.value = false;
@@ -805,9 +800,9 @@ const handleExport = async () => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0];
 
-    // 验证时间范围（2016-07-01 至 2016-08-31）
+    // 验证时间范围（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
+    const validEndDate = "2016-09-30";
 
     if (
       startDate < validStartDate ||
@@ -847,86 +842,93 @@ const handleExport = async () => {
 
     message.success("报表已下载");
   } catch (error: any) {
-    console.error("导出失败:", error);
     message.error("导出失败：" + (error.message || "未知错误"));
   } finally {
     exportLoading.value = false;
   }
 };
 
-// 导出能耗详情数据
-const handleExportEnergyDetail = async () => {
-  exportLoading.value = true;
-  message.info("正在导出能耗详情数据...");
-
-  try {
-    const startDate = queryForm.timeRange
-      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0];
-    const endDate = queryForm.timeRange
-      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0];
-
-    // 验证时间范围（2016-07-01 至 2016-08-31）
-    const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
-
-    if (
-      startDate < validStartDate ||
-      startDate > validEndDate ||
-      endDate < validStartDate ||
-      endDate > validEndDate
-    ) {
-      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
-      exportLoading.value = false;
-      return;
-    }
-
-    // 确保使用从后端获取的真实建筑 ID
-    if (!queryForm.buildings || queryForm.buildings.length === 0) {
-      message.warning("请选择建筑");
-      exportLoading.value = false;
-      return;
-    }
-
-    const exportParams = {
-      building_ids: queryForm.buildings,
-      startTime: startDate,
-      endTime: endDate,
-      format: "excel" as const,
-    };
-
-    const response = await alarmApi.exportExcel(exportParams);
-
-    const url = window.URL.createObjectURL(response.data as Blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `能耗详情_${startDate}_${endDate}_${Date.now()}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    message.success("能耗详情数据已下载");
-  } catch (error: any) {
-    console.error("导出失败:", error);
-    message.error("导出失败：" + (error.message || "未知错误"));
-  } finally {
-    exportLoading.value = false;
-  }
-};
-
+// 页面加载时
 onMounted(async () => {
-  // 初始化时执行查询
-  await loadBuildings();
-  loadAlarmLevels();
-  loadAlarmTypes();
-  if (buildingOptions.value.length > 0) {
-    queryForm.buildings = [buildingOptions.value[0].value];
-    setQuickTime("week"); // 默认查询近一周
-    handleQuery();
+  // 1. 先加载建筑列表和字典数据
+  await Promise.all([
+    loadBuildings(),
+    loadAlarmLevels(),
+    loadAlarmTypes()
+  ])
+  
+  // 2. 检测路由参数，判断是否需要高亮特定告警
+  const highlightId = route.query.highlight_id as string
+  const expandDetail = route.query.expand_detail === 'true'
+  const buildingId = route.query.building_id as string
+  const alarmTime = route.query.alarm_time as string
+  
+  if (highlightId && buildingId) {
+    // 设置查询条件为告警所在建筑
+    queryForm.buildings = [buildingId]
+    
+    // 根据告警时间设置时间范围（告警时间前后 7 天）
+    if (alarmTime) {
+      const alarmDate = new Date(alarmTime)
+      const startDate = new Date(alarmDate)
+      startDate.setDate(alarmDate.getDate() - 7)
+      const endDate = new Date(alarmDate)
+      endDate.setDate(alarmDate.getDate() + 7)
+      
+      queryForm.timeRange = [startDate.getTime(), endDate.getTime()]
+    } else {
+      // 如果没有告警时间，默认使用近 7 天
+      setQuickTime('week')
+    }
+    
+    // 查询告警列表
+    await handleQuery()
+    
+    // 等待列表加载完成后，高亮并展开指定告警
+    await nextTick()
+    
+    if (expandDetail && alarmListRef.value) {
+      // 找到对应的告警行 - 优先匹配 highlight_id，同时兼容时间和建筑匹配
+      const alarmRow = tableData.value.find(
+        (item: any) => {
+          // 优先匹配 ID（支持数字和字符串比较）
+          if (String(item.id) === String(highlightId)) return true
+          // 如果 ID 不匹配，尝试匹配时间和建筑（防止 ID 格式不一致）
+          if (alarmTime && item.building_id === buildingId) {
+            const itemTime = new Date(item.time).getTime()
+            const targetTime = new Date(alarmTime).getTime()
+            // 时间相差不超过 1 小时
+            return Math.abs(itemTime - targetTime) < 3600000
+          }
+          return false
+        }
+      )
+      
+      if (alarmRow) {
+        message.success('已定位到指定告警')
+        
+        // 使用 setTimeout 延迟执行，确保 DOM 完全渲染
+        setTimeout(async () => {
+          // 调用子组件的查看详情方法
+          ;(alarmListRef.value as any).handleViewDetail(alarmRow)
+          
+          // 等待弹窗完全打开
+          await nextTick()
+          await nextTick()
+        }, 300) // 延迟 300ms 执行
+      } else {
+        message.warning('未找到指定的告警，请检查筛选条件')
+      }
+    }
+  } else {
+    // 没有高亮参数，执行正常初始化
+    if (buildingOptions.value.length > 0) {
+      queryForm.buildings = [buildingOptions.value[0].value]
+      setQuickTime('week') // 默认查询近一周
+      handleQuery()
+    }
   }
-});
+})
 </script>
 
 <style scoped>

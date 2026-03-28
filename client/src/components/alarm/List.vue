@@ -395,7 +395,8 @@ const handleBatchResolve = () => {
 }
 
 defineExpose({
-  onChecked
+  onChecked,
+  handleViewDetail
 })
 </script>
 

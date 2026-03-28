@@ -9,7 +9,6 @@ export interface RawData {
   electricity: number
   hvac: number
   water: number
-  // ... 其他能耗数据字段
 }
 
 // 建筑信息
@@ -18,7 +17,6 @@ export interface Building {
   name: string
   type: string
   area: number
-  // ... 其他建筑属性
 }
 
 // 监测点信息
@@ -28,7 +26,6 @@ export interface Meter {
   type: string
   location: string
   building_id: string
-  // ... 其他监测点属性
 }
 
 // 设备状态
@@ -37,7 +34,6 @@ export interface DeviceStatus {
   name: string
   status: 'running' | 'standby' | 'fault' | 'maintenance'
   last_update: string
-  // ... 其他设备状态属性
 }
 
 // 查询参数
@@ -47,4 +43,11 @@ export interface QueryParams {
   end_date?: string
   limit?: number
   offset?: number
+}
+
+// 查询响应
+export interface QueryResponse<T> {
+  code: number
+  message: string
+  data: T
 }

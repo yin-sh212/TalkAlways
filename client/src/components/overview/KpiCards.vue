@@ -17,13 +17,29 @@
             <span class="unit">MWh</span>
           </div>
           <div class="kpi-changes">
-            <div class="kpi-change" :class="{ 'is-up': kpiData.dayChange >= 0 }">
-              <n-icon :component="kpiData.dayChange >= 0 ? ArrowUpward : ArrowDownward" size="14" />
+            <div
+              class="kpi-change"
+              :class="{ 'is-up': kpiData.dayChange >= 0 }"
+            >
+              <n-icon
+                :component="
+                  kpiData.dayChange >= 0 ? ArrowUpward : ArrowDownward
+                "
+                size="14"
+              />
               {{ Math.abs(kpiData.dayChange).toFixed(1) }}%
               <span class="change-label">较昨日</span>
             </div>
-            <div class="kpi-change" :class="{ 'is-up': kpiData.weekChange >= 0 }">
-              <n-icon :component="kpiData.weekChange >= 0 ? ArrowUpward : ArrowDownward" size="14" />
+            <div
+              class="kpi-change"
+              :class="{ 'is-up': kpiData.weekChange >= 0 }"
+            >
+              <n-icon
+                :component="
+                  kpiData.weekChange >= 0 ? ArrowUpward : ArrowDownward
+                "
+                size="14"
+              />
               {{ Math.abs(kpiData.weekChange).toFixed(1) }}%
               <span class="change-label">较上周</span>
             </div>
@@ -33,7 +49,13 @@
     </n-grid-item>
 
     <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;" @click="handleDeviceClick" style="cursor: pointer;">
+      <n-card
+        :bordered="false"
+        class="kpi-card"
+        content-style="padding: 14px;"
+        @click="handleDeviceClick"
+        style="cursor: pointer"
+      >
         <template #header>
           <n-space justify="space-between" align="center">
             <span class="card-title">在线设备率</span>
@@ -49,7 +71,10 @@
             <span class="unit">%</span>
           </div>
           <div class="kpi-subtitle">
-            <n-tag :type="kpiData.abnormalDeviceCount > 0 ? 'warning' : 'success'" size="small">
+            <n-tag
+              :type="kpiData.abnormalDeviceCount > 0 ? 'warning' : 'success'"
+              size="small"
+            >
               异常设备：{{ kpiData.abnormalDeviceCount }}
             </n-tag>
           </div>
@@ -65,13 +90,16 @@
             <n-space align="center">
               <n-tooltip placement="bottom">
                 <template #trigger>
-                  <n-icon size="18" color="#999" style="cursor: help;">
+                  <n-icon size="18" color="#999" style="cursor: help">
                     <HelpCircleOutline />
                   </n-icon>
                 </template>
-                COP = 制热量 / 输入功率<br/>
-                根据能耗与温差计算得出<br/>
-                数值越高表示能效越好
+                <div style="padding: 4px 0">
+                  <strong>计算公式：</strong>COP = 制热量 / 输入功率<br />
+                  <strong>数据来源：</strong>根据能耗与温差计算得出<br />
+                  <strong>指标含义：</strong>数值越高表示能效越好<br />
+                  <strong>参考范围：</strong>一般空调系统 COP 在 2.5-4.0 之间
+                </div>
               </n-tooltip>
               <n-icon size="20" color="#52c41a">
                 <Leaf />
@@ -90,7 +118,7 @@
         </template>
       </n-card>
     </n-grid-item>
-    
+
     <!-- <n-grid-item>
       <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
         <template #header>
@@ -117,32 +145,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { 
-  ArrowUpOutline as ArrowUpward, 
+import { useRouter } from "vue-router";
+import {
+  ArrowUpOutline as ArrowUpward,
   ArrowDownOutline as ArrowDownward,
-  Flash, 
-  Leaf, 
-  TrendingUp, 
-  FlashOutline as Device, 
-  Flash as EnergyIcon, 
-  HelpCircleOutline 
-} from '@vicons/ionicons5'
-import type { KPIData } from '@/types/dashboard'
+  Flash,
+  Leaf,
+  TrendingUp,
+  FlashOutline as Device,
+  Flash as EnergyIcon,
+  HelpCircleOutline,
+} from "@vicons/ionicons5";
+import type { KPIData } from "@/types/dashboard";
 
 interface Props {
-  loading: boolean
-  kpiData: KPIData
+  loading: boolean;
+  kpiData: KPIData;
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
-const router = useRouter()
+const router = useRouter();
 
 const handleDeviceClick = () => {
-  router.push({ path: '/workspace', query: { tab: 'devices' } })
-}
+  // 跳转到工作区 - 设备管理页面
+  router.push({ path: "/workspace", query: { tab: "devices" } });
+};
 </script>
 
 <style scoped lang="scss">
@@ -150,7 +178,7 @@ const handleDeviceClick = () => {
   .kpi-card {
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-    
+
     .card-title {
       font-size: 13px;
       color: #666;
@@ -180,11 +208,11 @@ const handleDeviceClick = () => {
         align-items: center;
         gap: 3px;
         font-size: 12px;
-        
+
         &.is-up {
           color: #f5222d;
         }
-        
+
         &:not(.is-up) {
           color: #52c41a;
         }

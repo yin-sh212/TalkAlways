@@ -15,7 +15,6 @@
         :building-energy="chartData.buildingEnergy"
         :trend-data="chartData.trendData"
         :distribution-data="chartData.distributionData"
-        @building-click="handleBuildingClick"
       />
 
       <!-- 设备监控 -->
@@ -26,6 +25,7 @@
         :loading="loading" 
         :anomaly-list="anomalyList"
         :last-update-time="lastUpdateTime"
+        :current-simulate-time="currentSimulateTime"
         @view-all="handleViewAll"
       />
     </div>
@@ -39,12 +39,13 @@ import { useMessage, useDialog } from 'naive-ui'
 import { useUserStore } from '@/store/user'
 import { useBuildingStore } from '@/store/building'
 import { useAppStore } from '@/store/app'
-import { getKPIData, getChartData, getAnomalyList, getTrendData } from '@/api/dashboard'
-import type { KPIData, ChartData, AnomalyItem } from '@/types/dashboard'
+import { getKPIData, getChartData, getTrendData } from '@/api/dashboard'
+import { getAlarmList as fetchAlarmList } from '@/api/alarm'
+import type { KPIData } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
 import { getDeviceStatus } from '@/api/query'
-import { detectAnomaly, getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
+import { getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings } from '@/api/query'
 
 // 声明全局 Window 类型
@@ -80,6 +81,12 @@ watch(() => window.isDark?.value, (newVal) => {
 const loading = ref(false)
 const lastUpdateTime = ref('')
 
+// 实时推送相关
+const eventSource = ref<EventSource | null>(null)
+const isRealtimeConnected = ref(false)
+const realtimeStartTime = ref('2016-09-03 00:00:00') // 固定从 9 月 3 日 0 点开始
+const currentSimulateTime = ref('2016-09-03 00:00:00') // 当前模拟时间，初始为开始时间
+
 const kpiData = ref<KPIData>({
   totalEnergy: 0,
   energyChange: 0,
@@ -88,7 +95,6 @@ const kpiData = ref<KPIData>({
   deviceOnlineRate: 0,
   abnormalDeviceCount: 0,
   cop: 0 // COP(能效比)
-  // co2Reduction: 0 // 已注释，不再使用
 })
 
 const chartData = ref({
@@ -144,14 +150,20 @@ const generateRankingData = (buildingEnergy: any[]) => {
 const updateDeviceStats = async () => {
   try {
     const response = await getDeviceStatus(currentBuildingId.value)
-    const data = response.data.data
+    const data = response.data?.data as {
+      totalCount?: number
+      normalCount?: number
+      abnormalCount?: number
+      offlineCount?: number
+      healthScore?: number
+    } | undefined
     
     deviceStats.value = {
-      totalCount: data.totalCount || 0,
-      normalCount: data.normalCount || 0,
-      abnormalCount: data.abnormalCount || 0,
-      offlineCount: data.offlineCount || 0,
-      healthScore: Math.round(((data.normalCount || 0) / (data.totalCount || 1)) * 100)
+      totalCount: data?.totalCount || 0,
+      normalCount: data?.normalCount || 0,
+      abnormalCount: data?.abnormalCount || 0,
+      offlineCount: data?.offlineCount || 0,
+      healthScore: Math.round(((data?.normalCount || 0) / (data?.totalCount || 1)) * 100)
     }
   } catch (error) {
     console.error('获取设备状态失败:', error)
@@ -180,10 +192,11 @@ const updateCOP = async () => {
       end_date: mockToday
     })
     
-    // 后端返回格式：{ avg_cop_cooling, avg_cop_heating }
-    const copData = response.data.data
-    // 优先使用制冷 COP，如果没有则使用供热 COP，最后使用默认值
-    const cop = copData.avg_cop_cooling || copData.avg_cop_heating || 3.5
+    // 后端返回格式：{ avg_cop_cooling, avg_cop_heating, cop_type, evaluation, details }
+    const copData = response.data?.data
+    
+    // 使用 avg_cop_cooling 属性，如果没有则使用默认值
+    const cop = copData?.avg_cop_cooling || 3.5
     kpiData.value.cop = Number(cop.toFixed(2))
   } catch (error) {
     console.error('更新 COP 失败:', error)
@@ -192,23 +205,22 @@ const updateCOP = async () => {
   }
 }
 
-// 更新异常设备数量
+// 更新异常设备数量 - 从 alarms 表统计未解决的告警数量
 const updateAbnormalDeviceCount = async () => {
   try {
-    const appStore = useAppStore()
-    const mockToday = appStore.MOCK_TODAY
-    
-    const anomalyResponse = await detectAnomaly({
-      building_id: currentBuildingId.value,
-      start_date: mockToday,
-      end_date: mockToday,
-      threshold: 2.0
+    // 直接查询 alarms 表中的未解决告警数量
+    const alarmRes = await fetchAlarmList({ 
+      status: 'pending',
+      page_size: 1,
+      page: 1
     })
     
-    // 更新 KPI 数据中的异常设备数量
-    kpiData.value.abnormalDeviceCount = anomalyResponse.data.data.anomaly_count || 0
+    // 从响应中获取总数
+    const totalAlarms = alarmRes.data?.data?.total || 0
+    kpiData.value.abnormalDeviceCount = totalAlarms
   } catch (error) {
     console.error('更新异常设备数量失败:', error)
+    kpiData.value.abnormalDeviceCount = 0
   }
 }
 
@@ -226,7 +238,7 @@ const updateDayAndWeekChange = async () => {
       dates: dates
     })
     
-    const dailyData = response.data.data.daily_data || []
+    const dailyData = response.data?.data?.daily_data || []
     
     // 按日期映射数据
     const dataMap = new Map()
@@ -253,7 +265,7 @@ const updateBuildingEnergyData = async () => {
     
     // 获取建筑列表
     const buildingsResponse = await getBuildings()
-    const buildings = buildingsResponse.data.data || []
+    const buildings = buildingsResponse.data?.data || []
     
     // 提取所有建筑 ID
     const buildingIds = buildings.map((building: any) => 
@@ -268,7 +280,7 @@ const updateBuildingEnergyData = async () => {
       building_ids: buildingIds
     })
     
-    const buildingsData = response.data.data.buildings || []
+    const buildingsData = response.data?.data?.buildings || []
     
     // 按建筑 ID 汇总
     const buildingEnergyMap = new Map()
@@ -346,15 +358,25 @@ const loadData = async () => {
   loading.value = true
   try {
     // 并行调用：KPI 数据 + 分布图数据（24 小时）+ 趋势数据（近 7 日）+ 异常列表
-    const [kpiRes, distributionRes, trendRes, anomalyRes] = await Promise.all([
+    const [kpiRes, distributionRes, trendRes, alarmRes] = await Promise.all([
       getKPIData(),
       getChartData(),
       getTrendData(),
-      getAnomalyList(5)
+      fetchAlarmList({ status: 'pending', page_size: 5 })
     ])
 
-    // 填充 KPI 数据
-    kpiData.value = kpiRes
+    // 填充 KPI 数据 - 使用 Object.assign 保持响应式引用
+    if (kpiRes) {
+      Object.assign(kpiData.value, {
+        totalEnergy: kpiRes.totalEnergy ?? 0,
+        energyChange: kpiRes.energyChange ?? 0,
+        dayChange: kpiRes.dayChange ?? 0,
+        weekChange: kpiRes.weekChange ?? 0,
+        deviceOnlineRate: kpiRes.deviceOnlineRate ?? 100,
+        abnormalDeviceCount: kpiRes.abnormalDeviceCount ?? 0
+        // cop 属性不覆盖，由后续 updateCOP() 单独更新
+      })
+    }
     
     // 填充图表数据 - 分别使用不同的数据源
     chartData.value = {
@@ -363,30 +385,37 @@ const loadData = async () => {
       trendData: trendRes                // 近 7 日总能耗趋势（独立数据）
     }
     
-    // 填充异常列表
+    // 填充异常列表 - 始终保留最近的 5 条未解决告警
     anomalyList.value = []
-    if (anomalyRes.data.data?.anomalies && anomalyRes.data.data.anomalies.length > 0) {
-      anomalyList.value = anomalyRes.data.data.anomalies.map((item: any) => ({
-        id: item.timestamp || Date.now(),
-        time: item.timestamp,
-        buildingName: '建筑',
-        type: '能耗异常',
-        status: 'pending' as const,
-        buildingId: currentBuildingId.value,
-        timeRange: {
-          start: anomalyRes.data.data.period.split(' 至 ')[0],
-          end: anomalyRes.data.data.period.split(' 至 ')[1]
-        }
-      })).slice(0, 5) // 只取前 5 条
-    }
     
+    const alarmData = alarmRes.data?.data
+    if (alarmData?.items && Array.isArray(alarmData.items)) {
+      const alarms = alarmData.items
+      
+      anomalyList.value = alarms.map((item: any) => ({
+        id: item.id,
+        time: item.start_time,
+        buildingName: item.building_id,
+        type: mapAlarmTypeToChinese(item.alarm_type),
+        status: mapAlarmStatus(item.status),
+        buildingId: item.building_id,
+        meterId: item.meter_id || '',
+        description: item.description || `告警 ${item.id}`,
+        timeRange: {
+          start: item.start_time,
+          end: item.end_time || item.start_time
+        }
+      }))
+    } else {
+      console.log('⚠️ 无告警数据')
+    }
+
     // 等待建筑能耗数据和设备统计数据更新完成
     await updateBuildingEnergyData()
     await updateDeviceStats()
     
     // 并行调用其他更新函数
     await Promise.all([
-      // updateCO2Reduction(),
       updateCOP(),
       updateAbnormalDeviceCount(),
       updateDayAndWeekChange()
@@ -402,49 +431,191 @@ const loadData = async () => {
   }
 }
 
-// 处理建筑点击事件（图表联动）
-const handleBuildingClick = (buildingName: string) => {
-  // EnergyCharts 组件内部已经通过 emit 事件处理了联动逻辑
-  // 这里不需要额外操作
-  console.log('建筑联动:', buildingName)
-}
-
-// 刷新数据
-const handleRefresh = () => {
-  loading.value = true
-  loadData().finally(() => {
-    loading.value = false
-  })
-}
-
 // 查看全部异常
 const handleViewAll = () => {
-  router.push('/analysis?showAllAnomalies=true')
+  router.push('/alarm')
 }
 
-// 退出登录
-const handleLogout = () => {
-  dialog.warning({
-    title: '退出登录',
-    content: '确定要退出登录吗？',
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await userStore.logoutAction()
-      message.success('已退出登录')
-      router.push('/login')
+// 连接到实时数据流
+const connectToRealtimeStream = () => {
+  try {
+    // 关闭之前的连接
+    if (eventSource.value) {
+      eventSource.value.close()
     }
-  })
+    
+    const params = new URLSearchParams({
+      start_date: realtimeStartTime.value,
+      end_date: '2016-09-30 23:59:59',
+      speed: '1', // 真实速度
+      batch_hours: '1' // 每次推送 1 小时的数据，每隔 1 小时推送一次
+    })
+    
+    const url = `http://localhost:3000/api/realtime/stream?${params}`
+    
+    eventSource.value = new EventSource(url)
+    isRealtimeConnected.value = true
+    
+    eventSource.value.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        
+        if (data.type === 'start') {
+        } 
+        else if (data.type === 'data') {
+          // 更新当前模拟时间
+          if (data.batch_start) {
+            currentSimulateTime.value = formatTimestamp(data.batch_start)
+          }
+          
+          // 检查是否有异常数据
+          if (data.records && data.records.length > 0) {
+            const anomalies = data.records.filter((r: any) => r.is_anomaly)
+            
+            if (anomalies.length > 0) {
+              // 将异常添加到列表
+              anomalies.forEach((record: any) => {
+                const anomalyItem = {
+                  id: `${record.building_id}_${record.timestamp}`,
+                  time: record.timestamp,
+                  buildingName: record.building_id,
+                  type: '能耗异常',
+                  status: 'pending' as const,
+                  buildingId: record.building_id,
+                  meterId: record.meter_id,
+                  electricity: record.electricity,
+                  ambientTemp: record.ambient_temp,
+                  // 显示算法检测的详细信息
+                  description: record.anomaly_info 
+                    ? `用电量 ${record.electricity.toFixed(2)} kWh (Z-score: ${record.anomaly_info.z_score?.toFixed(2) || 'N/A'})`
+                    : `用电量 ${record.electricity.toFixed(2)} kWh`,
+                  anomalyInfo: record.anomaly_info // 保存完整的异常信息
+                }
+                
+                // 避免重复添加
+                const exists = anomalyList.value.some(
+                  item => item.id === anomalyItem.id
+                )
+                
+                if (!exists) {
+                  anomalyList.value.unshift(anomalyItem)
+                  
+                  // 移除已解决的告警，保持列表中始终是最近的 5 条未解决告警
+                  const unresolvedIndex = anomalyList.value.findIndex(
+                    item => item.status === 'resolved'
+                  )
+                  
+                  if (unresolvedIndex !== -1 && anomalyList.value.length > 5) {
+                    // 如果超过 5 条且有已解决的，移除最后一条已解决的
+                    anomalyList.value.splice(unresolvedIndex, 1)
+                  } else if (anomalyList.value.length > 5) {
+                    // 如果没有已解决的，直接移除最后一条
+                    anomalyList.value.pop()
+                  }
+                  
+                  // 播放提示音或显示通知
+                  message.warning(`发现异常：${record.building_id} - ${record.meter_id}`)
+                }
+              })
+            }
+          }
+        } 
+        else if (data.type === 'progress') {
+        }
+        else if (data.type === 'complete') {
+          message.success('数据回放完成')
+          disconnectRealtimeStream()
+        }
+        else if (data.type === 'error') {
+          console.error('❌ 流错误:', data.message)
+          message.error(`数据流错误：${data.message}`)
+          disconnectRealtimeStream()
+        }
+      } catch (error) {
+        console.error('解析 SSE 数据失败:', error)
+      }
+    }
+    
+    eventSource.value.onerror = () => {
+      console.error('❌ SSE 连接错误')
+      message.error('实时数据连接中断')
+      disconnectRealtimeStream()
+    }
+    
+  } catch (error) {
+    console.error('连接实时数据流失败:', error)
+    message.error('连接失败')
+    isRealtimeConnected.value = false
+  }
 }
 
+// 断开实时数据流
+const disconnectRealtimeStream = () => {
+  if (eventSource.value) {
+    eventSource.value.close()
+    eventSource.value = null
+  }
+  isRealtimeConnected.value = false
+}
+
+// 格式化时间戳
+const formatTimestamp = (timestamp: string): string => {
+  try {
+    const date = new Date(timestamp)
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  } catch (e) {
+    return timestamp
+  }
+}
+
+// 告警类型映射（英文 -> 中文）
+const mapAlarmTypeToChinese = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'energy': '能耗异常',
+    'dynamic_baseline': '动态基线异常',
+    'trend_decline': '趋势下降异常',
+    'threshold': '阈值告警',
+    'device': '设备告警'
+  }
+  return typeMap[type] || type
+}
+
+// 告警状态映射
+const mapAlarmStatus = (status: string): 'pending' | 'processing' | 'resolved' => {
+  const statusMap: Record<string, 'pending' | 'processing' | 'resolved'> = {
+    'pending': 'pending',
+    'acknowledged': 'processing',
+    'confirmed': 'processing',
+    'resolved': 'resolved'
+  }
+  return statusMap[status] || 'pending'
+}
 
 onMounted(() => {
   // 先获取建筑 ID，再加载数据
   fetchCurrentBuildingId().then(loadData)
+  
+  const appStore = useAppStore()
+  const mockDateTime = appStore.getMockDateTime()
+  realtimeStartTime.value = mockDateTime
+  currentSimulateTime.value = mockDateTime
+  
+  // 延迟 2 秒后启动实时数据流
+  setTimeout(() => {
+    connectToRealtimeStream()
+  }, 2000)
 })
 
 onUnmounted(() => {
   // 清理逻辑已移除，不再需要清除定时器
+  disconnectRealtimeStream()
 })
 </script>
 

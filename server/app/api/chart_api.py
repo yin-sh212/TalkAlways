@@ -111,6 +111,118 @@ async def get_trend_data(
         }
 
 
+@router.get("/alarm-trend")
+async def get_alarm_trend_data(
+        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        start_date: Optional[str] = Query(default=None, description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
+        end_date: str = Query(default="2016-08-15", description="截止日期，格式：YYYY-MM-DD，例如：2016-08-15"),
+        days: Optional[int] = Query(default=None, ge=1, le=365, description="天数，可选，若未提供则根据 start_date 和 end_date 计算")
+):
+    """获取告警趋势图数据（ECharts 格式）- 按时间统计各告警级别的数量"""
+    try:
+        # 如果提供了 start_date，则根据 start_date 和 end_date 计算实际天数
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            days = (end_dt - start_dt).days + 1  # 包含首尾两天
+        else:
+            # 如果没有提供 start_date，使用 days 参数（默认 7 天）
+            days = days or 7
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            start_dt = end_dt - timedelta(days=days-1)
+            start_date = start_dt.strftime("%Y-%m-%d")
+        
+        # 根据天数决定时间粒度
+        if days == 1:
+            # 今日：按小时统计告警数量
+            group_by = "DATE(start_time), HOUR(start_time)"
+            select_time = "DATE(start_time) as date, HOUR(start_time) as hour"
+            format_time = lambda item: f"{item['date']} {item['hour']:02d}:00"
+            
+            # 生成所有小时点（00:00 到 23:00）
+            categories = [f"{start_date} {h:02d}:00" for h in range(24)]
+        else:
+            # 多天：按天统计告警数量
+            group_by = "DATE(start_time)"
+            select_time = "DATE(start_time) as date"
+            format_time = lambda item: str(item['date'])
+            
+            # 生成所有日期（包含首尾）
+            categories = []
+            current_dt = start_dt
+            while current_dt <= end_dt:
+                categories.append(current_dt.strftime("%Y-%m-%d"))
+                current_dt += timedelta(days=1)
+        
+        # 查询告警数量，按级别统计
+        sql = f"""
+            SELECT 
+                {select_time},
+                alarm_level,
+                COUNT(*) as alarm_count
+            FROM alarms
+            WHERE building_id = %s 
+                AND DATE(start_time) BETWEEN %s AND %s
+            GROUP BY {group_by}, alarm_level
+            ORDER BY date ASC, alarm_level ASC
+        """
+
+        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+
+        # 初始化系列数据，所有时间点都初始化为 0
+        series_data = {
+            1: [0] * len(categories),  # 紧急
+            2: [0] * len(categories),  # 重要
+            3: [0] * len(categories),  # 一般
+            4: [0] * len(categories)   # 提示
+        }
+        
+        # 填充实际告警数量
+        for item in data:
+            time_key = format_time(item)
+            if time_key in categories:
+                time_index = categories.index(time_key)
+                alarm_level = item['alarm_level']
+                alarm_count = item['alarm_count']
+                
+                if alarm_level in series_data:
+                    series_data[alarm_level][time_index] = alarm_count
+        
+        # 构建系列数据
+        level_names = {
+            1: "紧急",
+            2: "重要",
+            3: "一般",
+            4: "提示"
+        }
+        
+        series = []
+        for level, name in level_names.items():
+            series.append({
+                "name": name,
+                "type": "line",
+                "data": series_data[level],
+                "smooth": True
+            })
+
+        return {
+            "code": 200,
+            "data": {
+                "categories": categories,
+                "series": series
+            }
+        }
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"获取告警趋势数据失败：{str(e)}",
+            "data": {
+                "categories": [],
+                "series": []
+            }
+        }
+
+
 @router.get("/comparison")
 async def get_comparison_data(
         building_ids: str = Query(...,
@@ -157,7 +269,7 @@ async def get_comparison_data(
         
         building_name = name_data['name'] if name_data else building_id
         building_type = name_data['type'] if name_data else '未知'
-        building_area = name_data['area'] if name_data and name_data['area'] else 1  # 避免除零
+        building_area = name_data['area'] if name_data and name_data['area'] else None
         
         # 计算各项指标
         total_elec = data['total_elec']
@@ -166,8 +278,12 @@ async def get_comparison_data(
         anomaly_count = data['anomaly_count']
         total_count = data['total_count']
         
-        # 单位面积能耗 (kWh/m²) - 由于面积为 0，直接用总能耗代替
-        per_area = total_elec / building_area if building_area > 0 else total_elec
+        # 单位面积能耗 (kWh/m²) - 如果面积缺失或为 0，使用平均能耗作为替代指标
+        if building_area and building_area > 0:
+            per_area = total_elec / building_area
+        else:
+            # 使用平均能耗作为相对指标（避免极端值）
+            per_area = avg_elec * 10  # 乘以一个系数使其与其他评分量级相当
         
         # 峰值系数
         peak_ratio = peak_elec / avg_elec if avg_elec > 0 else 0
@@ -209,6 +325,10 @@ async def get_comparison_data(
                 b["efficiency_score"] = max(0, min(100, relative_efficiency))
             else:
                 b["efficiency_score"] = 50  # 默认中间分
+            
+            # 防止出现 NaN 或无穷大
+            if not b["efficiency_score"]:
+                b["efficiency_score"] = 50
 
     # 构建雷达图数据
     radar_data = {
@@ -222,11 +342,11 @@ async def get_comparison_data(
             {
                 "building_name": b["building_name"],
                 "values": [
-                    round(b["efficiency_score"], 2),
-                    round(b["stability_score"], 2),
-                    round(b["health_score"], 2),
+                    round(b["efficiency_score"], 2) if b["efficiency_score"] else 50,
+                    round(b["stability_score"], 2) if b["stability_score"] else 50,
+                    round(b["health_score"], 2) if b["health_score"] else 50,
                     # 能效比：基于单位面积能耗的相对评分（与节能性类似但权重不同）
-                    round(max(0, min(100, 50 - (b["per_area"] - avg_per_area) / avg_per_area * 30)), 2) if avg_per_area > 0 else 50
+                    round(max(0, min(100, 50 - (b["per_area"] - avg_per_area) / max(avg_per_area, 0.001) * 30)), 2) if avg_per_area > 0 else 50
                 ]
             }
             for b in building_details
@@ -290,4 +410,76 @@ async def get_alarm_distribution(
             "code": 500,
             "message": f"获取告警分布失败：{str(e)}",
             "data": []
+        }
+
+
+@router.get("/energy-distribution")
+async def get_energy_distribution(
+        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        date: str = Query(default="2016-09-01", description="日期，格式：YYYY-MM-DD")
+):
+    """获取 24 小时能耗分布数据（折线图）- 按小时统计能耗"""
+    try:
+        # 查询指定日期的 24 小时能耗数据
+        sql = """
+            SELECT 
+                HOUR(timestamp) as hour,
+                AVG(electricity) as avg_elec,
+                MAX(electricity) as max_elec
+            FROM energy_consumption
+            WHERE building_id = %s 
+                AND DATE(timestamp) = %s
+            GROUP BY HOUR(timestamp)
+            ORDER BY hour ASC
+        """
+        
+        data = await Database.fetch_all(sql, (building_id, date))
+        
+        # 生成 24 个小时的 categories (00:00 - 23:00)
+        categories = [f"{h:02d}:00" for h in range(24)]
+        
+        # 初始化所有小时的数据为 0
+        avg_values = [0] * 24
+        max_values = [0] * 24
+        
+        # 填充实际查询到的数据
+        for item in data:
+            hour = int(item['hour']) if item['hour'] is not None else 0
+            if 0 <= hour < 24:
+                avg_values[hour] = float(item['avg_elec']) if item['avg_elec'] is not None else 0
+                max_values[hour] = float(item['max_elec']) if item['max_elec'] is not None else 0
+        
+        series = [
+            {
+                "name": "平均用电量",
+                "type": "line",
+                "data": avg_values,
+                "smooth": True,
+                "areaStyle": {"opacity": 0.2}
+            },
+            {
+                "name": "最大用电量",
+                "type": "line",
+                "data": max_values,
+                "smooth": True,
+                "lineStyle": {"type": "dashed"}
+            }
+        ]
+        
+        return {
+            "code": 200,
+            "data": {
+                "categories": categories,
+                "series": series
+            }
+        }
+    except Exception as e:
+        print(f"❌ 获取能耗分布失败：{e}")
+        return {
+            "code": 500,
+            "message": f"获取能耗分布失败：{str(e)}",
+            "data": {
+                "categories": [],
+                "series": []
+            }
         }

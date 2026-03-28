@@ -2,8 +2,34 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useAppStore = defineStore('app', () => {
-  // Mock 日期 - 用于开发测试
-  const MOCK_TODAY = ref<string>('2016-08-15')
+  // 格式化日期为 YYYY-MM-DD
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
+  // Mock 日期 - 基于真实当前时间计算
+  // 计算逻辑：用真实当前时间减去 N 天，使日期回到 2016 年，但保持时分秒不变
+  const calculateMockToday = (): string => {
+    const now = new Date() // 真实当前时间，如 2026-03-28 15:05:40
+    
+    // 目标基准日期：2016-09-03（可以根据需要调整）
+    const targetBaseDate = new Date('2016-09-03T00:00:00')
+    
+    // 计算当前时间与基准日期的天数差
+    const oneDay = 24 * 60 * 60 * 1000 // 一天的毫秒数
+    const daysDiff = Math.floor((now.getTime() - targetBaseDate.getTime()) / oneDay)
+    
+    // 用基准日期加上时分秒部分
+    const mockDate = new Date('2016-09-03T00:00:00')
+    mockDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
+    
+    return formatDate(mockDate)
+  }
+  
+  const MOCK_TODAY = ref<string>(calculateMockToday())
   
   // 设置 Mock 日期
   const setMockToday = (date: string) => {
@@ -15,12 +41,20 @@ export const useAppStore = defineStore('app', () => {
     return MOCK_TODAY.value
   }
   
-  // 格式化日期为 YYYY-MM-DD
-  const formatDate = (date: Date): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+  // 获取完整的模拟时间（包含时分秒）- 用于实时数据流
+  const getMockDateTime = (): string => {
+    const now = new Date() // 真实当前时间
+    const mockDate = new Date('2016-09-03T00:00:00')
+    mockDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
+    
+    const year = mockDate.getFullYear()
+    const month = String(mockDate.getMonth() + 1).padStart(2, '0')
+    const day = String(mockDate.getDate()).padStart(2, '0')
+    const hours = String(mockDate.getHours()).padStart(2, '0')
+    const minutes = String(mockDate.getMinutes()).padStart(2, '0')
+    const seconds = String(mockDate.getSeconds()).padStart(2, '0')
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
   }
   
   // 计算昨日日期
@@ -55,21 +89,22 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   
-  // 获取本周时间范围（周一至周日）
+  // 获取本周时间范围（当前日期往前推 7 天）
   const getWeekRange = (): { start: string; end: string } => {
     const mockDate = new Date(MOCK_TODAY.value)
-    const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
-    const monday = new Date(mockDate)
-    monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
-    monday.setHours(0, 0, 0, 0)
     
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
-    sunday.setHours(23, 59, 59, 999)
+    // 结束时间为今天 23:59:59
+    const end = new Date(mockDate)
+    end.setHours(23, 59, 59, 999)
+    
+    // 开始时间为 7 天前 00:00:00
+    const start = new Date(mockDate)
+    start.setDate(mockDate.getDate() - 6) // 往前推 6 天，加上今天共 7 天
+    start.setHours(0, 0, 0, 0)
     
     return {
-      start: monday.toISOString().split('T')[0],
-      end: sunday.toISOString().split('T')[0]
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
     }
   }
   
@@ -93,6 +128,7 @@ export const useAppStore = defineStore('app', () => {
     MOCK_TODAY,
     setMockToday,
     getMockToday,
+    getMockDateTime,
     formatDate,
     getYesterday,
     getLastWeek,

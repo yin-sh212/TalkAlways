@@ -291,3 +291,75 @@ async def get_alarm_distribution(
             "message": f"获取告警分布失败：{str(e)}",
             "data": []
         }
+
+
+@router.get("/energy-distribution")
+async def get_energy_distribution(
+        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        date: str = Query(default="2016-09-01", description="日期，格式：YYYY-MM-DD")
+):
+    """获取 24 小时能耗分布数据（折线图）- 按小时统计能耗"""
+    try:
+        # 查询指定日期的 24 小时能耗数据
+        sql = """
+            SELECT 
+                HOUR(timestamp) as hour,
+                AVG(electricity) as avg_elec,
+                MAX(electricity) as max_elec
+            FROM energy_consumption
+            WHERE building_id = %s 
+                AND DATE(timestamp) = %s
+            GROUP BY HOUR(timestamp)
+            ORDER BY hour ASC
+        """
+        
+        data = await Database.fetch_all(sql, (building_id, date))
+        
+        # 生成 24 个小时的 categories (00:00 - 23:00)
+        categories = [f"{h:02d}:00" for h in range(24)]
+        
+        # 初始化所有小时的数据为 0
+        avg_values = [0] * 24
+        max_values = [0] * 24
+        
+        # 填充实际查询到的数据
+        for item in data:
+            hour = int(item['hour']) if item['hour'] is not None else 0
+            if 0 <= hour < 24:
+                avg_values[hour] = float(item['avg_elec']) if item['avg_elec'] is not None else 0
+                max_values[hour] = float(item['max_elec']) if item['max_elec'] is not None else 0
+        
+        series = [
+            {
+                "name": "平均用电量",
+                "type": "line",
+                "data": avg_values,
+                "smooth": True,
+                "areaStyle": {"opacity": 0.2}
+            },
+            {
+                "name": "最大用电量",
+                "type": "line",
+                "data": max_values,
+                "smooth": True,
+                "lineStyle": {"type": "dashed"}
+            }
+        ]
+        
+        return {
+            "code": 200,
+            "data": {
+                "categories": categories,
+                "series": series
+            }
+        }
+    except Exception as e:
+        print(f"❌ 获取 24 小时能耗分布失败：{e}")
+        return {
+            "code": 500,
+            "message": f"获取 24 小时能耗分布失败：{str(e)}",
+            "data": {
+                "categories": [],
+                "series": []
+            }
+        }

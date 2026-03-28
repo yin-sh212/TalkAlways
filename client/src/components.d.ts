@@ -63,6 +63,7 @@ declare module 'vue' {
     NTooltip: typeof import('naive-ui')['NTooltip']
     NUpload: typeof import('naive-ui')['NUpload']
     NUploadDragger: typeof import('naive-ui')['NUploadDragger']
+    RealtimeMonitor: typeof import('./components/overview/RealtimeMonitor.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     Trend: typeof import('./components/alarm/Trend.vue')['default']

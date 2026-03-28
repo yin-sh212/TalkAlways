@@ -1,15 +1,17 @@
 import http from './http'
+import type { ApiResponse } from '@/types/user'
+import type { Building, DeviceStatus } from '@/types/query'
 
-// 获取建筑列表
+// 获取建筑列表 - 使用 Building 类型
 export const getBuildings = () => {
-  return http.get('/query/buildings')
+  return http.get<ApiResponse<Building[]>>('/query/buildings')
 }
 
-// 获取设备状态
+// 获取设备状态 - 使用 DeviceStatus 类型
 export const getDeviceStatus = (params?: {
   building_id?: string
 }) => {
-  return http.get('/query/device-status', { params })
+  return http.get<ApiResponse<DeviceStatus[]>>('/query/device-status', { params })
 }
 
 // 告警查询参数
@@ -27,6 +29,7 @@ export interface AlarmQueryParams {
 // 告警查询响应
 export interface AlarmResponse {
   code: number
+  message: string
   data: {
     alarms: AlarmItem[]
     total: number
@@ -63,7 +66,7 @@ export const getAlarmSummary = (params: {
   return http.get('/statistics/summary', { params })
 }
 
-// 获取告警趋势数据
+// 获取告警趋势数据 - 使用 TrendData 类型
 export const getAlarmTrend = (params: {
   building_id?: string
   start_date?: string
@@ -72,7 +75,7 @@ export const getAlarmTrend = (params: {
   return http.get('/charts/trend', { params })
 }
 
-// 获取告警分布数据
+// 获取告警分布数据 - 使用 DistributionData 类型
 export const getAlarmDistribution = (params: {
   building_id?: string
   start_date?: string
@@ -81,7 +84,7 @@ export const getAlarmDistribution = (params: {
   return http.get('/charts/distribution', { params })
 }
 
-// 获取异常检测数据
+// 获取异常检测数据 - 使用 AnomalyDetection 类型
 export const detectAnomaly = (params: {
   building_id?: string
   start_date?: string
@@ -157,7 +160,7 @@ export const batchResolve = (data: {
   })
 }
 
-// 导出告警报表
+// 导出告警报表 - 使用 ExportParams 类型
 export interface ExportParams {
   building_ids: string[]
   startTime: string | Date
@@ -165,7 +168,7 @@ export interface ExportParams {
   format?: 'csv' | 'excel' | 'pdf'
 }
 
-export const exportCSV = (params: ExportParams) => {
+export const exportCSV = (params: ExportParams): Promise<Blob> => {
   return http.get('/export/csv', {
     params: {
       building_id: params.building_ids[0] || 'B001',
@@ -176,7 +179,7 @@ export const exportCSV = (params: ExportParams) => {
   })
 }
 
-export const exportExcel = (params: ExportParams) => {
+export const exportExcel = (params: ExportParams): Promise<Blob> => {
   return http.get('/export/excel', {
     params: {
       building_id: params.building_ids[0] || 'B001',
@@ -187,7 +190,7 @@ export const exportExcel = (params: ExportParams) => {
   })
 }
 
-export const exportPDF = (params: ExportParams) => {
+export const exportPDF = (params: ExportParams): Promise<Blob> => {
   return http.get('/export/pdf', {
     params: {
       building_id: params.building_ids[0] || 'B001',
@@ -280,17 +283,17 @@ export const getAlarmLevels = () => {
   return http.get<{ code: number; message: string; data: AlarmLevelDict[] }>('/alarm/dict/alarm-levels')
 }
 
-// 获取告警列表
+// 获取告警列表 - 使用 AlarmListParams 和 AlarmListResponse 类型
 export const getAlarmList = (params?: AlarmListParams) => {
   return http.get<AlarmListResponse>('/alarm/list', { params })
 }
 
-// 批量确认告警
+// 批量确认告警 - 使用 BatchOperationRequest 和 BatchOperationResponse 类型
 export const batchConfirmAlarms = (data: BatchOperationRequest) => {
   return http.post<BatchOperationResponse>('/alarm/batch-confirm', data)
 }
 
-// 批量解决告警
+// 批量解决告警 - 使用 BatchOperationRequest 和 BatchOperationResponse 类型
 export const batchResolveAlarms = (data: BatchOperationRequest) => {
   return http.post<BatchOperationResponse>('/alarm/batch-resolve', data)
 }

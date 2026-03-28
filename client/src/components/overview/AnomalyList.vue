@@ -2,6 +2,9 @@
   <n-card title="实时异常/报警（最新 5 条）" :bordered="false" content-style="padding: 20px;">
     <template #header-extra>
       <n-space align="center">
+        <span v-if="currentSimulateTime" class="simulate-time">
+          📡 模拟时间：{{ currentSimulateTime }}
+        </span>
         <span class="refresh-time">最后更新：{{ lastUpdateTime }}</span>
         <n-button text size="small" @click="handleViewAll">
           查看全部
@@ -22,6 +25,7 @@
           :type="getTypeTagType(item.type)"
           :time="item.time"
           :content="`${item.buildingName} - ${item.type}`"
+          :description="item.description"
         />
       </n-timeline>
     </template>
@@ -30,6 +34,7 @@
 
 <script setup lang="ts">
 import { ChevronForwardOutline as ArrowRight } from '@vicons/ionicons5'
+import { computed } from 'vue'
 
 interface AnomalyItem {
   id: string
@@ -38,6 +43,10 @@ interface AnomalyItem {
   type: string
   status: 'pending' | 'processing' | 'resolved'
   buildingId?: string
+  meterId?: string
+  electricity?: number
+  ambientTemp?: number
+  description?: string
   timeRange?: {
     start: string
     end: string
@@ -48,9 +57,12 @@ interface Props {
   loading: boolean
   anomalyList: AnomalyItem[]
   lastUpdateTime: string
+  currentSimulateTime?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  currentSimulateTime: ''
+})
 
 // 定义事件
 const emit = defineEmits<{
@@ -87,4 +99,11 @@ const sortedAnomalyList = computed(() => {
   font-size: 12px;
   color: #999;
 }
+
+.simulate-time {
+  font-size: 12px;
+  color: #999;
+  margin-right: 10px;
+}
+
 </style>

@@ -8,16 +8,14 @@ export interface SummaryData {
   total_hvac: number
   avg_hvac: number
   peak_hvac: number
-  // ... 其他汇总数据字段
 }
 
-// 能效比(COP)计算结果
+// 能效比 (COP) 计算结果
 export interface COPResult {
   cop_value: number
   cooling_capacity: number
   input_power: number
   efficiency_level: string
-  // ... 其他COP相关字段
 }
 
 // 异常检测结果
@@ -46,4 +44,11 @@ export interface SummaryParams {
   start_date?: string
   end_date?: string
   time_unit?: 'hour' | 'day' | 'week' | 'month'
+}
+
+// 统计响应
+export interface StatisticsResponse<T> {
+  code: number
+  message: string
+  data: T
 }

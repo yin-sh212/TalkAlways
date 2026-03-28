@@ -2,8 +2,34 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useAppStore = defineStore('app', () => {
-  // Mock 日期 - 用于开发测试
-  const MOCK_TODAY = ref<string>('2016-08-15')
+  // 格式化日期为 YYYY-MM-DD
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
+  // Mock 日期 - 基于真实当前时间计算
+  // 计算逻辑：用真实当前时间减去 N 天，使日期回到 2016 年，但保持时分秒不变
+  const calculateMockToday = (): string => {
+    const now = new Date() // 真实当前时间，如 2026-03-28 15:05:40
+    
+    // 目标基准日期：2016-09-01（可以根据需要调整）
+    const targetBaseDate = new Date('2016-09-01T00:00:00')
+    
+    // 计算当前时间与基准日期的天数差
+    const oneDay = 24 * 60 * 60 * 1000 // 一天的毫秒数
+    const daysDiff = Math.floor((now.getTime() - targetBaseDate.getTime()) / oneDay)
+    
+    // 用基准日期加上时分秒部分
+    const mockDate = new Date('2016-09-01T00:00:00')
+    mockDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
+    
+    return formatDate(mockDate)
+  }
+  
+  const MOCK_TODAY = ref<string>(calculateMockToday())
   
   // 设置 Mock 日期
   const setMockToday = (date: string) => {
@@ -13,14 +39,6 @@ export const useAppStore = defineStore('app', () => {
   // 获取 Mock 日期
   const getMockToday = () => {
     return MOCK_TODAY.value
-  }
-  
-  // 格式化日期为 YYYY-MM-DD
-  const formatDate = (date: Date): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
   }
   
   // 计算昨日日期

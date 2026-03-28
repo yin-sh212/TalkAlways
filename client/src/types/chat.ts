@@ -1,6 +1,6 @@
 // 智能问答相关类型定义
 
-// ML模型配置
+// ML 模型配置
 export interface MLModelConfig {
   model_type: 'anomaly_detection' | 'forecasting' | 'classification'
   parameters: {
@@ -37,4 +37,17 @@ export interface AskResponse {
     snippet: string
   }>
   session_id: string
+}
+
+// 对话消息
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp?: string
+}
+
+// 会话历史
+export interface ChatHistory {
+  session_id: string
+  messages: ChatMessage[]
 }

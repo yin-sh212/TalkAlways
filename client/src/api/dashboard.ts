@@ -1,8 +1,6 @@
-import http from './http'
-import type { KPIData, ChartData, AnomalyItem, DashboardResponse, SummaryResponse, DistributionResponse, TrendResponse, AnomalyResponse } from '@/types/dashboard'
-import { getSummary, detectAnomaly } from './statistics'
-import { getDistributionData, getTrendData as getTrendDataFromCharts } from './charts'
-import { getDeviceStatus } from './query'
+import type { KPIData, ChartData, DashboardResponse, AnomalyItem } from '@/types/dashboard'
+import { getSummary as getStatisticsSummary, detectAnomaly as detectStatisticsAnomaly } from './statistics'
+import { getEnergyDistributionData, getTrendData as getTrendDataFromCharts } from './charts'
 import { useBuildingStore } from '@/store/building'
 import { useAppStore } from '@/store/app'
 
@@ -24,7 +22,7 @@ const getMockToday = () => {
 }
 
 // 获取 KPI 数据 - 对接真实接口
-export const getKPIData = async () => {
+export const getKPIData = async (): Promise<KPIData> => {
   // 后端接口：GET /api/statistics/summary?building_id=xxx&start_date=xxx&end_date=xxx&time_unit=day
   const buildingId = getBuildingId()
   const mockToday = getMockToday()
@@ -38,13 +36,12 @@ export const getKPIData = async () => {
       weekChange: 0,
       deviceOnlineRate: 100,
       abnormalDeviceCount: 0,
-      // co2Reduction: 0,
       cop: 0
     }
   }
   
   try {
-    const response = await getSummary({
+    const response = await getStatisticsSummary({
       building_id: buildingId,
       start_date: mockToday,
       end_date: mockToday,
@@ -52,7 +49,7 @@ export const getKPIData = async () => {
     })
     
     // 将后端数据转换为前端需要的格式
-    const summaryData = response.data.data.summary
+    const summaryData = response.data?.data
     
     // 如果没有数据，返回默认值
     if (!summaryData || summaryData.total_elec === null) {
@@ -97,8 +94,8 @@ export const getKPIData = async () => {
 }
 
 // 获取图表数据 - 对接真实接口
-export const getChartData = async () => {
-  // 后端接口：GET /api/charts/distribution?building_id=xxx&date=xxx
+export const getChartData = async (): Promise<ChartData> => {
+  // 后端接口：GET /api/charts/energy-distribution?building_id=xxx&date=xxx
   const buildingId = getBuildingId()
   const mockToday = getMockToday()
   
@@ -111,17 +108,17 @@ export const getChartData = async () => {
   }
   
   try {
-    const response = await getDistributionData({
+    const response = await getEnergyDistributionData({
       building_id: buildingId,
       date: mockToday
     })
     
-    const distributionData = response.data.data
+    const distributionData = response.data?.data
     
     // 直接返回后端返回的图表配置数据
     return {
-      categories: distributionData.categories || [],
-      series: distributionData.series || []
+      categories: distributionData?.categories || [],
+      series: distributionData?.series || []
     }
   } catch (error) {
     console.error('获取图表数据失败:', error)
@@ -134,7 +131,7 @@ export const getChartData = async () => {
 }
 
 // 获取趋势数据 - 对接真实接口（近 7 日总能耗趋势）
-export const getTrendData = async () => {
+export const getTrendData = async (): Promise<Array<{ date: string; energy: number }>> => {
   // 后端接口：GET /api/charts/trend?building_id=xxx&days=7
   const buildingId = getBuildingId()
   
@@ -149,14 +146,13 @@ export const getTrendData = async () => {
       days: 7
     })
     
-    const trendResponse = response.data.data
+    const trendData = response.data?.data
     
     // 将后端返回的趋势数据转换为前端需要的格式
-    // 后端返回：{ categories: ['2016-07-09', '2016-07-10', ...], series: [{name: '平均用电量', data: [...}] }
-    if (trendResponse.categories && trendResponse.series && trendResponse.series.length > 0) {
-      return trendResponse.categories.map((date: string, index: number) => ({
+    if (trendData?.categories && trendData?.series && trendData.series.length > 0) {
+      return trendData.categories.map((date: string, index: number) => ({
         date: date,
-        energy: trendResponse.series[0].data[index] || 0
+        energy: trendData.series[0].data[index] || 0
       }))
     }
     
@@ -169,7 +165,7 @@ export const getTrendData = async () => {
 }
 
 // 获取异常列表 - 对接真实接口
-export const getAnomalyList = async (limit = 5) => {
+export const getAnomalyList = async (limit = 5): Promise<DashboardResponse<AnomalyItem[]>> => {
   // 后端接口：GET /api/statistics/anomaly?building_id=xxx&start_date=xxx&end_date=xxx
   const buildingId = getBuildingId()
   const mockToday = getMockToday()
@@ -177,44 +173,44 @@ export const getAnomalyList = async (limit = 5) => {
   if (!buildingId) {
     console.warn('未设置建筑 ID，返回默认数据')
     return {
-      data: {
-        code: 200,
-        message: '成功',
-        data: {
-          building_id: '',
-          period: `${mockToday} 至 ${mockToday}`,
-          total_points: 0,
-          anomaly_count: 0,
-          anomalies: []
-        }
-      }
+      code: 200,
+      message: '成功',
+      data: []
     }
   }
   
   try {
-    const response = await detectAnomaly({
+    const response = await detectStatisticsAnomaly({
       building_id: buildingId,
       start_date: mockToday,
       end_date: mockToday,
       threshold: 2.0
     })
     
-    return response
+    // 将响应转换为 DashboardResponse 格式
+    return {
+      code: response.data?.code || 200,
+      message: response.data?.message || '成功',
+      data: response.data?.data?.anomalies?.map(anomaly => ({
+        id: anomaly.timestamp,
+        time: anomaly.timestamp,
+        buildingName: '', // 需要通过 building_id 查询
+        type: '能耗异常',
+        status: 'pending',
+        buildingId: buildingId,
+        timeRange: {
+          start: mockToday,
+          end: mockToday
+        }
+      })) || []
+    }
   } catch (error) {
     console.error('获取异常列表失败:', error)
     // 返回空响应
     return {
-      data: {
-        code: 200,
-        message: '成功',
-        data: {
-          building_id: '',
-          period: `${mockToday} 至 ${mockToday}`,
-          total_points: 0,
-          anomaly_count: 0,
-          anomalies: []
-        }
-      }
+      code: 200,
+      message: '成功',
+      data: []
     }
   }
 }

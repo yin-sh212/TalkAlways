@@ -17,9 +17,6 @@
         :distribution-data="chartData.distributionData"
       />
 
-      <!-- 设备监控 -->
-      <DeviceMonitor :loading="loading" :deviceStats="deviceStats" />
-
       <!-- 异常列表 -->
       <AnomalyList 
         :loading="loading" 
@@ -44,7 +41,6 @@ import { getAlarmList as fetchAlarmList } from '@/api/alarm'
 import type { KPIData } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
-import { getDeviceStatus } from '@/api/query'
 import { getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings } from '@/api/query'
 
@@ -105,13 +101,6 @@ const chartData = ref({
 
 const anomalyList = ref<any[]>([])
 const rankingList = ref<any[]>([])
-const deviceStats = ref({
-  totalCount: 0,
-  normalCount: 0,
-  abnormalCount: 0,
-  offlineCount: 0,
-  healthScore: 0
-})
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
 
@@ -146,38 +135,6 @@ const generateRankingData = (buildingEnergy: any[]) => {
   }
 }
 
-// 更新设备统计数据 - 数据来源于 meters 表（监测点/传感器）
-const updateDeviceStats = async () => {
-  try {
-    const response = await getDeviceStatus(currentBuildingId.value)
-    const data = response.data?.data as {
-      totalCount?: number
-      normalCount?: number
-      abnormalCount?: number
-      offlineCount?: number
-      healthScore?: number
-    } | undefined
-    
-    deviceStats.value = {
-      totalCount: data?.totalCount || 0,
-      normalCount: data?.normalCount || 0,
-      abnormalCount: data?.abnormalCount || 0,
-      offlineCount: data?.offlineCount || 0,
-      healthScore: Math.round(((data?.normalCount || 0) / (data?.totalCount || 1)) * 100)
-    }
-  } catch (error) {
-    console.error('获取监测点状态失败:', error)
-    // 使用默认值
-    deviceStats.value = {
-      totalCount: 150,
-      normalCount: 128,
-      abnormalCount: 12,
-      offlineCount: 10,
-      healthScore: 85
-    }
-  }
-}
-
 // 更新 COP(能效比)
 const updateCOP = async () => {
   try {
@@ -203,13 +160,6 @@ const updateCOP = async () => {
     // 使用默认值
     kpiData.value.cop = 3.5 // 典型 COP 值
   }
-}
-
-// 更新异常设备数量 - 从 deviceStats 中获取监测点的真实异常数量
-const updateAbnormalDeviceCount = () => {
-  // 直接使用 deviceStats 中的 abnormalCount，避免重复查询
-  // deviceStats 已经在 updateDeviceStats() 中从 /api/query/device-status 接口获取
-  kpiData.value.abnormalDeviceCount = deviceStats.value.abnormalCount
 }
 
 // 更新日环比和周同比 - 使用批量接口
@@ -398,14 +348,12 @@ const loadData = async () => {
       console.log('⚠️ 无告警数据')
     }
 
-    // 等待建筑能耗数据和设备统计数据更新完成
+    // 等待建筑能耗数据更新完成
     await updateBuildingEnergyData()
-    await updateDeviceStats()
     
     // 并行调用其他更新函数
     await Promise.all([
       updateCOP(),
-      updateAbnormalDeviceCount(),
       updateDayAndWeekChange()
     ])
     

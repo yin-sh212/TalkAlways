@@ -17,6 +17,9 @@
                 <component :is="Component" :key="route.fullPath" v-if="!route.meta.keepAlive" />
               </router-view>
             </n-layout-content>
+            
+            <!-- AI 悬浮球 - 全局可用 -->
+            <AIFloatingBall />
           </n-layout>
         </n-notification-provider>
       </n-dialog-provider>
@@ -25,10 +28,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, NLayout, NLayoutContent, darkTheme, GlobalThemeOverrides } from 'naive-ui'
 import Navbar from '@/components/common/Navbar.vue'
+import AIFloatingBall from '@/components/common/AIFloatingBall.vue'
 
 // 声明全局 Window 类型
 declare global {
@@ -39,6 +43,10 @@ declare global {
 }
 
 const route = useRoute()
+
+onMounted(() => {
+  console.log('[App] 应用已挂载，当前路由:', route.path)
+})
 
 // 判断是否是登录页面
 const isLoginPage = computed(() => route.path === '/login')

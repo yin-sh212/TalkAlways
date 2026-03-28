@@ -8,6 +8,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AiAssistantPlaceholder: typeof import('./components/workspace/AiAssistantPlaceholder.vue')['default']
+    AIFloatingBall: typeof import('./components/common/AIFloatingBall.vue')['default']
     AnomalyList: typeof import('./components/overview/AnomalyList.vue')['default']
     DetailTable: typeof import('./components/alarm/DetailTable.vue')['default']
     DeviceManagement: typeof import('./components/workspace/DeviceManagement.vue')['default']
@@ -22,6 +23,7 @@ declare module 'vue' {
     NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
     Navbar: typeof import('./components/common/Navbar.vue')['default']
+    NBadge: typeof import('naive-ui')['NBadge']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
     NCollapse: typeof import('naive-ui')['NCollapse']

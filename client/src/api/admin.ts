@@ -45,13 +45,17 @@ export interface KnowledgeDocument {
 
 export interface KnowledgeListData {
   total: number
-  documents: KnowledgeDocument[]
+  page: number
+  page_size: number
+  items: KnowledgeDocument[]
 }
 
 export const getKnowledgeList = (params?: { 
   page?: number
   page_size?: number
   category?: string
+  keyword?: string
+  tag?: string
 }) => {
   return http.get<ApiResponse<KnowledgeListData>>('/admin/knowledge/list', { params })
 }
@@ -84,4 +88,13 @@ export interface AddDocumentParams {
 
 export const addDocument = (data: AddDocumentParams) => {
   return http.post<ApiResponse<{ id: number }>>('/admin/knowledge/add', data)
+}
+
+// 删除知识库文档
+export interface DeleteDocumentResponse {
+  is_success: boolean
+}
+
+export const deleteKnowledgeDocument = (docId: number) => {
+  return http.delete<ApiResponse<DeleteDocumentResponse>>(`/admin/knowledge/${docId}`)
 }

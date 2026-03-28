@@ -192,9 +192,6 @@ export const getAnomalyList = async (limit = 5): Promise<DashboardResponse<Anoma
       threshold: 2.0
     })
     
-    console.log('📋 异常检测响应:', response.data)
-    
-    // 修复：后端返回格式是 { data: { results: { electricity: { anomalies: [] } } } }
     const results = response.data?.data?.results
     let anomalies: any[] = []
     
@@ -205,8 +202,6 @@ export const getAnomalyList = async (limit = 5): Promise<DashboardResponse<Anoma
         anomalies = results.electricity.anomalies || []
       }
     }
-    
-    console.log('🔍 解析后的异常数量:', anomalies?.length)
     
     // 将响应转换为 DashboardResponse 格式
     return {

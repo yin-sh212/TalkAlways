@@ -89,21 +89,22 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   
-  // 获取本周时间范围（周一至周日）
+  // 获取本周时间范围（当前日期往前推 7 天）
   const getWeekRange = (): { start: string; end: string } => {
     const mockDate = new Date(MOCK_TODAY.value)
-    const dayOfWeek = mockDate.getDay() || 7 // 将周日转换为 7
-    const monday = new Date(mockDate)
-    monday.setDate(mockDate.getDate() - (dayOfWeek - 1))
-    monday.setHours(0, 0, 0, 0)
     
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
-    sunday.setHours(23, 59, 59, 999)
+    // 结束时间为今天 23:59:59
+    const end = new Date(mockDate)
+    end.setHours(23, 59, 59, 999)
+    
+    // 开始时间为 7 天前 00:00:00
+    const start = new Date(mockDate)
+    start.setDate(mockDate.getDate() - 6) // 往前推 6 天，加上今天共 7 天
+    start.setHours(0, 0, 0, 0)
     
     return {
-      start: monday.toISOString().split('T')[0],
-      end: sunday.toISOString().split('T')[0]
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
     }
   }
   

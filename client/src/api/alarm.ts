@@ -66,13 +66,13 @@ export const getAlarmSummary = (params: {
   return http.get('/statistics/summary', { params })
 }
 
-// 获取告警趋势数据 - 使用 TrendData 类型
+// 获取告警趋势数据 - 使用新的告警专用接口
 export const getAlarmTrend = (params: {
   building_id?: string
   start_date?: string
   end_date?: string
 }) => {
-  return http.get('/charts/trend', { params })
+  return http.get('/charts/alarm-trend', { params })
 }
 
 // 获取告警分布数据 - 使用 DistributionData 类型

@@ -45,7 +45,7 @@ import type { KPIData } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
 import { getDeviceStatus } from '@/api/query'
-import { detectAnomaly, getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
+import { getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings } from '@/api/query'
 
 // 声明全局 Window 类型
@@ -205,25 +205,22 @@ const updateCOP = async () => {
   }
 }
 
-// 更新异常设备数量
+// 更新异常设备数量 - 从 alarms 表统计未解决的告警数量
 const updateAbnormalDeviceCount = async () => {
   try {
-    const appStore = useAppStore()
-    const mockToday = appStore.MOCK_TODAY
-    
-    const anomalyResponse = await detectAnomaly({
-      building_id: currentBuildingId.value,
-      start_date: mockToday,
-      end_date: mockToday,
-      threshold: 2.0
+    // 直接查询 alarms 表中的未解决告警数量
+    const alarmRes = await fetchAlarmList({ 
+      status: 'pending',
+      page_size: 1,
+      page: 1
     })
     
-    // 更新 KPI 数据中的异常设备数量 - 从 results.electricity.anomaly_count 获取
-    const results = anomalyResponse.data?.data?.results
-    const anomalyCount = results?.electricity?.anomaly_count || 0
-    kpiData.value.abnormalDeviceCount = anomalyCount
+    // 从响应中获取总数
+    const totalAlarms = alarmRes.data?.data?.total || 0
+    kpiData.value.abnormalDeviceCount = totalAlarms
   } catch (error) {
     console.error('更新异常设备数量失败:', error)
+    kpiData.value.abnormalDeviceCount = 0
   }
 }
 
@@ -391,13 +388,9 @@ const loadData = async () => {
     // 填充异常列表 - 始终保留最近的 5 条未解决告警
     anomalyList.value = []
     
-    console.log('📋 初始告警数据响应:', alarmRes)
-    
     const alarmData = alarmRes.data?.data
     if (alarmData?.items && Array.isArray(alarmData.items)) {
       const alarms = alarmData.items
-      
-      console.log('✅ 有告警数据，总数:', alarms.length)
       
       anomalyList.value = alarms.map((item: any) => ({
         id: item.id,
@@ -479,7 +472,6 @@ const connectToRealtimeStream = () => {
           if (data.records && data.records.length > 0) {
             const anomalies = data.records.filter((r: any) => r.is_anomaly)
             
-            console.log('🔍 异常数据数量:', anomalies.length)
             if (anomalies.length > 0) {
               // 将异常添加到列表
               anomalies.forEach((record: any) => {

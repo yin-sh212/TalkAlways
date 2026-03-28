@@ -105,3 +105,53 @@ class Database:
                 conn.close()
         
         return await loop.run_in_executor(None, _execute)
+    
+    @classmethod
+    async def get_pool(cls):
+        """获取数据库连接池（模拟 aiomysql 的接口）"""
+        class PoolWrapper:
+            def __init__(self):
+                pass
+            
+            async def acquire(self):
+                """获取连接"""
+                conn = cls._get_connection()
+                return ConnectionWrapper(conn)
+        
+        return PoolWrapper()
+
+
+class ConnectionWrapper:
+    """连接包装器，支持异步上下文管理器"""
+    def __init__(self, conn):
+        self.conn = conn
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.conn.close()
+    
+    def cursor(self):
+        """获取游标"""
+        class CursorWrapper:
+            def __init__(self, connection):
+                self.cursor = connection.cursor()
+            
+            def __enter__(self):
+                self.cursor.__enter__()
+                return self
+            
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                self.cursor.__exit__(exc_type, exc_val, exc_tb)
+            
+            async def execute(self, query, params=None):
+                if params:
+                    self.cursor.execute(query, params)
+                else:
+                    self.cursor.execute(query)
+            
+            async def fetchall(self):
+                return self.cursor.fetchall()
+        
+        return CursorWrapper(self.conn)

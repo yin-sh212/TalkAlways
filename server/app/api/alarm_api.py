@@ -282,7 +282,7 @@ async def generate_real_alarms(
                         description="检测指标"),
     # 动态基线参数
     dynamic_window: int = Query(24, ge=6, le=168, description="动态基线窗口大小（小时）"),
-    dynamic_threshold: float = Query(2.5, ge=1.5, le=4.0, description="动态基线阈值倍数"),
+    dynamic_threshold: float = Query(2.5, ge=1.5, le=4.0, description="动态阈值倍数"),
     # 趋势下降参数
     trend_window: int = Query(6, ge=3, le=24, description="趋势检测窗口大小"),
     min_trend_decline: float = Query(0.15, ge=0.05, le=0.5, description="最小下降率")
@@ -297,154 +297,143 @@ async def generate_real_alarms(
     4. 提供详细的检测依据和统计信息
     """
     try:
-        # 1. 获取数据库连接池
-        pool = await Database.get_pool()
+        # 1. 清空旧告警
+        await Database.execute("DELETE FROM alarms")
+        print("✅ 已清空旧告警")
+
+        # 2. 构建建筑 ID 列表
+        if building_ids:
+            target_buildings = [b.strip() for b in building_ids.split(',')]
+        else:
+            # 查询所有建筑
+            buildings_sql = "SELECT DISTINCT building_id FROM energy_consumption"
+            buildings_result = await Database.fetch_all(buildings_sql)
+            target_buildings = [b[0] for b in buildings_result]
         
-        # 2. 在同一个连接中执行所有操作（清空、查询、插入）
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                # 2.1 先清空旧告警
-                await cursor.execute("DELETE FROM alarms")
-                print("✅ 已清空旧告警")
+        print(f"🏢 待检测建筑数量：{len(target_buildings)}")
 
-                # 2.2 构建建筑 ID 列表
-                if building_ids:
-                    target_buildings = [b.strip() for b in building_ids.split(',')]
-                else:
-                    # 查询所有建筑
-                    buildings_sql = "SELECT DISTINCT building_id FROM energy_consumption"
-                    await cursor.execute(buildings_sql)
-                    buildings_result = await cursor.fetchall()
-                    target_buildings = [b[0] for b in buildings_result]
+        total_alarms = 0
+        alarm_stats = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "dynamic_baseline": 0,
+            "trend_decline": 0
+        }
+
+        # 3. 对每个建筑执行检测
+        for building_id in target_buildings:
+            # 查询该建筑的能耗数据
+            sql = """
+                SELECT 
+                    timestamp,
+                    electricity,
+                    cooling_load,
+                    heating_load
+                FROM energy_consumption
+                WHERE building_id = %s 
+                    AND DATE(timestamp) BETWEEN %s AND %s
+                ORDER BY timestamp
+            """
+            
+            data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+            
+            if len(data) < 10:
+                print(f"⚠️  {building_id}: 数据量不足 ({len(data)} 条)，跳过")
+                continue
+            
+            # 提取指定指标的数据
+            values = [row[1] for row in data if row[1] is not None] if metric == 'electricity' else \
+                     [row[2] for row in data if row[2] is not None] if metric == 'cooling_load' else \
+                     [row[3] for row in data if row[3] is not None]
+            timestamps = [str(row[0]) for row in data if (row[1] if metric == 'electricity' else row[2] if metric == 'cooling_load' else row[3]) is not None]
+            
+            if len(values) < 10:
+                print(f"⚠️  {building_id}: 有效数据不足 ({len(values)} 条)，跳过")
+                continue
+            
+            # 执行综合检测
+            detection_result = detect_combined_alarm(
+                values=values,
+                timestamps=timestamps,
+                dynamic_window=dynamic_window,
+                dynamic_threshold=dynamic_threshold,
+                trend_window=trend_window,
+                min_trend_decline=min_trend_decline
+            )
+            
+            # 严重程度映射
+            severity_map = {
+                "critical": 1,
+                "high": 2,
+                "medium": 3,
+                "low": 4
+            }
+            
+            # 插入动态基线告警
+            for anomaly in detection_result['baseline_anomalies']:
+                alarm_level = severity_map.get(anomaly['severity'], 3)
+                alarm_type_str = "过高" if anomaly['type'] == "过高" else "过低"
+                description = f"{metric} {alarm_type_str}，值为{anomaly['value']:.2f}，超出动态基线范围 [{anomaly['lower_bound']:.2f}, {anomaly['upper_bound']:.2f}]"
                 
-                print(f"🏢 待检测建筑数量：{len(target_buildings)}")
-
-                total_alarms = 0
-                alarm_stats = {
-                    "critical": 0,
-                    "high": 0,
-                    "medium": 0,
-                    "low": 0,
-                    "dynamic_baseline": 0,
-                    "trend_decline": 0
-                }
-
-                # 2.3 对每个建筑执行检测
-                for building_id in target_buildings:
-                    # 查询该建筑的能耗数据
-                    sql = """
-                        SELECT 
-                            timestamp,
-                            electricity,
-                            cooling_load,
-                            heating_load
-                        FROM energy_consumption
-                        WHERE building_id = %s 
-                            AND DATE(timestamp) BETWEEN %s AND %s
-                        ORDER BY timestamp
-                    """
-                    
-                    await cursor.execute(sql, (building_id, start_date, end_date))
-                    data = await cursor.fetchall()
-                    
-                    if len(data) < 10:
-                        print(f"⚠️  {building_id}: 数据量不足 ({len(data)} 条)，跳过")
-                        continue
-                    
-                    # 提取指定指标的数据
-                    values = [row[1] for row in data if row[1] is not None] if metric == 'electricity' else \
-                             [row[2] for row in data if row[2] is not None] if metric == 'cooling_load' else \
-                             [row[3] for row in data if row[3] is not None]
-                    timestamps = [str(row[0]) for row in data if (row[1] if metric == 'electricity' else row[2] if metric == 'cooling_load' else row[3]) is not None]
-                    
-                    if len(values) < 10:
-                        print(f"⚠️  {building_id}: 有效数据不足 ({len(values)} 条)，跳过")
-                        continue
-                    
-                    # 执行综合检测
-                    detection_result = detect_combined_alarm(
-                        values=values,
-                        timestamps=timestamps,
-                        dynamic_window=dynamic_window,
-                        dynamic_threshold=dynamic_threshold,
-                        trend_window=trend_window,
-                        min_trend_decline=min_trend_decline
-                    )
-                    
-                    # 严重程度映射
-                    severity_map = {
-                        "critical": 1,
-                        "high": 2,
-                        "medium": 3,
-                        "low": 4
-                    }
-                    
-                    # 插入动态基线告警
-                    for anomaly in detection_result['baseline_anomalies']:
-                        alarm_level = severity_map.get(anomaly['severity'], 3)
-                        alarm_type_str = "过高" if anomaly['type'] == "过高" else "过低"
-                        description = f"{metric} {alarm_type_str}，值为{anomaly['value']:.2f}，超出动态基线范围 [{anomaly['lower_bound']:.2f}, {anomaly['upper_bound']:.2f}]"
-                        
-                        insert_sql = """
-                            INSERT INTO alarms 
-                            (building_id, meter_id, start_time, value, alarm_type, alarm_level, description, status, threshold)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """
-                        
-                        try:
-                            await cursor.execute(insert_sql, (
-                                building_id,
-                                f"{building_id}_meter",
-                                anomaly['timestamp'],
-                                anomaly['value'],
-                                'dynamic_baseline',
-                                alarm_level,
-                                description,
-                                'pending',
-                                anomaly['upper_bound'] if anomaly['type'] == "过高" else anomaly['lower_bound']
-                            ))
-                            total_alarms += 1
-                            alarm_stats[anomaly['severity']] += 1
-                            alarm_stats['dynamic_baseline'] += 1
-                        except Exception as e:
-                            print(f"❌ 插入动态基线告警失败：{e}")
-                    
-                    # 插入趋势下降告警
-                    for anomaly in detection_result['trend_anomalies']:
-                        alarm_level = severity_map.get(anomaly['severity'], 3)
-                        description = f"{metric} 持续下降{anomaly['continuous_points']}个点，从{anomaly['start_value']:.2f}降至{anomaly['end_value']:.2f}，累计下降{anomaly['decline_rate']}"
-                        
-                        insert_sql = """
-                            INSERT INTO alarms 
-                            (building_id, meter_id, start_time, end_time, value, alarm_type, alarm_level, description, status, threshold)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """
-                        
-                        try:
-                            await cursor.execute(insert_sql, (
-                                building_id,
-                                f"{building_id}_meter",
-                                anomaly['start_timestamp'],
-                                anomaly['end_timestamp'],
-                                anomaly['end_value'],
-                                'trend_decline',
-                                alarm_level,
-                                description,
-                                'pending',
-                                anomaly['start_value'] * (1 - min_trend_decline)  # 阈值
-                            ))
-                            total_alarms += 1
-                            alarm_stats[anomaly['severity']] += 1
-                            alarm_stats['trend_decline'] += 1
-                        except Exception as e:
-                            print(f"❌ 插入趋势下降告警失败：{e}")
-                    
-                    if total_alarms % 50 == 0 and total_alarms > 0:
-                        print(f"  已插入 {total_alarms} 条告警...")
+                insert_sql = """
+                    INSERT INTO alarms 
+                    (building_id, meter_id, start_time, value, alarm_type, alarm_level, description, status, threshold)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                
+                try:
+                    await Database.execute(insert_sql, (
+                        building_id,
+                        f"{building_id}_meter",
+                        anomaly['timestamp'],
+                        anomaly['value'],
+                        'dynamic_baseline',
+                        alarm_level,
+                        description,
+                        'pending',
+                        anomaly['upper_bound'] if anomaly['type'] == "过高" else anomaly['lower_bound']
+                    ))
+                    total_alarms += 1
+                    alarm_stats[anomaly['severity']] += 1
+                    alarm_stats['dynamic_baseline'] += 1
+                except Exception as e:
+                    print(f"❌ 插入动态基线告警失败：{e}")
             
-            # 2.4 在同一个连接中提交所有事务
-            await conn.commit()
+            # 插入趋势下降告警
+            for anomaly in detection_result['trend_anomalies']:
+                alarm_level = severity_map.get(anomaly['severity'], 3)
+                description = f"{metric} 持续下降{anomaly['continuous_points']}个点，从{anomaly['start_value']:.2f}降至{anomaly['end_value']:.2f}，累计下降{anomaly['decline_rate']}"
+                
+                insert_sql = """
+                    INSERT INTO alarms 
+                    (building_id, meter_id, start_time, end_time, value, alarm_type, alarm_level, description, status, threshold)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                
+                try:
+                    await Database.execute(insert_sql, (
+                        building_id,
+                        f"{building_id}_meter",
+                        anomaly['start_timestamp'],
+                        anomaly['end_timestamp'],
+                        anomaly['end_value'],
+                        'trend_decline',
+                        alarm_level,
+                        description,
+                        'pending',
+                        anomaly['start_value'] * (1 - min_trend_decline)  # 阈值
+                    ))
+                    total_alarms += 1
+                    alarm_stats[anomaly['severity']] += 1
+                    alarm_stats['trend_decline'] += 1
+                except Exception as e:
+                    print(f"❌ 插入趋势下降告警失败：{e}")
             
+            if total_alarms % 50 == 0 and total_alarms > 0:
+                print(f"  已插入 {total_alarms} 条告警...")
+        
         return {
             "code": 200,
             "message": f"成功生成 {total_alarms} 条真实告警",

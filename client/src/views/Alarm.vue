@@ -382,14 +382,12 @@ const handleQuery = async (skipValidation: boolean = false) => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : appStore.getMockToday();
 
-    // 验证时间范围（2016-07-01 至 2016-08-31）
+    // 验证时间范围（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
+    const validEndDate = "2016-09-30";
 
     if (
       startDate < validStartDate ||
-      startDate > validEndDate ||
-      endDate < validStartDate ||
       endDate > validEndDate
     ) {
       message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
@@ -736,9 +734,9 @@ const handleGenerateAlarms = async () => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : appStore.getMockToday();
     
-    // 验证时间范围（2016-07-01 至 2016-08-31）
+    // 验证时间范围（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
+    const validEndDate = "2016-09-30";
     
     if (
       startDate < validStartDate ||
@@ -805,9 +803,9 @@ const handleExport = async () => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0];
 
-    // 验证时间范围（2016-07-01 至 2016-08-31）
+    // 验证时间范围（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
+    const validEndDate = "2016-09-30";
 
     if (
       startDate < validStartDate ||
@@ -846,68 +844,6 @@ const handleExport = async () => {
     window.URL.revokeObjectURL(url);
 
     message.success("报表已下载");
-  } catch (error: any) {
-    console.error("导出失败:", error);
-    message.error("导出失败：" + (error.message || "未知错误"));
-  } finally {
-    exportLoading.value = false;
-  }
-};
-
-// 导出能耗详情数据
-const handleExportEnergyDetail = async () => {
-  exportLoading.value = true;
-  message.info("正在导出能耗详情数据...");
-
-  try {
-    const startDate = queryForm.timeRange
-      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0];
-    const endDate = queryForm.timeRange
-      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0];
-
-    // 验证时间范围（2016-07-01 至 2016-08-31）
-    const validStartDate = "2016-07-01";
-    const validEndDate = "2016-08-31";
-
-    if (
-      startDate < validStartDate ||
-      startDate > validEndDate ||
-      endDate < validStartDate ||
-      endDate > validEndDate
-    ) {
-      message.error(`导出时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
-      exportLoading.value = false;
-      return;
-    }
-
-    // 确保使用从后端获取的真实建筑 ID
-    if (!queryForm.buildings || queryForm.buildings.length === 0) {
-      message.warning("请选择建筑");
-      exportLoading.value = false;
-      return;
-    }
-
-    const exportParams = {
-      building_ids: queryForm.buildings,
-      startTime: startDate,
-      endTime: endDate,
-      format: "excel" as const,
-    };
-
-    const response = await alarmApi.exportExcel(exportParams);
-
-    const url = window.URL.createObjectURL(response.data as Blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `能耗详情_${startDate}_${endDate}_${Date.now()}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    message.success("能耗详情数据已下载");
   } catch (error: any) {
     console.error("导出失败:", error);
     message.error("导出失败：" + (error.message || "未知错误"));

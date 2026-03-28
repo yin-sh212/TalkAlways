@@ -146,7 +146,7 @@ const generateRankingData = (buildingEnergy: any[]) => {
   }
 }
 
-// 更新设备统计数据
+// 更新设备统计数据 - 数据来源于 meters 表（监测点/传感器）
 const updateDeviceStats = async () => {
   try {
     const response = await getDeviceStatus(currentBuildingId.value)
@@ -166,7 +166,7 @@ const updateDeviceStats = async () => {
       healthScore: Math.round(((data?.normalCount || 0) / (data?.totalCount || 1)) * 100)
     }
   } catch (error) {
-    console.error('获取设备状态失败:', error)
+    console.error('获取监测点状态失败:', error)
     // 使用默认值
     deviceStats.value = {
       totalCount: 150,
@@ -205,23 +205,11 @@ const updateCOP = async () => {
   }
 }
 
-// 更新异常设备数量 - 从 alarms 表统计未解决的告警数量
-const updateAbnormalDeviceCount = async () => {
-  try {
-    // 直接查询 alarms 表中的未解决告警数量
-    const alarmRes = await fetchAlarmList({ 
-      status: 'pending',
-      page_size: 1,
-      page: 1
-    })
-    
-    // 从响应中获取总数
-    const totalAlarms = alarmRes.data?.data?.total || 0
-    kpiData.value.abnormalDeviceCount = totalAlarms
-  } catch (error) {
-    console.error('更新异常设备数量失败:', error)
-    kpiData.value.abnormalDeviceCount = 0
-  }
+// 更新异常设备数量 - 从 deviceStats 中获取监测点的真实异常数量
+const updateAbnormalDeviceCount = () => {
+  // 直接使用 deviceStats 中的 abnormalCount，避免重复查询
+  // deviceStats 已经在 updateDeviceStats() 中从 /api/query/device-status 接口获取
+  kpiData.value.abnormalDeviceCount = deviceStats.value.abnormalCount
 }
 
 // 更新日环比和周同比 - 使用批量接口

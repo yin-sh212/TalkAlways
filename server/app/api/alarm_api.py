@@ -364,17 +364,18 @@ async def generate_real_alarms(
                 min_trend_decline=min_trend_decline
             )
             
-            # 严重程度映射
+            # 严重程度映射 - 统一为 3 级制（严重/警告/提示）
             severity_map = {
-                "critical": 1,
-                "high": 2,
-                "medium": 3,
-                "low": 4
+                "critical": {"level": 1, "name": "严重"},
+                "high": {"level": 2, "name": "警告"},
+                "medium": {"level": 2, "name": "警告"},  # 合并到警告
+                "low": {"level": 3, "name": "提示"}
             }
-            
+            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
+
             # 插入动态基线告警
             for anomaly in detection_result['baseline_anomalies']:
-                alarm_level = severity_map.get(anomaly['severity'], 3)
+                alarm_level = severity_info["level"]
                 alarm_type_str = "过高" if anomaly['type'] == "过高" else "过低"
                 description = f"{metric} {alarm_type_str}，值为{anomaly['value']:.2f}，超出动态基线范围 [{anomaly['lower_bound']:.2f}, {anomaly['upper_bound']:.2f}]"
                 
@@ -404,7 +405,7 @@ async def generate_real_alarms(
             
             # 插入趋势下降告警
             for anomaly in detection_result['trend_anomalies']:
-                alarm_level = severity_map.get(anomaly['severity'], 3)
+                alarm_level = severity_info["level"]
                 description = f"{metric} 持续下降{anomaly['continuous_points']}个点，从{anomaly['start_value']:.2f}降至{anomaly['end_value']:.2f}，累计下降{anomaly['decline_rate']}"
                 
                 insert_sql = """
@@ -684,12 +685,13 @@ async def init_alarm_dict_tables():
                 )
             """)
 
-            # 插入默认级别
+            # 插入默认级别 - 统一为 3 级制（严重/警告/提示）
             await cursor.execute("""
                 INSERT IGNORE INTO alarm_levels (level, name, color, description) VALUES
                 (1, '严重', 'red', '需要立即处理'),
                 (2, '警告', 'orange', '需要关注'),
-                (3, '提示', 'blue', '仅供参考')
+                (3, '提示', 'blue', '仅供参考'),
+                (4, '提示', 'green', '轻微告警')
             """)
 
             # 创建告警表（如果不存在）
@@ -1308,13 +1310,14 @@ async def detect_real_alarms(request: AlarmDetectionRequest):
         # 添加动态基线告警
         for anomaly in detection_result['baseline_anomalies']:
             alarm_type = "过高" if anomaly['type'] == "过高" else "过低"
+            # 严重程度映射 - 统一为 3 级制（严重/警告/提示）
             severity_map = {
                 "critical": {"level": 1, "name": "严重"},
                 "high": {"level": 2, "name": "警告"},
-                "medium": {"level": 3, "name": "中等"},
-                "low": {"level": 4, "name": "提示"}
+                "medium": {"level": 2, "name": "警告"},  # 合并到警告
+                "low": {"level": 3, "name": "提示"}
             }
-            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "中等"})
+            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
             
             alarms.append({
                 "alarm_type": "dynamic_baseline",
@@ -1335,13 +1338,14 @@ async def detect_real_alarms(request: AlarmDetectionRequest):
         
         # 添加趋势下降告警
         for anomaly in detection_result['trend_anomalies']:
+            # 严重程度映射 - 统一为 3 级制（严重/警告/提示）
             severity_map = {
                 "critical": {"level": 1, "name": "严重"},
                 "high": {"level": 2, "name": "警告"},
-                "medium": {"level": 3, "name": "中等"},
-                "low": {"level": 4, "name": "提示"}
+                "medium": {"level": 2, "name": "警告"},  # 合并到警告
+                "low": {"level": 3, "name": "提示"}
             }
-            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "中等"})
+            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
             
             alarms.append({
                 "alarm_type": "trend_decline",

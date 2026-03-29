@@ -181,9 +181,11 @@ import type {
   EnergySummary,
 } from "@/types/analysis";
 import { useAppStore } from "@/store/app";
+import { useBuildingStore } from "@/store/building";
 
 const message = useMessage();
 const appStore = useAppStore();
+const buildingStore = useBuildingStore();
 const router = useRouter();
 const route = useRoute();
 
@@ -274,11 +276,10 @@ const alarmDistributionRef = ref<InstanceType<typeof AlarmDistribution> | null>(
 );
 const alarmListRef = ref<InstanceType<typeof AlarmList> | null>(null);
 
-// 获取建筑列表
-const loadBuildings = async () => {
+// 获取建筑列表（从 store 获取固定数据）
+const loadBuildings = () => {
   try {
-    const response = await alarmApi.getBuildings();
-    const buildings = response.data.data || [];
+    const buildings = buildingStore.buildings || [];
 
     buildingOptions.value = buildings.map((building: any) => ({
       label: building.name || `建筑${building.id || building.building_id}`,
@@ -510,7 +511,8 @@ const handleQuery = async (skipValidation: boolean = false) => {
     if (detailRes && detailRes.data?.data) {
       const detailData = detailRes.data.data;
       energyDetailData.value = detailData.details || [];
-      energySummaryData.value = detailData.summary || undefined;
+      // SummaryResponse 类型没有 summary 属性，使用 details 中的汇总信息
+      energySummaryData.value = undefined;
       energyDetailPeriod.value =
         detailData.period || `${startDate} 至 ${endDate}`;
     } else {
@@ -831,7 +833,8 @@ const handleExport = async () => {
 
     const response = await alarmApi.exportExcel(exportParams);
 
-    const url = window.URL.createObjectURL(response.data as Blob);
+    // exportExcel 返回的是 Blob 对象，不是 AxiosResponse
+    const url = window.URL.createObjectURL(response as Blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = `告警报表_${startDate}_${endDate}_${Date.now()}.xlsx`;

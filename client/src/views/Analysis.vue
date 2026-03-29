@@ -240,6 +240,7 @@ import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { getLineChartConfig, getBarChartConfig, getRadarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 import { getBuildings } from '@/api/query'
+import { useBuildingStore } from '@/store/building'
 import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
 import { detectAnomaly, getSummary } from '@/api/statistics'
 import { getAnalysisInsights } from '@/api/analysis'
@@ -249,6 +250,7 @@ import { useAppStore } from '@/store/app'
 const router = useRouter()
 const message = useMessage()
 const appStore = useAppStore()
+const buildingStore = useBuildingStore()
 
 // 状态
 const loading = ref(false)
@@ -285,13 +287,12 @@ let compareChart: echarts.ECharts | null = null
 const trendChartRef = ref<HTMLElement | null>(null)
 const compareChartRef = ref<HTMLElement | null>(null)
 
-// 加载建筑列表
-const loadBuildings = async () => {
+// 加载建筑列表（从 store 获取固定数据）
+const loadBuildings = () => {
   loading.value = true
   
   try {
-    const response = await getBuildings()
-    const buildings: any[] = response.data.data || []
+    const buildings: any[] = buildingStore.buildings || []
     
     buildingOptions.value = buildings.map((building: any) => ({
       label: building.name || `建筑${building.id}`,
@@ -384,8 +385,7 @@ const loadAnalysisData = async () => {
     try {
       trendRes = await getTrendData({ 
         building_id: filters.buildingId, 
-        days: timeParams.days,
-        end_date: timeParams.end_date
+        days: timeParams.days
       })
       updateTrendChart(trendRes.data.data, timeParams.isSingleDay)
     } catch (error) {
@@ -678,15 +678,17 @@ const handleExport = async () => {
     // 调用导出 PDF 接口 - 使用动态时间范围
     const exportParams = {
       buildings: [filters.buildingId],
-      startTime: timeParams.start_date,
-      endTime: timeParams.end_date,
+      parameter: 'energy', // 添加必需的 parameter 参数
+      startTime: new Date(timeParams.start_date).getTime(),
+      endTime: new Date(timeParams.end_date).getTime(),
       format: 'pdf' as const
     }
     
     // 使用 analysis API 中的 exportPDF 函数
     const response = await import('@/api/analysis').then(mod => mod.exportPDF(exportParams))
-    const blob = response.data || response
-    
+    // exportPDF 返回的是 Blob 对象，不是 AxiosResponse
+    const blob = response
+
     // 检查是否是有效的 PDF blob
     if (!blob || blob.size === 0) {
       throw new Error('下载的文件为空，请检查后端接口是否正常')

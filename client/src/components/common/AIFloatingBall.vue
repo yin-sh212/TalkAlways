@@ -183,7 +183,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Chatbubbles, Person, Close, Send, Analytics, Flash, Sparkles } from '@vicons/ionicons5'
-import { analyzeWithAI, getQuickInsights as fetchQuickInsights } from '@/api/ai-analyst'
+import { analyzeWithAI, generateQuickSuggestions, getQuickInsights as fetchQuickInsights } from '@/api/ai-analyst'
 import { useBuildingStore } from '@/store/building'
 
 interface Message {
@@ -559,49 +559,27 @@ const generateSuggestionsForSelection = async () => {
   suggestedQuestionsForSelection.value = []
   
   try {
-    // 调用 AI 生成推荐问题
+    // 使用新的快速推荐接口
     const context = getPageContext()
-    const question = `我选中了这段文字："${selectedText.value}"，请基于这个内容，生成 3-5 个用户可能会问的问题。只返回问题列表，用 JSON 数组格式，例如：["问题 1", "问题 2", "问题 3"]`
+    const response = await generateQuickSuggestions(selectedText.value, context)
     
-    const response = await analyzeWithAI(question, context)
-    const responseData = response.data?.data
-    
-    if (responseData?.answer) {
-      // 尝试从回答中提取问题列表
-      const answer = responseData.answer
-      const jsonMatch = answer.match(/\[(.*?)\]/s)
-      
-      if (jsonMatch) {
-        try {
-          const questions = JSON.parse(jsonMatch[0])
-          if (Array.isArray(questions)) {
-            suggestedQuestionsForSelection.value = questions.slice(0, 5)
-          }
-        } catch (e) {
-          console.warn('解析推荐问题失败:', e)
-          // 如果解析失败，使用预设问题
-          suggestedQuestionsForSelection.value = [
-            '这是什么意思？',
-            '这个数据正常吗？',
-            '如何优化这个指标？'
-          ]
-        }
-      } else {
-        // 如果没有找到 JSON，使用预设问题
-        suggestedQuestionsForSelection.value = [
-          '这是什么意思？',
-          '这个数据正常吗？',
-          '如何优化这个指标？'
-        ]
-      }
+    if (response.data?.data?.suggestions) {
+      suggestedQuestionsForSelection.value = response.data.data.suggestions.slice(0, 3)
+    } else {
+      // 兜底方案
+      suggestedQuestionsForSelection.value = [
+        '这是什么意思？',
+        '这个数据正常吗？',
+        '如何优化？'
+      ]
     }
   } catch (error: any) {
-    console.error('生成推荐问题失败:', error)
-    // 使用预设问题
+    console.warn('生成推荐问题失败（使用预设问题）:', error.message)
+    // 失败时使用预设问题，不影响用户体验
     suggestedQuestionsForSelection.value = [
       '这是什么意思？',
       '这个数据正常吗？',
-      '如何优化这个指标？'
+      '如何优化？'
     ]
   } finally {
     loadingSuggestions.value = false

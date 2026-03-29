@@ -132,6 +132,18 @@ class ConnectionWrapper:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self.conn.close()
     
+    async def rollback(self):
+        """回滚事务"""
+        self.conn.rollback()
+    
+    async def commit(self):
+        """提交事务"""
+        self.conn.commit()
+    
+    async def release(self):
+        """释放连接"""
+        self.conn.close()
+    
     def cursor(self):
         """获取游标"""
         class CursorWrapper:
@@ -150,8 +162,19 @@ class ConnectionWrapper:
                     self.cursor.execute(query, params)
                 else:
                     self.cursor.execute(query)
+                return self.cursor.rowcount
             
             async def fetchall(self):
                 return self.cursor.fetchall()
+            
+            async def fetchone(self):
+                return self.cursor.fetchone()
+            
+            # 添加异步上下文管理器支持
+            async def __aenter__(self):
+                return self
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                self.cursor.close()
         
         return CursorWrapper(self.conn)

@@ -1,7 +1,8 @@
 # app/api/alarm_api.py
+import json
 from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
-from typing import List, Optional, Dict,Any
+from typing import List, Optional, Dict, Any
 from app.database.db import Database
 from app.services.anomaly_detector import detect_combined_alarm
 from datetime import datetime
@@ -750,14 +751,14 @@ class AlarmAnalysisResponse(BaseModel):
                             "building_id": "Eagle_education_Wesley",
                             "alarm_type": "energy",
                             "alarm_level": 2,
-                            "description": "能耗异常，值为1150kW",
+                            "description": "能耗异常，值为 1150kW",
                             "start_time": "2016-07-03T01:00:00",
                             "main_cause": "当日气温较高（28.3℃），空调系统负荷增大导致能耗飙升",
                             "top_factors": [
                                 {"factor": "气温", "value": 28.3, "impact": "high",
-                                 "description": "气温比正常值高5.2℃"},
+                                 "description": "气温比正常值高 5.2℃"},
                                 {"factor": "设备效率", "value": 0.72, "impact": "medium",
-                                 "description": "COP低于正常值0.85"},
+                                 "description": "COP 低于正常值 0.85"},
                                 {"factor": "运行时段", "value": "11:00", "impact": "high",
                                  "description": "处于用电高峰期"}
                             ],
@@ -787,7 +788,7 @@ class AlarmAnalysisResponse(BaseModel):
 )
 async def analyze_alarm(alarm_id: int):
     """
-    分析告警：返回主要原因、TOP3影响因素、快速解决方案
+    分析告警：使用 AI Agent 进行智能根因分析
     """
     try:
         # 1. 获取告警基本信息
@@ -817,7 +818,7 @@ async def analyze_alarm(alarm_id: int):
         building_id = alarm['building_id']
         start_time = alarm['start_time']
 
-        # 2. 查询告警发生时的环境数据（从energy_consumption表）
+        # 2. 查询告警发生时的环境数据
         env_sql = """
             SELECT 
                 timestamp,
@@ -833,12 +834,13 @@ async def analyze_alarm(alarm_id: int):
         """
         env_data = await Database.fetch_all(env_sql, (building_id, start_time, start_time))
 
-        # 3. 计算对比数据（正常时段 vs 异常时段）
+        # 3. 计算对比数据
         normal_period_sql = """
             SELECT 
                 AVG(electricity) as avg_electricity,
                 AVG(ambient_temp) as avg_temp,
-                AVG(cooling_load) as avg_cooling
+                AVG(cooling_load) as avg_cooling,
+                AVG(pressure) as avg_pressure
             FROM energy_consumption 
             WHERE building_id = %s 
                 AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 30 DAY) AND %s
@@ -847,110 +849,25 @@ async def analyze_alarm(alarm_id: int):
         """
         normal_stats = await Database.fetch_one(normal_period_sql, (building_id, start_time, start_time, start_time))
 
-        # 4. 分析影响因素
-        factors = []
-        main_cause = ""
-        quick_solution = ""
-
-        # 获取告警时的数据点
+        # 4. 准备分析数据
         alarm_point = next((e for e in env_data if e['timestamp'] == start_time), None)
+        
+        data_context = {
+            "alarm_info": {
+                "type": alarm['alarm_type'],
+                "level": alarm['alarm_level'],
+                "description": alarm['description'],
+                "start_time": str(start_time)
+            },
+            "current_data": alarm_point,
+            "normal_stats": normal_stats,
+            "environment_trend": env_data[:12]  # 前后 6 小时的数据
+        }
 
-        if alarm_point:
-            current_elec = alarm_point['electricity']
-            current_temp = alarm_point['ambient_temp']
+        # 5. 调用 AI Agent 进行智能分析
+        ai_analysis = await analyze_with_ai(data_context)
 
-            # 计算与正常值的差异
-            if normal_stats:
-                avg_elec = normal_stats['avg_electricity'] or current_elec
-                avg_temp = normal_stats['avg_temp'] or current_temp
-
-                elec_diff = ((current_elec - avg_elec) / avg_elec) * 100 if avg_elec > 0 else 0
-                temp_diff = current_temp - avg_temp
-
-                # 因素1：气温影响
-                if temp_diff > 3:
-                    factors.append({
-                        "factor": "气温异常",
-                        "value": round(current_temp, 1),
-                        "normal": round(avg_temp, 1),
-                        "impact": "high",
-                        "description": f"气温比正常值高{round(temp_diff, 1)}℃，导致制冷负荷增加"
-                    })
-                elif temp_diff > 1:
-                    factors.append({
-                        "factor": "气温偏高",
-                        "value": round(current_temp, 1),
-                        "normal": round(avg_temp, 1),
-                        "impact": "medium",
-                        "description": f"气温比正常值高{round(temp_diff, 1)}℃"
-                    })
-
-                # 因素2：能耗突增
-                if elec_diff > 50:
-                    factors.append({
-                        "factor": "能耗突增",
-                        "value": round(current_elec, 1),
-                        "normal": round(avg_elec, 1),
-                        "impact": "high",
-                        "description": f"能耗比正常值高出{round(elec_diff)}%"
-                    })
-                elif elec_diff > 30:
-                    factors.append({
-                        "factor": "能耗偏高",
-                        "value": round(current_elec, 1),
-                        "normal": round(avg_elec, 1),
-                        "impact": "medium",
-                        "description": f"能耗比正常值高出{round(elec_diff)}%"
-                    })
-
-                # 因素3：设备效率（如果冷却负荷数据可用）
-                if alarm_point.get('cooling_load') and alarm_point['cooling_load'] > 0:
-                    cop = alarm_point['cooling_load'] / current_elec if current_elec > 0 else 0
-                    normal_cop = normal_stats['avg_cooling'] / avg_elec if avg_elec > 0 and normal_stats[
-                        'avg_cooling'] > 0 else 3.5
-
-                    if cop < normal_cop * 0.8:
-                        factors.append({
-                            "factor": "设备效率下降",
-                            "value": round(cop, 2),
-                            "normal": round(normal_cop, 2),
-                            "impact": "high",
-                            "description": f"COP值{round(cop, 2)}低于正常值{round(normal_cop, 2)}"
-                        })
-
-        # 5. 根据告警类型和级别生成主要原因和解决方案
-        alarm_level = alarm['alarm_level']
-        alarm_type = alarm['alarm_type']
-
-        # 主要原因分析
-        if alarm_type == 'energy':
-            if any(f['impact'] == 'high' for f in factors):
-                main_cause = "高温导致制冷负荷剧增，同时设备运行效率下降"
-            elif temp_diff > 2:
-                main_cause = f"气温升高{round(temp_diff, 1)}℃，空调系统负荷增大"
-            else:
-                main_cause = "设备运行异常导致能耗突增"
-        elif alarm_type == 'equipment':
-            main_cause = "设备故障或运行参数异常"
-        elif alarm_type == 'environment':
-            main_cause = "环境因素超出正常范围"
-        else:
-            main_cause = "未知原因，建议检查设备运行日志"
-
-        # 快速解决方案
-        if alarm_type == 'energy':
-            quick_solution = "1. 检查空调系统运行参数\n2. 清洗冷凝器滤网\n3. 优化运行时段\n4. 检查是否有设备异常运行"
-        elif alarm_type == 'equipment':
-            quick_solution = "1. 查看设备故障代码\n2. 重启设备\n3. 联系运维人员检查\n4. 参考设备手册排查"
-        else:
-            quick_solution = "1. 检查环境监测设备\n2. 校准传感器\n3. 查看历史数据对比"
-
-        # 取TOP3影响因素
-        top_factors = sorted(factors, key=lambda x: {'high': 3, 'medium': 2, 'low': 1}[x['impact']], reverse=True)[:3]
-
-        # 6. 关联知识库（如果有）
-        related_knowledge = await search_related_knowledge(alarm_type, main_cause)
-
+        # 6. 返回 AI 分析结果
         return {
             "code": 200,
             "message": "成功",
@@ -961,21 +878,207 @@ async def analyze_alarm(alarm_id: int):
                 "alarm_level": alarm['alarm_level'],
                 "description": alarm['description'],
                 "start_time": alarm['start_time'],
-                "main_cause": main_cause,
-                "top_factors": top_factors,
-                "quick_solution": quick_solution,
-                "related_knowledge": related_knowledge
+                "main_cause": ai_analysis.get('main_cause', '分析中...'),
+                "top_factors": ai_analysis.get('top_factors', []),
+                "quick_solution": ai_analysis.get('quick_solution', '建议进一步分析'),
+                "related_knowledge": ai_analysis.get('related_knowledge', [])
             }
         }
 
     except Exception as e:
-        print(f"告警分析错误: {e}")
+        print(f"告警分析错误：{e}")
+        import traceback
+        traceback.print_exc()
         return {
             "code": 500,
-            "message": f"分析失败: {str(e)}",
+            "message": f"分析失败：{str(e)}",
             "data": None
         }
 
+
+async def analyze_with_ai(data_context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    使用 AI 对告警进行智能根因分析
+    
+    Args:
+        data_context: 包含告警信息和环境数据的上下文
+        
+    Returns:
+        AI 分析结果，包含主要原因、影响因素、解决方案
+    """
+    try:
+        from app.services.ai_agent import AIAgent
+        ai_agent = AIAgent()
+        
+        # 构建 AI 分析提示词
+        prompt = f"""你是一个专业的建筑能源管理系统 AI 分析师，请分析以下告警并提供深度根因分析。
+
+【重要约束】
+1. **禁止简单重复告警描述**：不要把告警 description 原封不动抄过来
+2. **必须深入分析原因**：解释"为什么"会发生这个告警，而不是"是什么"
+3. **提供且只提供 3 个影响因素**：从天气、设备、控制系统等多角度分析
+4. **解决方案要具体**：给出可执行的维护步骤，不是泛泛而谈
+
+【告警信息】
+- 类型：{data_context['alarm_info']['type']}
+- 级别：{data_context['alarm_info']['level']}
+- 时间：{data_context['alarm_info']['start_time']}
+- 描述：{data_context['alarm_info']['description']}
+
+【当前运行数据】
+{json.dumps(data_context['current_data'], indent=2, default=str) if data_context['current_data'] else '暂无数据'}
+
+【历史同期正常值】
+{json.dumps(data_context['normal_stats'], indent=2, default=str) if data_context['normal_stats'] else '暂无数据'}
+
+【分析任务】
+
+**步骤 1：识别异常模式**
+- 如果是"趋势下降"（trend_decline）：分析性能衰减的根本原因（如设备老化、冷媒泄漏、部件磨损）
+- 如果是"能耗突增"（energy）：分析导致能耗增加的因素（如气温异常、负荷增加、设备故障）
+- 如果是"设备故障"（equipment）：分析可能的故障类型和影响
+
+**步骤 2：因果推理**
+使用以下推理链：
+- 气温异常 → 制冷负荷变化 → COP 值变化 → 能耗变化
+- 设备老化/磨损 → 效率下降 → COP 值降低 → 能耗增加
+- 冷媒泄漏 → 系统压力下降 → 制冷效率降低 → COP 值下降
+- 控制系统故障 → 运行参数偏离 → 设备非最优运行 → 能耗异常
+
+**步骤 3：量化影响**
+计算关键指标的偏差百分比：
+- 气温偏差 = (当前气温 - 正常气温) / 正常气温 × 100%
+- COP 偏差 = (当前 COP - 正常 COP) / 正常 COP × 100%
+- 能耗偏差 = (当前能耗 - 正常能耗) / 正常能耗 × 100%
+
+【输出格式】
+必须严格按以下 JSON 格式返回：
+
+```json
+{{
+  "main_cause": "用 1-2 句话说明根本原因，例如：'冷媒泄漏导致系统压力不足（1.8bar vs 正常 2.5bar），制冷效率下降 35%'（不要重复告警描述）",
+  "top_factors": [
+    {{
+      "factor": "因素名称（如'冷媒不足'、'气温异常偏高'、'设备效率下降'）",
+      "value": 当前值（数字）,
+      "normal": 正常值（数字）,
+      "impact": "high|medium|low",
+      "description": "因果分析（如'系统压力下降 28%，导致制冷效率严重下降'）"
+    }},
+    // 至少 3 个因素
+  ],
+  "quick_solution": "3-5 条具体可执行的维护建议，每条包含具体操作和目标值"
+}}
+```
+
+【示例参考】
+
+❌ **错误示例**（不要这样写）：
+```json
+{{
+  "main_cause": "检测到 electricity 持续下降 6 个点，从 394.00 降至 333.00，累计下降 15.5%",
+  "top_factors": [],
+  "quick_solution": "1. 检查设备运行状态 2. 查看监控数据"
+}}
+```
+
+✅ **正确示例**（参考这种深度）：
+```json
+{{
+  "main_cause": "冷媒泄漏导致系统压力严重不足（1.8bar vs 正常 2.5bar），制冷效率下降 35%，COP 值从 2.8 降至 0.76",
+  "top_factors": [
+    {{
+      "factor": "冷媒不足",
+      "value": 1.8,
+      "normal": 2.5,
+      "impact": "high",
+      "description": "系统压力下降 28%，导致制冷循环效率严重下降"
+    }},
+    {{
+      "factor": "气温异常偏高",
+      "value": 28.3,
+      "normal": 22.0,
+      "impact": "medium",
+      "description": "气温升高 6.3℃，制冷负荷增加 35%"
+    }},
+    {{
+      "factor": "设备效率下降",
+      "value": 0.76,
+      "normal": 2.8,
+      "impact": "high",
+      "description": "COP 值仅为正常值的 27%，需立即检修"
+    }}
+  ],
+  "quick_solution": "1. 立即检测冷媒系统压力和密封性，定位并修复泄漏点\\n2. 补充 R410A 制冷剂至标准压力（2.5bar）\\n3. 检查压缩机运行电流和噪音，评估是否过载\\n4. 清洗冷凝器，改善散热条件\\n5. 建议 24 小时内完成检修，避免故障扩大"
+}}
+```
+
+现在请分析上述告警数据，提供专业的根因分析。"""
+
+        # 调用 LLM 进行分析
+        response = ai_agent.llm.generate(prompt, max_tokens=1024)
+        
+        # 解析 AI 响应
+        try:
+            # 尝试提取 JSON
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                analysis_result = json.loads(json_match.group())
+            else:
+                analysis_result = json.loads(response)
+            
+            # 验证结果质量
+            if not analysis_result.get('top_factors') or len(analysis_result['top_factors']) == 0:
+                print(f"⚠️ AI 分析结果为空，使用默认分析")
+                analysis_result = {
+                    "main_cause": f"基于运行数据分析，{data_context['alarm_info']['description']}。可能原因：设备性能衰退、控制系统故障或传感器失准",
+                    "top_factors": [
+                        {
+                            "factor": "设备效率下降",
+                            "value": data_context['current_data'].get('electricity', 0) if data_context['current_data'] else 0,
+                            "normal": data_context['normal_stats']['avg_electricity'] if data_context['normal_stats'] else 0,
+                            "impact": "high",
+                            "description": "运行效率低于正常水平"
+                        }
+                    ],
+                    "quick_solution": "1. 检查设备运行状态和参数\\n2. 校准传感器\\n3. 查看历史数据趋势\\n4. 联系专业人员诊断"
+                }
+        except Exception as e:
+            print(f"⚠️ AI 响应解析失败：{e}")
+            # 如果解析失败，返回默认结果
+            analysis_result = {
+                "main_cause": f"基于数据分析，{data_context['alarm_info']['description']} 可能由多种因素导致，建议结合现场情况进一步排查",
+                "top_factors": [
+                    {
+                        "factor": "运行参数异常",
+                        "value": data_context['alarm_info'].get('level', 0),
+                        "normal": 1,
+                        "impact": "medium",
+                        "description": "检测到异常运行模式"
+                    }
+                ],
+                "quick_solution": "1. 检查相关设备运行状态\\n2. 查看历史数据趋势\\n3. 联系专业人员现场诊断"
+            }
+        
+        return analysis_result
+        
+    except Exception as e:
+        print(f"AI 分析失败：{e}")
+        # AI 分析失败时返回基础分析
+        return {
+            "main_cause": f"检测到{data_context['alarm_info']['description']}，建议立即检查相关设备",
+            "top_factors": [
+                {
+                    "factor": "运行异常",
+                    "value": 0,
+                    "normal": 1,
+                    "impact": "medium",
+                    "description": "检测到异常模式"
+                }
+            ],
+            "quick_solution": "1. 检查设备运行状态\\n2. 查看监控数据\\n3. 联系运维人员"
+        }
 
 # ========== 批量告警分析接口 ==========
 

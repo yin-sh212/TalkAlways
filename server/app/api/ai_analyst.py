@@ -85,7 +85,7 @@ async def analyze_with_context(
             "code": 200,
             "message": "分析成功",
             "data": {
-                "answer": analysis.get('answer', '分析失败'),
+                "answer": analysis.get('answer', '未获取到分析结果'),
                 "supporting_data": data_results,
                 "suggested_questions": analysis.get('follow_ups', []),
                 "visualization_type": analysis.get('chart_type', 'table'),
@@ -99,12 +99,80 @@ async def analyze_with_context(
         return {
             "code": 500,
             "message": f"分析失败：{str(e)}",
+            "data": None
+        }
+
+
+@router.post("/quick-suggestions")
+async def generate_quick_suggestions(
+    selected_text: str = Body(..., description="用户选中的文本"),
+    context: Dict[str, Any] = Body({}, description="页面上下文"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    快速生成推荐问题（不需要数据库查询）
+    
+    用于划词分析场景，直接让 LLM 生成相关问题，跳过数据库查询步骤
+    """
+    ai_agent = AIAgent()
+    
+    try:
+        # 直接让 AI 生成推荐问题，不查询数据库
+        prompt = f"""
+你是智能助手，用户选中了这段文字，请生成 3 个简短的相关问题。
+
+【选中的文字】
+{selected_text}
+
+只需返回 JSON 数组格式：["问题 1", "问题 2", "问题 3"]
+问题要简短、直接、有针对性。
+"""
+        
+        response = ai_agent.llm.generate(prompt, max_tokens=300)
+        
+        # 解析 JSON
+        import json
+        start_idx = response.find('{')
+        end_idx = response.rfind('}') + 1
+        
+        suggestions = []
+        if start_idx >= 0 and end_idx > start_idx:
+            try:
+                parsed = json.loads(response[start_idx:end_idx])
+                if isinstance(parsed, list):
+                    suggestions = parsed[:3]
+            except:
+                # 如果不是 JSON，尝试从文本中提取
+                lines = [line.strip() for line in response.split('\n') if line.strip() and not line.startswith('{') and not line.startswith('[')]
+                suggestions = [line.lstrip('0123456789. -').strip() for line in lines[:3]]
+        
+        # 兜底方案
+        if not suggestions:
+            suggestions = [
+                "这是什么意思？",
+                "这个数据正常吗？",
+                "如何优化？"
+            ]
+        
+        return {
+            "code": 200,
+            "message": "生成成功",
             "data": {
-                "answer": "抱歉，分析过程中出现错误，请稍后再试。",
-                "supporting_data": {},
-                "suggested_questions": [],
-                "visualization_type": "table",
-                "confidence": 0.0
+                "suggestions": suggestions
+            }
+        }
+        
+    except Exception as e:
+        print(f"[AI Analyst] 快速推荐失败：{e}")
+        return {
+            "code": 500,
+            "message": f"生成失败：{str(e)}",
+            "data": {
+                "suggestions": [
+                    "这是什么意思？",
+                    "这个数据正常吗？",
+                    "如何优化？"
+                ]
             }
         }
 

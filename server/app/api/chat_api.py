@@ -22,22 +22,11 @@ class StreamQuestionRequest(BaseModel):
 
 async def stream_generator(full_prompt: str):
     """SSE 流式生成器"""
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
-    
     try:
-        # 在线程池中运行同步的生成器
-        executor = ThreadPoolExecutor(max_workers=1)
-        loop = asyncio.get_event_loop()
+        # 直接迭代生成器，不需要线程池
+        from app.services.llm_client import llm_client
         
-        # 获取生成器
-        generator = await loop.run_in_executor(
-            executor, 
-            lambda: llm_client.generate_stream(full_prompt)
-        )
-        
-        # 遍历生成器并输出 SSE 格式
-        for chunk in generator:
+        for chunk in llm_client.generate_stream(full_prompt):
             sse_data = json.dumps({
                 "code": 200,
                 "data": {
@@ -52,14 +41,15 @@ async def stream_generator(full_prompt: str):
     except Exception as e:
         print(f"流式生成失败：{e}")
         traceback.print_exc()
-        error_data = json.dumps({
+        # 发送错误消息
+        sse_error = json.dumps({
             "code": 500,
-            "message": str(e),
             "data": {
-                "content": ""
+                "content": f"生成失败：{str(e)}"
             }
         }, ensure_ascii=False)
-        yield f"data: {error_data}\n\n"
+        yield f"data: {sse_error}\n\n"
+        yield "data: [DONE]\n\n"
 
 
 @router.post(

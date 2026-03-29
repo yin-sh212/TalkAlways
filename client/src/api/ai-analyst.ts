@@ -50,6 +50,18 @@ export const analyzeWithAI = (question: string, context: AIAnalysisRequest['cont
 }
 
 /**
+ * 快速生成推荐问题接口（用于划词分析）
+ * @param selectedText 选中的文本
+ * @param context 页面上下文
+ */
+export const generateQuickSuggestions = (selectedText: string, context: Record<string, any> = {}) => {
+  return http.post<ApiResponse<{ suggestions: string[] }>>('/ai-analyst/quick-suggestions', {
+    selected_text: selectedText,
+    context
+  })
+}
+
+/**
  * 获取快速洞察（主动推送）
  * @param building_id 建筑 ID
  */

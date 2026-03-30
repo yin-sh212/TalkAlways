@@ -6,7 +6,7 @@
       <KpiCards :loading="loading" :kpiData="kpiData" />
 
       <!-- 能耗排名 TOP5 -->
-      <EnergyRanking :rankingList="rankingList" />
+      <EnergyRanking :loading="loading" :rankingList="rankingList" />
 
       <!-- 图表区 -->
       <EnergyCharts 
@@ -16,9 +16,6 @@
         :trend-data="chartData.trendData"
         :distribution-data="chartData.distributionData"
       />
-
-      <!-- 设备监控 -->
-      <DeviceMonitor :loading="loading" :deviceStats="deviceStats" />
 
       <!-- 异常列表 -->
       <AnomalyList 
@@ -44,7 +41,6 @@ import { getAlarmList as fetchAlarmList } from '@/api/alarm'
 import type { KPIData } from '@/types/dashboard'
 import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
-import { getDeviceStatus } from '@/api/query'
 import { getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings } from '@/api/query'
 
@@ -105,13 +101,6 @@ const chartData = ref({
 
 const anomalyList = ref<any[]>([])
 const rankingList = ref<any[]>([])
-const deviceStats = ref({
-  totalCount: 0,
-  normalCount: 0,
-  abnormalCount: 0,
-  offlineCount: 0,
-  healthScore: 0
-})
 
 const energyChartsRef = ref<InstanceType<typeof EnergyCharts> | null>(null)
 
@@ -146,38 +135,6 @@ const generateRankingData = (buildingEnergy: any[]) => {
   }
 }
 
-// 更新设备统计数据
-const updateDeviceStats = async () => {
-  try {
-    const response = await getDeviceStatus(currentBuildingId.value)
-    const data = response.data?.data as {
-      totalCount?: number
-      normalCount?: number
-      abnormalCount?: number
-      offlineCount?: number
-      healthScore?: number
-    } | undefined
-    
-    deviceStats.value = {
-      totalCount: data?.totalCount || 0,
-      normalCount: data?.normalCount || 0,
-      abnormalCount: data?.abnormalCount || 0,
-      offlineCount: data?.offlineCount || 0,
-      healthScore: Math.round(((data?.normalCount || 0) / (data?.totalCount || 1)) * 100)
-    }
-  } catch (error) {
-    console.error('获取设备状态失败:', error)
-    // 使用默认值
-    deviceStats.value = {
-      totalCount: 150,
-      normalCount: 128,
-      abnormalCount: 12,
-      offlineCount: 10,
-      healthScore: 85
-    }
-  }
-}
-
 // 更新 COP(能效比)
 const updateCOP = async () => {
   try {
@@ -202,25 +159,6 @@ const updateCOP = async () => {
     console.error('更新 COP 失败:', error)
     // 使用默认值
     kpiData.value.cop = 3.5 // 典型 COP 值
-  }
-}
-
-// 更新异常设备数量 - 从 alarms 表统计未解决的告警数量
-const updateAbnormalDeviceCount = async () => {
-  try {
-    // 直接查询 alarms 表中的未解决告警数量
-    const alarmRes = await fetchAlarmList({ 
-      status: 'pending',
-      page_size: 1,
-      page: 1
-    })
-    
-    // 从响应中获取总数
-    const totalAlarms = alarmRes.data?.data?.total || 0
-    kpiData.value.abnormalDeviceCount = totalAlarms
-  } catch (error) {
-    console.error('更新异常设备数量失败:', error)
-    kpiData.value.abnormalDeviceCount = 0
   }
 }
 
@@ -410,14 +348,12 @@ const loadData = async () => {
       console.log('⚠️ 无告警数据')
     }
 
-    // 等待建筑能耗数据和设备统计数据更新完成
+    // 等待建筑能耗数据更新完成
     await updateBuildingEnergyData()
-    await updateDeviceStats()
     
     // 并行调用其他更新函数
     await Promise.all([
       updateCOP(),
-      updateAbnormalDeviceCount(),
       updateDayAndWeekChange()
     ])
     

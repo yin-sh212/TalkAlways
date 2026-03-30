@@ -53,12 +53,10 @@
         :bordered="false"
         class="kpi-card"
         content-style="padding: 14px;"
-        @click="handleDeviceClick"
-        style="cursor: pointer"
       >
         <template #header>
           <n-space justify="space-between" align="center">
-            <span class="card-title">在线设备率</span>
+            <span class="card-title">监测点在线率</span>
             <n-icon size="20" color="#1890ff">
               <Device />
             </n-icon>
@@ -75,7 +73,7 @@
               :type="kpiData.abnormalDeviceCount > 0 ? 'warning' : 'success'"
               size="small"
             >
-              异常设备：{{ kpiData.abnormalDeviceCount }}
+              异常监测点：{{ kpiData.abnormalDeviceCount }}
             </n-tag>
           </div>
         </template>
@@ -145,7 +143,6 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from "vue-router";
 import {
   ArrowUpOutline as ArrowUpward,
   ArrowDownOutline as ArrowDownward,
@@ -164,13 +161,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const router = useRouter();
-
-const handleDeviceClick = () => {
-  // 跳转到工作区 - 设备管理页面
-  router.push({ path: "/workspace", query: { tab: "devices" } });
-};
 </script>
 
 <style scoped lang="scss">

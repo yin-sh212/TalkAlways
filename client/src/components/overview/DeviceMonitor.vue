@@ -1,7 +1,7 @@
 <template>
   <n-grid :cols="2" :x-gap="16" :y-gap="16" class="device-grid">
     <n-grid-item>
-      <n-card title="设备运行状态" :bordered="false" content-style="padding: 20px;">
+      <n-card title="监测点运行状态" :bordered="false" content-style="padding: 20px;">
         <template #header-extra>
           <n-tag :type="deviceStats.healthScore > 80 ? 'success' : 'warning'" size="small">
             健康度：{{ deviceStats.healthScore }}%
@@ -39,7 +39,7 @@
             <div class="device-stat-item">
               <div class="stat-header">
                 <n-icon size="20" color="#faad14"><Warning /></n-icon>
-                <span class="stat-label">离线设备</span>
+                <span class="stat-label">离线监测点</span>
               </div>
               <div class="stat-value warning">{{ deviceStats.offlineCount }}</div>
               <n-progress
@@ -52,7 +52,7 @@
             <div class="device-stat-item">
               <div class="stat-header">
                 <n-icon size="20" color="#18a058"><Layers /></n-icon>
-                <span class="stat-label">设备总数</span>
+                <span class="stat-label">监测点总数</span>
               </div>
               <div class="stat-value">{{ deviceStats.totalCount }}</div>
             </div>
@@ -62,7 +62,7 @@
     </n-grid-item>
 
     <n-grid-item>
-      <n-card title="设备类型分布" :bordered="false" content-style="padding: 20px;">
+      <n-card title="监测点类型分布" :bordered="false" content-style="padding: 20px;">
         <n-skeleton v-if="loading" :rows="4" />
         <template v-else>
           <div ref="deviceChartRef" class="device-chart-container"></div>

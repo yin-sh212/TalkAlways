@@ -1,3 +1,10 @@
+// 
+// 设备台账管理页面
+// 说明：本页面管理的是独立的设备台账（devices 表），包括空调机组、水泵、风机等大型设备
+// 与开屏页面的"监测点运行状态"（meters 表）为不同的业务概念
+// - devices 表：设备台账，数量较少，用于设备全生命周期管理
+// - meters 表：监测点/传感器，数量较多，用于实时数据采集和监控
+//
 <template>
   <div class="device-management">
     <!-- 查询条件 -->
@@ -72,8 +79,8 @@
       </n-grid-item>
     </n-grid>
 
-    <!-- 设备列表 -->
-    <n-card title="设备列表" :bordered="false">
+    <!-- 设备台账列表 -->
+    <n-card title="设备台账列表" :bordered="false">
       <n-data-table
         :columns="columns"
         :data="filteredDevices"
@@ -249,7 +256,7 @@ const buildingOptions = ref<any[]>([])
 const devices = ref<Device[]>([])
 const loading = ref(false)
 
-// 设备统计数据
+// 设备统计数据 - 来源于 devices 表（独立设备台账）
 const deviceStatsData = ref<ApiDeviceStats | null>(null)
 
 // 加载建筑列表

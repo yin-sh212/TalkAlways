@@ -47,7 +47,8 @@ async def detect_anomalies_for_batch(data: List[Dict]) -> List[Dict[str, Any]]:
     # 将检测结果插入到 alarms 表
     if anomalies:
         pool = await Database.get_pool()
-        async with pool.acquire() as conn:
+        conn = await pool.acquire()
+        try:
             async with conn.cursor() as cursor:
                 for anomaly in anomalies:
                     # 从数据中找到对应的记录，获取 building_id
@@ -85,6 +86,8 @@ async def detect_anomalies_for_batch(data: List[Dict]) -> List[Dict[str, Any]]:
                             await conn.rollback()
                         else:
                             await conn.commit()
+        finally:
+            await conn.release()
     
     return anomalies
 

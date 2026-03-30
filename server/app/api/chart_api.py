@@ -389,9 +389,8 @@ async def get_alarm_distribution(
             
             # 根据告警类型设置名称
             type_names = {
-                'equipment': '设备告警',
-                'energy': '能耗告警',
-                'environment': '环境告警'
+                'dynamic_baseline': '动态基线告警',
+                'trend_decline': '趋势下降告警',
             }
             
             result.append({

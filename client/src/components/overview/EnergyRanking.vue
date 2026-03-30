@@ -1,6 +1,7 @@
 <template>
   <n-card title="能耗排名 TOP5" :bordered="false" content-style="padding: 14px;" class="ranking-card">
-    <n-space vertical :size="10">
+    <n-skeleton v-if="loading" :rows="5" />
+    <n-space v-else vertical :size="10">
       <div v-for="(item, index) in rankingList" :key="item.buildingId" class="ranking-item">
         <div class="ranking-info">
           <n-tag :type="getRankingTagType(index)" size="small" class="ranking-tag">
@@ -30,10 +31,13 @@ interface RankingItem {
 }
 
 interface Props {
+  loading?: boolean
   rankingList: RankingItem[]
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  loading: false
+})
 
 // 获取排名标签类型
 const getRankingTagType = (index: number) => {

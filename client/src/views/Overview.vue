@@ -6,7 +6,7 @@
       <KpiCards :loading="loading" :kpiData="kpiData" />
 
       <!-- 能耗排名 TOP5 -->
-      <EnergyRanking :rankingList="rankingList" />
+      <EnergyRanking :loading="loading" :rankingList="rankingList" />
 
       <!-- 图表区 -->
       <EnergyCharts 

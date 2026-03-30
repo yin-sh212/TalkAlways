@@ -238,10 +238,9 @@ import {
 } from '@vicons/ionicons5'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
-import { getLineChartConfig, getBarChartConfig, getRadarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
-import { getBuildings } from '@/api/query'
+import { getLineChartConfig, getRadarChartConfig, CHART_COLORS } from '@/utils/echarts-config'
 import { useBuildingStore } from '@/store/building'
-import { getTrendData, getDistributionData, getComparisonData } from '@/api/charts'
+import { getTrendData, getComparisonData } from '@/api/charts'
 import { detectAnomaly, getSummary } from '@/api/statistics'
 import { getAnalysisInsights } from '@/api/analysis'
 import { addDocument } from '@/api/admin'
@@ -453,11 +452,6 @@ const loadAnalysisData = async () => {
   } finally {
     loading.value = false
   }
-}
-
-// 加载对比数据（固定为雷达图模式）
-const loadComparisonData = async (startDate?: string, endDate?: string) => {
-  await loadAllBuildingsComparison()
 }
 
 // 更新趋势图表 - 支持小时/天粒度切换
@@ -728,12 +722,6 @@ const handleExport = async () => {
 const navigateToKnowledgeBase = () => {
   router.push('/workspace?tab=knowledge')
   message.info('正在跳转到运维知识库...')
-}
-
-// 处理对比维度变化
-const handleCompareDimensionChange = async () => {
-  // 切换维度时需要重新加载对比数据
-  await loadAllBuildingsComparison()
 }
 
 // 加载所有建筑的对比数据

@@ -201,14 +201,11 @@ const updateBuildingEnergyData = async () => {
   try {
     const mockToday = appStore.getMockToday()
     
-    // 获取建筑列表
-    const buildingsResponse = await getBuildings()
-    const buildings = buildingsResponse.data?.data || []
+    // 直接从 buildingStore 获取死数据建筑列表
+    const buildings = buildingStore.buildings
     
     // 提取所有建筑 ID
-    const buildingIds = buildings.map((building: any) => 
-      typeof building === 'string' ? building : (building.id || building.building_id)
-    )
+    const buildingIds = buildings.map(building => building.id)
     
     // 批量获取所有建筑的能耗数据
     const response = await getBuildingsSummary({
@@ -225,7 +222,8 @@ const updateBuildingEnergyData = async () => {
     buildingsData.forEach((item: any) => {
       const buildingId = item.building_id
       const energy = (item.total_elec || 0) / 1000
-      const current = buildingEnergyMap.get(buildingId) || { name: item.building_name || `建筑${buildingId}`, value: 0 }
+      const buildingName = buildings.find(b => b.id === buildingId)?.name || `建筑${buildingId}`
+      const current = buildingEnergyMap.get(buildingId) || { name: buildingName, value: 0 }
       current.value += energy
       buildingEnergyMap.set(buildingId, current)
     })

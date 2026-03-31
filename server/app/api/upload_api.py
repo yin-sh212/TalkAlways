@@ -36,14 +36,58 @@ def extract_text_from_pdf(content: bytes) -> str:
 
 
 def extract_text_from_docx(content: bytes) -> str:
-    """从DOCX提取文本"""
+    """从 DOCX 提取文本"""
     doc = Document(BytesIO(content))
     text = "\n".join([para.text for para in doc.paragraphs])
     return text
 
 
+def extract_text_from_doc(content: bytes) -> str:
+    """从旧版 DOC 格式（Word 97-2003）提取文本"""
+    try:
+        # 方法 1：尝试使用 olefile 读取
+        import olefile
+        ole = olefile.OleFileIO(BytesIO(content))
+        
+        # DOC 文件通常包含 WordDocument 流
+        if ole.exists('WordDocument'):
+            # 简单提取：尝试读取文本内容
+            # 注意：这种方法不完美，复杂 DOC 可能需要专业库
+            text_parts = []
+            for stream in ole.listdir():
+                stream_name = '/'.join(stream)
+                if not stream_name.startswith('1'):  # 跳过二进制流
+                    try:
+                        stream_data = ole.openstream(stream)
+                        text = stream_data.read().decode('utf-8', errors='ignore')
+                        if text.strip():
+                            text_parts.append(text.strip())
+                    except:
+                        pass
+            
+            if text_parts:
+                return '\n'.join(text_parts)
+        
+        # 如果没有找到文本，返回空字符串
+        return ""
+        
+    except ImportError:
+        raise ValueError("需要安装 olefile 库：pip install olefile")
+    except Exception as e:
+        # 如果解析失败，尝试直接返回内容中的可读部分
+        # 作为降级方案
+        try:
+            # 尝试提取可读文本，忽略二进制数据
+            text = content.decode('utf-8', errors='ignore')
+            # 过滤掉非打印字符
+            text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t')
+            return text[:10000]  # 限制长度
+        except:
+            raise ValueError(f"DOC 文件解析失败：{str(e)}")
+
+
 def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
-    """根据文件类型解析为DataFrame"""
+    """根据文件类型解析为 DataFrame"""
     filename = file.filename.lower()
 
     # CSV
@@ -62,7 +106,7 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
         elif isinstance(data, dict):
             return pd.DataFrame([data])
         else:
-            raise ValueError("JSON格式不支持")
+            raise ValueError("JSON 格式不支持")
 
     # XML
     elif filename.endswith('.xml'):
@@ -80,7 +124,7 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
         text = content.decode('utf-8')
         lines = text.strip().split('\n')
         if ',' in lines[0]:
-            # 假设是CSV格式的TXT
+            # 假设是 CSV 格式的 TXT
             return pd.read_csv(StringIO(text))
         else:
             # 纯文本，每行作为一个记录
@@ -97,6 +141,17 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
         text = extract_text_from_docx(content)
         paragraphs = text.split('\n')
         return pd.DataFrame({'content': paragraphs})
+
+    # DOC（旧版 Word 格式，需要 olefile 和 antiword）
+    elif filename.endswith('.doc'):
+        try:
+            # 尝试使用 antiword 或 win32com 解析
+            # 简单处理：尝试提取文本
+            text = extract_text_from_doc(content)
+            paragraphs = text.split('\n')
+            return pd.DataFrame({'content': paragraphs})
+        except Exception as e:
+            raise ValueError(f"DOC 格式解析失败：{str(e)}。建议使用 DOCX 格式")
 
     else:
         raise ValueError(f"不支持的文件格式: {filename}")
@@ -263,22 +318,34 @@ async def upload_file(file: UploadFile = File(..., description="支持多种格�
 
         # 对于文本类文件（PDF, DOCX, TXT）
         else:
-            # 直接作为知识库文档存储
-            # 这里可以调用知识库服务
+            # 直接存储到数据库，不保存本地文件
             from app.services.knowledge_base import knowledge_base
-
-            # 保存到知识库目录
-            safe_filename = file.filename.replace(' ', '_')
-            file_path = f"data/knowledge/{safe_filename}"
-            os.makedirs("data/knowledge", exist_ok=True)
-
-            with open(file_path, 'wb') as f:
-                f.write(content)
-
-            # 加载到向量库
-            documents = knowledge_base.load_document(file_path)
-
             from app.services.vector_db import vector_db
+            
+            # 提取文本内容
+            if file_type == 'PDF':
+                text_content = extract_text_from_pdf(content)
+            elif file_type == 'DOCX':
+                text_content = extract_text_from_docx(content)
+            else:  # TXT
+                text_content = content.decode('utf-8')
+            
+            # 分割为段落
+            paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
+            
+            # 直接存入向量数据库，不保存本地文件
+            documents = []
+            for i, para in enumerate(paragraphs):
+                documents.append({
+                    'content': para,
+                    'metadata': {
+                        'source': file.filename,
+                        'paragraph_index': i,
+                        'upload_time': datetime.now().isoformat()
+                    }
+                })
+            
+            # 添加到向量库
             vector_db.add_documents(documents)
 
             stats = {
@@ -300,24 +367,6 @@ async def upload_file(file: UploadFile = File(..., description="支持多种格�
             }
         }
 
-    except pd.errors.EmptyDataError:
-        return {
-            "code": 400,
-            "message": "文件为空",
-            "data": None
-        }
-    except json.JSONDecodeError as e:
-        return {
-            "code": 400,
-            "message": f"JSON解析错误: {str(e)}",
-            "data": None
-        }
-    except ET.ParseError as e:
-        return {
-            "code": 400,
-            "message": f"XML解析错误: {str(e)}",
-            "data": None
-        }
     except Exception as e:
         return {
             "code": 500,

@@ -5,7 +5,7 @@ import type {
 } from '@/types/export'
 
 // 导出 CSV - 使用 ExportParams 类型
-export const exportCSV = (params: ExportParams): Promise<Blob> => {
+export const exportCSV = (params: ExportParams): Promise<any> => {
   return http.get('/export/csv', { 
     params, 
     responseType: 'blob' 
@@ -13,7 +13,7 @@ export const exportCSV = (params: ExportParams): Promise<Blob> => {
 }
 
 // 导出 Excel - 使用 ExportParams 类型
-export const exportExcel = (params: ExportParams): Promise<Blob> => {
+export const exportExcel = (params: ExportParams): Promise<any> => {
   return http.get('/export/excel', { 
     params, 
     responseType: 'blob' 
@@ -21,7 +21,7 @@ export const exportExcel = (params: ExportParams): Promise<Blob> => {
 }
 
 // 导出 PDF - 使用 ExportParams 类型
-export const exportPDF = (params: ExportParams): Promise<Blob> => {
+export const exportPDF = (params: ExportParams): Promise<any> => {
   return http.get('/export/pdf', { 
     params, 
     responseType: 'blob' 

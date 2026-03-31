@@ -2,6 +2,11 @@
   <n-card title="告警趋势" :bordered="false" content-style="padding: 16px;">
     <template #header-extra>
       <n-space>
+        <ChartAIAnalysis 
+          :chart-ref="chartRef"
+          chart-title="告警趋势"
+          chart-type="line"
+        />
         <n-tag type="info" size="small">按时间统计</n-tag>
       </n-space>
     </template>
@@ -13,6 +18,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
 import { getLineChartConfig, CHART_COLORS } from '@/utils/echarts-config'
+import ChartAIAnalysis from '@/components/common/ChartAIAnalysis.vue'
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null

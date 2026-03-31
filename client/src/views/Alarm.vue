@@ -808,10 +808,12 @@ const handleExport = async () => {
       format: "excel" as const,
     };
 
-    const response = await alarmApi.exportExcel(exportParams);
+    const response = await alarmApi.exportExcel(exportParams)
 
-    // exportExcel 返回的是 Blob 对象，不是 AxiosResponse
-    const url = window.URL.createObjectURL(response as Blob);
+    // exportExcel 返回的是 AxiosResponse，需要提取 data 中的 Blob
+    const blob = response.data
+
+    const url = window.URL.createObjectURL(blob as Blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = `告警报表_${startDate}_${endDate}_${Date.now()}.xlsx`;
@@ -822,6 +824,7 @@ const handleExport = async () => {
 
     message.success("报表已下载");
   } catch (error: any) {
+    console.error('[Alarm] 导出失败:', error)
     message.error("导出失败：" + (error.message || "未知错误"));
   } finally {
     exportLoading.value = false;

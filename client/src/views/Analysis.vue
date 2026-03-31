@@ -694,9 +694,11 @@ const handleExport = async () => {
     }
     
     // 使用 analysis API 中的 exportPDF 函数
-    const response = await import('@/api/analysis').then(mod => mod.exportPDF(exportParams))
-    // exportPDF 返回的是 Blob 对象，不是 AxiosResponse
-    const blob = response
+    const { exportPDF } = await import('@/api/analysis')
+    const response = await exportPDF(exportParams)
+    
+    // exportPDF 返回的是 AxiosResponse，需要提取 data 中的 Blob
+    const blob = response.data
 
     // 检查是否是有效的 PDF blob
     if (!blob || blob.size === 0) {
@@ -707,7 +709,6 @@ const handleExport = async () => {
     if (blob.type && !blob.type.includes('application/pdf')) {
       // 如果不是 PDF，可能是后端返回了错误信息
       const text = await blob.text()
-      console.error('[Analysis] 后端返回的不是 PDF:', text)
       try {
         const error = JSON.parse(text)
         throw new Error(error.message || error.error || 'PDF 生成失败')
@@ -728,7 +729,6 @@ const handleExport = async () => {
     
     message.success('分析报告下载成功')
   } catch (error: any) {
-    console.error('[Analysis] 导出失败:', error)
     message.error(error.response?.data?.message || error.message || '导出失败，请稍后重试')
   }
 }

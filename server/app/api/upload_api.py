@@ -27,7 +27,7 @@ SUPPORTED_FORMATS = {
 
 
 def extract_text_from_pdf(content: bytes) -> str:
-    """从PDF提取文本"""
+    """从 PDF 提取文本"""
     text = ""
     pdf_reader = PyPDF2.PdfReader(BytesIO(content))
     for page in pdf_reader.pages:
@@ -37,58 +37,34 @@ def extract_text_from_pdf(content: bytes) -> str:
 
 def extract_text_from_docx(content: bytes) -> str:
     """从 DOCX 提取文本"""
-    doc = Document(BytesIO(content))
-    text = "\n".join([para.text for para in doc.paragraphs])
-    return text
-
-
-def extract_text_from_doc(content: bytes) -> str:
-    """从旧版 DOC 格式（Word 97-2003）提取文本"""
     try:
-        # 方法 1：尝试使用 olefile 读取
-        import olefile
-        ole = olefile.OleFileIO(BytesIO(content))
+        doc = Document(BytesIO(content))
+        # 只提取段落文本，过滤空行和页眉页脚
+        paragraphs = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            # 过滤掉过短的文本（可能是页眉页脚或格式符号）
+            if len(text) > 5:
+                paragraphs.append(text)
         
-        # DOC 文件通常包含 WordDocument 流
-        if ole.exists('WordDocument'):
-            # 简单提取：尝试读取文本内容
-            # 注意：这种方法不完美，复杂 DOC 可能需要专业库
-            text_parts = []
-            for stream in ole.listdir():
-                stream_name = '/'.join(stream)
-                if not stream_name.startswith('1'):  # 跳过二进制流
-                    try:
-                        stream_data = ole.openstream(stream)
-                        text = stream_data.read().decode('utf-8', errors='ignore')
-                        if text.strip():
-                            text_parts.append(text.strip())
-                    except:
-                        pass
-            
-            if text_parts:
-                return '\n'.join(text_parts)
+        if not paragraphs:
+            return ""
         
-        # 如果没有找到文本，返回空字符串
-        return ""
-        
-    except ImportError:
-        raise ValueError("需要安装 olefile 库：pip install olefile")
+        return "\n".join(paragraphs)
     except Exception as e:
-        # 如果解析失败，尝试直接返回内容中的可读部分
-        # 作为降级方案
-        try:
-            # 尝试提取可读文本，忽略二进制数据
-            text = content.decode('utf-8', errors='ignore')
-            # 过滤掉非打印字符
-            text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t')
-            return text[:10000]  # 限制长度
-        except:
-            raise ValueError(f"DOC 文件解析失败：{str(e)}")
+        raise ValueError(f"DOCX 文件解析失败：{str(e)}")
 
 
 def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
     """根据文件类型解析为 DataFrame"""
     filename = file.filename.lower()
+
+    # 只支持特定的文件格式
+    supported_extensions = ['.csv', '.xlsx', '.xls', '.json', '.xml', '.txt', '.pdf', '.docx']
+    
+    # 检查文件扩展名
+    if not any(filename.endswith(ext) for ext in supported_extensions):
+        raise ValueError(f"不支持的文件格式 '{file.filename}'，仅支持：{', '.join(supported_extensions)}")
 
     # CSV
     if filename.endswith('.csv'):
@@ -96,369 +72,115 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
 
     # Excel
     elif filename.endswith(('.xlsx', '.xls')):
-        return pd.read_excel(BytesIO(content))
+        try:
+            return pd.read_excel(BytesIO(content))
+        except Exception as e:
+            raise ValueError(f"Excel 文件解析失败：{str(e)}")
 
     # JSON
     elif filename.endswith('.json'):
-        data = json.loads(content)
-        if isinstance(data, list):
-            return pd.DataFrame(data)
-        elif isinstance(data, dict):
-            return pd.DataFrame([data])
-        else:
-            raise ValueError("JSON 格式不支持")
+        try:
+            data = json.loads(content.decode('utf-8'))
+            if isinstance(data, list):
+                return pd.DataFrame(data)
+            else:
+                return pd.DataFrame([data])
+        except Exception as e:
+            raise ValueError(f"JSON 文件解析失败：{str(e)}")
 
     # XML
     elif filename.endswith('.xml'):
-        root = ET.fromstring(content)
-        data = []
-        for record in root.findall('.//record'):
-            record_data = {}
-            for elem in record:
-                record_data[elem.tag] = elem.text
-            data.append(record_data)
-        return pd.DataFrame(data)
+        try:
+            tree = ET.parse(BytesIO(content))
+            root = tree.getroot()
+            data = []
+            for child in root:
+                row = {}
+                for elem in child:
+                    row[elem.tag] = elem.text
+                if row:
+                    data.append(row)
+            if not data:
+                raise ValueError("XML 文件中没有有效数据")
+            return pd.DataFrame(data)
+        except Exception as e:
+            raise ValueError(f"XML 文件解析失败：{str(e)}")
 
-    # TXT（按行解析，假设每行是逗号分隔）
+    # TXT（纯文本）
     elif filename.endswith('.txt'):
-        text = content.decode('utf-8')
-        lines = text.strip().split('\n')
-        if ',' in lines[0]:
-            # 假设是 CSV 格式的 TXT
-            return pd.read_csv(StringIO(text))
-        else:
-            # 纯文本，每行作为一个记录
-            return pd.DataFrame({'content': lines})
+        try:
+            text = content.decode('utf-8')
+            lines = text.strip().split('\n')
+            # 尝试检测是否为 CSV 格式
+            if len(lines) > 0 and (',' in lines[0] or '\t' in lines[0]):
+                delimiter = '\t' if '\t' in lines[0] else ','
+                return pd.read_csv(StringIO(text), delimiter=delimiter)
+            else:
+                # 纯文本，每行作为一条记录
+                if not lines or all(not line.strip() for line in lines):
+                    raise ValueError("TXT 文件中没有有效文本")
+                return pd.DataFrame({'content': lines})
+        except UnicodeDecodeError:
+            raise ValueError("TXT 文件编码错误，请使用 UTF-8 编码")
 
     # PDF（提取文本后按段落解析）
     elif filename.endswith('.pdf'):
         text = extract_text_from_pdf(content)
-        paragraphs = text.split('\n\n')
+        # 按段落分割，过滤空行
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        if not paragraphs:
+            raise ValueError("PDF 文件中未提取到有效文本")
         return pd.DataFrame({'content': paragraphs})
 
     # DOCX（提取文本后按段落解析）
     elif filename.endswith('.docx'):
         text = extract_text_from_docx(content)
-        paragraphs = text.split('\n')
+        # 按段落分割，过滤空行和过短文本
+        paragraphs = [p.strip() for p in text.split('\n') if p.strip() and len(p.strip()) > 5]
+        if not paragraphs:
+            raise ValueError("DOCX 文件中未提取到有效文本")
         return pd.DataFrame({'content': paragraphs})
-
-    # DOC（旧版 Word 格式，需要 olefile 和 antiword）
-    elif filename.endswith('.doc'):
-        try:
-            # 尝试使用 antiword 或 win32com 解析
-            # 简单处理：尝试提取文本
-            text = extract_text_from_doc(content)
-            paragraphs = text.split('\n')
-            return pd.DataFrame({'content': paragraphs})
-        except Exception as e:
-            raise ValueError(f"DOC 格式解析失败：{str(e)}。建议使用 DOCX 格式")
-
+    
+    # 不支持的格式
     else:
-        raise ValueError(f"不支持的文件格式: {filename}")
+        raise ValueError(f"不支持的文件格式：{file.content_type}")
 
 
-@router.post(
-    "/upload",
-    responses={
-        200: {
-            "description": "成功上传并导入数据",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "csv_success": {
-                            "summary": "CSV上传成功",
-                            "value": {
-                                "code": 200,
-                                "message": "成功",
-                                "data": {
-                                    "success": True,
-                                    "filename": "data.csv",
-                                    "file_type": "CSV",
-                                    "stats": {
-                                        "original_rows": 1500,
-                                        "after_cleaning": 1485,
-                                        "duplicates_removed": 15,
-                                        "inserted": 1485
-                                    },
-                                    "message": "成功导入 1485 条数据"
-                                }
-                            }
-                        },
-                        "pdf_success": {
-                            "summary": "PDF上传成功",
-                            "value": {
-                                "code": 200,
-                                "message": "成功",
-                                "data": {
-                                    "success": True,
-                                    "filename": "document.pdf",
-                                    "file_type": "PDF",
-                                    "stats": {
-                                        "original_rows": 15,
-                                        "after_cleaning": 15,
-                                        "paragraphs_extracted": 15,
-                                        "inserted": 15
-                                    },
-                                    "message": "成功从PDF提取 15 个段落"
-                                }
-                            }
-                        },
-                        "docx_success": {
-                            "summary": "DOCX上传成功",
-                            "value": {
-                                "code": 200,
-                                "message": "成功",
-                                "data": {
-                                    "success": True,
-                                    "filename": "document.docx",
-                                    "file_type": "DOCX",
-                                    "stats": {
-                                        "original_rows": 20,
-                                        "after_cleaning": 20,
-                                        "paragraphs_extracted": 20,
-                                        "inserted": 20
-                                    },
-                                    "message": "成功从Word文档提取 20 个段落"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "文件格式错误",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 400,
-                        "message": "不支持的文件格式。支持的格式：CSV, Excel, JSON, XML, TXT, PDF, DOCX",
-                        "data": None
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "服务器内部错误",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 500,
-                        "message": "处理失败: PDF解析错误",
-                        "data": None
-                    }
-                }
-            }
-        }
-    }
-)
-async def upload_file(file: UploadFile = File(..., description="支持多种格式的数据文件")):
-    """
-    上传文件并导入数据库
-
-    支持的文件格式：
-    - CSV, Excel (.xlsx, .xls): 直接转为表格数据
-    - JSON, XML: 解析为结构化数据
-    - TXT: 按行解析
-    - PDF, DOCX: 提取文本内容
-    """
+@router.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+):
+    """上传文件并解析为 DataFrame"""
     try:
-        filename = file.filename.lower()
+        # 读取文件内容（只读取一次）
         content = await file.read()
-
-        # 检查文件是否为空
+        
         if not content:
-            return {
-                "code": 400,
-                "message": "文件为空",
-                "data": None
-            }
-
-        # 解析文件为DataFrame
-        try:
-            df = parse_file_to_dataframe(file, content)
-            file_type = filename.split('.')[-1].upper()
-        except ValueError as e:
-            return {
-                "code": 400,
-                "message": str(e),
-                "data": None
-            }
-
-        # 数据清洗
-        original_count = len(df)
-
-        # 对于结构化数据（有列名）的处理
-        if file_type in ['CSV', 'XLSX', 'XLS', 'JSON', 'XML']:
-            # 去除完全重复的行
-            df = df.drop_duplicates()
-
-            # 处理空值
-            required_cols = ['building_id', 'timestamp'] if 'building_id' in df.columns else []
-            if required_cols:
-                df = df.dropna(subset=required_cols)
-
-            # 填充可选字段
-            if 'water' in df.columns:
-                df['water'] = df['water'].fillna(0)
-            if 'ambient_temp' in df.columns:
-                df['ambient_temp'] = df['ambient_temp'].fillna(20)
-
-            # 写入数据库的逻辑...
-            # 这里简化处理，实际需要根据你的表结构
-            inserted = original_count
-
-            stats = {
-                "original_rows": original_count,
-                "after_cleaning": len(df),
-                "duplicates_removed": original_count - len(df),
-                "inserted": inserted
-            }
-            message = f"成功导入 {inserted} 条数据"
-
-        # 对于文本类文件（PDF, DOCX, TXT）
-        else:
-            # 直接存储到数据库，不保存本地文件
-            from app.services.knowledge_base import knowledge_base
-            from app.services.vector_db import vector_db
-            
-            # 提取文本内容
-            if file_type == 'PDF':
-                text_content = extract_text_from_pdf(content)
-            elif file_type == 'DOCX':
-                text_content = extract_text_from_docx(content)
-            else:  # TXT
-                text_content = content.decode('utf-8')
-            
-            # 分割为段落
-            paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
-            
-            # 直接存入向量数据库，不保存本地文件
-            documents = []
-            for i, para in enumerate(paragraphs):
-                documents.append({
-                    'content': para,
-                    'metadata': {
-                        'source': file.filename,
-                        'paragraph_index': i,
-                        'upload_time': datetime.now().isoformat()
-                    }
-                })
-            
-            # 添加到向量库
-            vector_db.add_documents(documents)
-
-            stats = {
-                "original_rows": original_count,
-                "paragraphs_extracted": len(documents),
-                "inserted": len(documents)
-            }
-            message = f"成功从{file_type}提取 {len(documents)} 个段落"
-
+            raise HTTPException(status_code=400, detail="文件内容为空")
+        
+        # 检查文件大小（限制 10MB）
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="文件大小不能超过 10MB")
+        
+        # 解析文件
+        df = parse_file_to_dataframe(file, content)
+        
+        if df.empty:
+            raise HTTPException(status_code=400, detail="文件中没有有效数据")
+        
+        # 返回统计信息
         return {
-            "code": 200,
-            "message": "成功",
-            "data": {
-                "success": True,
-                "filename": file.filename,
-                "file_type": file_type,
-                "stats": stats,
-                "message": message
+            "message": "上传成功",
+            "stats": {
+                "rows": len(df),
+                "columns": len(df.columns),
+                "column_names": list(df.columns)
             }
         }
-
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="文件为空或格式错误")
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"处理失败: {str(e)}",
-            "data": None
-        }
-
-
-@router.get(
-    "/supported-formats",
-    responses={
-        200: {
-            "description": "成功获取支持的文件格式",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "message": "成功",
-                        "data": {
-                            "formats": [
-                                {"extension": ".csv", "type": "表格数据", "description": "逗号分隔值文件"},
-                                {"extension": ".xlsx", "type": "表格数据", "description": "Excel文件"},
-                                {"extension": ".json", "type": "结构化数据", "description": "JSON格式"},
-                                {"extension": ".pdf", "type": "文本文档", "description": "PDF文档"},
-                                {"extension": ".docx", "type": "文本文档", "description": "Word文档"}
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-    }
-)
-async def get_supported_formats():
-    """获取支持的文件格式列表"""
-    return {
-        "code": 200,
-        "message": "成功",
-        "data": {
-            "formats": [
-                {"extension": ".csv", "type": "表格数据", "description": "逗号分隔值文件"},
-                {"extension": ".xlsx", "type": "表格数据", "description": "Excel 2007+ 文件"},
-                {"extension": ".xls", "type": "表格数据", "description": "Excel 97-2003 文件"},
-                {"extension": ".json", "type": "结构化数据", "description": "JSON格式"},
-                {"extension": ".xml", "type": "结构化数据", "description": "XML格式"},
-                {"extension": ".txt", "type": "文本文件", "description": "纯文本文件"},
-                {"extension": ".pdf", "type": "文本文档", "description": "PDF文档"},
-                {"extension": ".docx", "type": "文本文档", "description": "Word文档"}
-            ]
-        }
-    }
-
-
-@router.get(
-    "/template",
-    responses={
-        200: {
-            "description": "成功下载 CSV 模板",
-            "content": {
-                "text/csv": {
-                    "example": "building_id,timestamp,electricity,water,ambient_temp\nB001,2025-03-01 08:00:00,156.3,12.5,22.5"
-                }
-            }
-        }
-    }
-)
-async def download_template():
-    """下载 CSV 模板"""
-    try:
-        template = """building_id,timestamp,electricity,water,ambient_temp
-B001,2025-03-01 08:00:00,156.3,12.5,22.5
-B001,2025-03-01 09:00:00,178.2,13.1,23.1
-B002,2025-03-01 08:00:00,89.7,8.2,22.3"""
-
-        return Response(
-            content=template,
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=template.csv"}
-        )
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"生成模板失败：{str(e)}",
-            "data": None
-        }
-
-
-# ========== 已移除知识库管理接口 ==========
-# 注：知识库功能已迁移至 knowledge_api.py，使用 MySQL 数据库存储
-# 原 JSON 文件存储方式已废弃，相关接口包括：
-# - POST /api/admin/knowledge/add
-# - GET /api/admin/knowledge/list  
-# - GET /api/admin/knowledge/detail/{doc_id}
-# - DELETE /api/admin/knowledge/delete/{doc_id}
-# 请使用 /api/knowledge/* 接口替代
+        raise HTTPException(status_code=500, detail=f"服务器错误：{str(e)}")

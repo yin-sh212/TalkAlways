@@ -179,7 +179,7 @@ export const exportCSV = (params: ExportParams): Promise<Blob> => {
   })
 }
 
-export const exportExcel = (params: ExportParams): Promise<Blob> => {
+export const exportExcel = (params: ExportParams): Promise<any> => {
   return http.get('/export/excel', {
     params: {
       building_id: params.building_ids[0] || 'B001',
@@ -190,7 +190,7 @@ export const exportExcel = (params: ExportParams): Promise<Blob> => {
   })
 }
 
-export const exportPDF = (params: ExportParams): Promise<Blob> => {
+export const exportPDF = (params: ExportParams): Promise<any> => {
   return http.get('/export/pdf', {
     params: {
       building_id: params.building_ids[0] || 'B001',

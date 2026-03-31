@@ -28,7 +28,7 @@
             :before-upload="handleBeforeUpload"
             @finish="handleUploadFinish"
             @error="handleUploadError"
-            accept=".pdf,.txt,.doc,.docx"
+            accept=".pdf,.txt,.docx"
             :trigger="uploadTrigger"
             :custom-request="handleCustomUpload"
             action="/api/admin/upload"
@@ -574,17 +574,42 @@ const debouncedUploadFile = debounce(async (file: UploadFileInfo) => {
       signal: AbortSignal.timeout(60000), // 60 秒超时
     });
     
-    const result = await response.json();
+    // 先检查响应状态
+    if (!response.ok) {
+      // 尝试解析错误信息
+      try {
+        const errorText = await response.text();
+        let errorMsg = `上传失败：HTTP ${response.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMsg = errorData.detail || errorData.message || errorMsg;
+        } catch {
+          // 如果不是 JSON，直接使用文本
+          if (errorText) errorMsg = errorText;
+        }
+        throw new Error(errorMsg);
+      } catch (e: any) {
+        throw new Error(`上传失败：${e.message || '未知错误'}`);
+      }
+    }
     
-    if (result.code === 200 && result.data.success) {
-      message.success(`✅ "${file.name}" 上传成功！${result.data.message}`);
+    // 解析成功响应
+    let result;
+    try {
+      result = await response.json();
+    } catch (e) {
+      throw new Error('服务器响应格式错误');
+    }
+    
+    if (response.ok && result.message === "上传成功") {
+      message.success(`✅ "${file.name}" 上传成功！解析了 ${result.stats?.rows || 0} 行数据`);
       
       // 记录上传的文件
       uploadedFiles.value.push({
         name: file.name,
-        savedName: result.data.saved_filename || file.name,
+        savedName: result.saved_filename || file.name,
         uploadTime: new Date().toLocaleString('zh-CN'),
-        blocksIndexed: result.data.stats?.blocks_indexed || 0
+        blocksIndexed: result.stats?.rows || 0
       });
 
       // 上传成功后创建文档记录（调用知识库 API）
@@ -593,9 +618,9 @@ const debouncedUploadFile = debounce(async (file: UploadFileInfo) => {
         category: 'technical', // 默认分类为技术文档
         tags: [], // 初始标签为空
         summary: `上传文件：${file.name}`,
-        description: `文件 ${file.name} 已上传至知识库，共建立 ${result.data.stats?.blocks_indexed || 0} 个文本块索引。`,
+        description: `文件 ${file.name} 已上传至知识库，共建立 ${result.stats?.rows || 0} 个文本块索引。`,
         solution: "可通过 AI 助手检索此文档内容",
-        notes: [`原始文件名：${file.name}`, `保存路径：${result.data.saved_filename || file.name}`],
+        notes: [`原始文件名：${file.name}`, `保存路径：${file.name}`],
       };
 
       // 调用知识库 API 保存文档记录
@@ -635,14 +660,14 @@ const handleCustomUpload = ({ file, onFinish, onError }: UploadCustomRequestOpti
 };
 
 const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
-  const validExtensions = [".pdf", ".txt", ".doc", ".docx"];
+  const validExtensions = [".pdf", ".txt", ".docx"];
 
   const hasValidExtension = validExtensions.some((ext) =>
     file.name.toLowerCase().endsWith(ext),
   );
 
   if (!hasValidExtension) {
-    message.error("只支持 PDF、TXT、DOC、DOCX 格式的文件");
+    message.error("只支持 PDF、TXT、DOCX 格式的文件");
     return false;
   }
 

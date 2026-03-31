@@ -7,16 +7,23 @@
         content-style="padding: 20px;"
       >
         <template #header-extra>
-          <n-tooltip>
-            <template #trigger>
-              <n-icon
-                size="18"
-                style="cursor: pointer; color: #18a058"
-                :component="LinkIcon"
-              />
-            </template>
-            点击环形图的某个建筑，其他图表将联动显示该建筑数据
-          </n-tooltip>
+          <n-space :size="8">
+            <ChartAIAnalysis 
+              :chart-ref="pieChartRef"
+              chart-title="各建筑能耗占比"
+              chart-type="pie"
+            />
+            <n-tooltip>
+              <template #trigger>
+                <n-icon
+                  size="18"
+                  style="cursor: pointer; color: #18a058"
+                  :component="LinkIcon"
+                />
+              </template>
+              点击环形图的某个建筑，其他图表将联动显示该建筑数据
+            </n-tooltip>
+          </n-space>
         </template>
         <n-skeleton v-if="loading" :rows="3" />
         <div v-else ref="pieChartRef" class="chart-container"></div>
@@ -29,6 +36,13 @@
         :bordered="false"
         content-style="padding: 20px;"
       >
+        <template #header-extra>
+          <ChartAIAnalysis 
+            :chart-ref="distributionChartRef"
+            chart-title="24 小时能耗分布"
+            chart-type="bar"
+          />
+        </template>
         <n-skeleton v-if="loading" :rows="3" />
         <div v-else ref="distributionChartRef" class="chart-container"></div>
       </n-card>
@@ -48,6 +62,7 @@ import {
 import * as echarts from "echarts";
 import { LinkOutline as LinkIcon } from "@vicons/ionicons5";
 import { useMessage } from "naive-ui";
+import ChartAIAnalysis from '@/components/common/ChartAIAnalysis.vue'
 import {
   getDonutChartConfig,
   getLineChartConfig,

@@ -2,6 +2,11 @@
   <n-card title="告警分布" :bordered="false" content-style="padding: 16px;">
     <template #header-extra>
       <n-space>
+        <ChartAIAnalysis 
+          :chart-ref="chartRef"
+          chart-title="告警分布"
+          chart-type="pie"
+        />
         <n-tag type="info" size="small">按类型统计</n-tag>
       </n-space>
     </template>
@@ -14,6 +19,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { getBasePieChartConfig, getLineChartConfig, CHART_COLORS } from '@/utils/echarts-config'
+import ChartAIAnalysis from '@/components/common/ChartAIAnalysis.vue'
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null

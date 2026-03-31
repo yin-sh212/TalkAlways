@@ -52,4 +52,22 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_phone (phone),
     INDEX idx_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+-- 知识库文档表（结构化存储）
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '文档 ID',
+    title VARCHAR(200) NOT NULL COMMENT '文档标题',
+    category VARCHAR(50) NOT NULL COMMENT '分类：skill/case/maintenance/standard/technical',
+    tags VARCHAR(500) COMMENT '标签，逗号分隔',
+    summary VARCHAR(500) COMMENT '摘要',
+    description TEXT COMMENT '问题描述',
+    solution TEXT COMMENT '解决方案',
+    notes TEXT COMMENT '注意事项，JSON 数组格式',
+    views INT DEFAULT 0 COMMENT '浏览次数',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_category (category),
+    INDEX idx_tags (tags),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库文档表';
 """

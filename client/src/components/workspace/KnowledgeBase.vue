@@ -426,14 +426,18 @@ function getCategoryName(category: string): string {
 
 // 事件处理
 const showDocumentDetail = async (doc: Document) => {
-  currentDoc.value = doc;
   showDetailModal.value = true;
-
-  // 增加浏览量 - 调用 API 更新
+  
+  // 从 API 获取详情数据
   try {
-    await getKnowledgeDetail(doc.id);
+    const response = await getKnowledgeDetail(doc.id);
+    if (response.data.code === 200 && response.data.data) {
+      currentDoc.value = response.data.data as Document;
+    }
   } catch (error) {
-    console.error('更新浏览量失败:', error);
+    console.error('获取文档详情失败:', error);
+    // 如果获取失败，至少显示列表中的数据
+    currentDoc.value = doc;
   }
 };
 
@@ -627,8 +631,8 @@ const fetchDocuments = async () => {
     });
     
     // 直接使用后端返回的数据，不做转换
-    if (response.data.code === 200 && response.data.data?.items) {
-      documents.value = response.data.data.items as Document[];
+    if (response.data.code === 200 && (response.data.data as any).list) {
+      documents.value = (response.data.data as any).list as Document[];
     } else {
       throw new Error(response.data.message || '获取失败');
     }

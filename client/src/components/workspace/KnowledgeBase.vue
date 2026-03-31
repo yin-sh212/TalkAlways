@@ -30,6 +30,7 @@
             @error="handleUploadError"
             accept=".pdf,.txt,.doc,.docx"
             :trigger="uploadTrigger"
+            :custom-request="handleCustomUpload"
             action="/api/admin/upload"
           >
             <n-upload-dragger>
@@ -135,12 +136,15 @@
       </n-grid-item>
     </n-grid>
 
+    <!-- 加载中状态 -->
+    <div v-if="loadingDocuments" class="loading-container">
+      <n-empty description="加载中..." />
+    </div>
+    
     <!-- 空状态 -->
-    <n-empty
-      v-if="filteredDocuments.length === 0"
-      description="暂无相关文档"
-      style="margin-top: 60px"
-    />
+    <div v-else-if="filteredDocuments.length === 0" class="empty-container">
+      <n-empty description="暂无相关文档" />
+    </div>
 
     <!-- 文档详情弹窗 -->
     <n-modal
@@ -149,7 +153,13 @@
       title="文档详情"
       style="width: 900px; max-height: 80vh; overflow-y: auto"
     >
-      <n-space vertical :size="16" v-if="currentDoc">
+      <!-- 加载中状态 -->
+      <div v-if="loadingDetail" style="padding: 60px 0; text-align: center">
+        <n-spin size="large" description="正在加载文档详情..." />
+      </div>
+      
+      <!-- 文档内容 -->
+      <n-space vertical :size="16" v-else-if="currentDoc">
         <n-space align="center">
           <n-tag :type="getCategoryType(currentDoc.category)">
             {{ getCategoryName(currentDoc.category) }}
@@ -296,7 +306,7 @@ import { ref, reactive, computed, onMounted, watch, h } from "vue";
 import { Search, AddCircle, Eye, DocumentText, Trash } from "@vicons/ionicons5";
 import { CloudUploadOutline } from "@vicons/ionicons5";
 import { NTag, NIcon, NButton, useMessage, useDialog } from "naive-ui";
-import type { UploadFileInfo } from "naive-ui";
+import type { UploadFileInfo, UploadCustomRequestOptions } from "naive-ui";
 import { uploadDocument } from "@/api/analysis";
 import { 
   addDocument, 
@@ -306,6 +316,7 @@ import {
   type KnowledgeDocument as ApiKnowledgeDocument,
   type AddDocumentParams 
 } from "@/api/admin";
+import { debounce } from 'lodash-es';
 
 // 本地 Document 类型（直接使用 API 返回的字段）
 interface Document extends ApiKnowledgeDocument {
@@ -352,6 +363,7 @@ const tagOptions = [
 
 // Mock 文档数据 - 仅用于初始展示，实际数据从 API 加载
 const documents = ref<Document[]>([]);
+const loadingDocuments = ref(false); // 添加列表加载状态
 
 // 过滤后的文档
 const filteredDocuments = computed(() => {
@@ -375,6 +387,7 @@ const filteredDocuments = computed(() => {
 // 详情展示
 const showDetailModal = ref(false);
 const currentDoc = ref<Document | null>(null);
+const loadingDetail = ref(false); // 添加加载状态
 
 // 新增文档
 const showAddModal = ref(false);
@@ -426,14 +439,21 @@ function getCategoryName(category: string): string {
 
 // 事件处理
 const showDocumentDetail = async (doc: Document) => {
-  currentDoc.value = doc;
   showDetailModal.value = true;
-
-  // 增加浏览量 - 调用 API 更新
+  loadingDetail.value = true; // 开始加载
+  
+  // 从 API 获取详情数据
   try {
-    await getKnowledgeDetail(doc.id);
+    const response = await getKnowledgeDetail(doc.id);
+    if (response.data.code === 200 && response.data.data) {
+      currentDoc.value = response.data.data as Document;
+    }
   } catch (error) {
-    console.error('更新浏览量失败:', error);
+    console.error('获取文档详情失败:', error);
+    // 如果获取失败，至少显示列表中的数据
+    currentDoc.value = doc;
+  } finally {
+    loadingDetail.value = false; // 加载完成
   }
 };
 
@@ -525,14 +545,96 @@ const handleAddDocument = async () => {
 // 文件上传事件处理
 const uploading = ref(false);
 const uploadedFiles = ref<UploadFileRecord[]>([]);
+const uploadingFiles = ref<Set<string>>(new Set()); // 去重集合
+
+// 防抖版本的文件上传处理（300ms）
+const debouncedUploadFile = debounce(async (file: UploadFileInfo) => {
+  if (!file.file) {
+    message.error("文件无效");
+    return;
+  }
+
+  // 检查是否正在上传（去重）
+  if (uploadingFiles.value.has(file.name)) {
+    console.log(`⚠️ 文件 ${file.name} 正在上传，跳过重复请求`);
+    return;
+  }
+
+  uploadingFiles.value.add(file.name);
+  uploading.value = true;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file.file);
+    
+    // 使用 axios 上传，添加超时配置
+    const response = await fetch('/api/admin/upload', {
+      method: 'POST',
+      body: formData,
+      signal: AbortSignal.timeout(60000), // 60 秒超时
+    });
+    
+    const result = await response.json();
+    
+    if (result.code === 200 && result.data.success) {
+      message.success(`✅ "${file.name}" 上传成功！${result.data.message}`);
+      
+      // 记录上传的文件
+      uploadedFiles.value.push({
+        name: file.name,
+        savedName: result.data.saved_filename || file.name,
+        uploadTime: new Date().toLocaleString('zh-CN'),
+        blocksIndexed: result.data.stats?.blocks_indexed || 0
+      });
+
+      // 上传成功后创建文档记录（调用知识库 API）
+      const documentData: AddDocumentParams = {
+        title: file.name.replace(/\.[^/.]+$/, ""), // 去掉文件扩展名作为标题
+        category: 'technical', // 默认分类为技术文档
+        tags: [], // 初始标签为空
+        summary: `上传文件：${file.name}`,
+        description: `文件 ${file.name} 已上传至知识库，共建立 ${result.data.stats?.blocks_indexed || 0} 个文本块索引。`,
+        solution: "可通过 AI 助手检索此文档内容",
+        notes: [`原始文件名：${file.name}`, `保存路径：${result.data.saved_filename || file.name}`],
+      };
+
+      // 调用知识库 API 保存文档记录
+      await addDocument(documentData);
+      message.success("📄 文档记录已创建");
+
+      // 刷新文档列表
+      await fetchDocuments();
+    } else {
+      throw new Error(result.message || "上传失败");
+    }
+  } catch (error: any) {
+    console.error('上传错误:', error);
+    if (error.name === 'TimeoutError') {
+      message.error('❌ 上传超时，文件过大或网络不稳定');
+    } else {
+      message.error(`❌ 上传失败：${error.message}`);
+    }
+  } finally {
+    uploadingFiles.value.delete(file.name);
+    uploading.value = false;
+  }
+}, 300);
+
+// 自定义上传请求（替代默认的 finish 事件）
+const handleCustomUpload = ({ file, onFinish, onError }: UploadCustomRequestOptions) => {
+  // 使用防抖函数处理上传
+  (async () => {
+    try {
+      await debouncedUploadFile(file);
+      if (onFinish) onFinish();
+    } catch (err: any) {
+      console.error('上传失败:', err);
+      if (onError) onError();
+    }
+  })();
+};
 
 const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
-  const validTypes = [
-    "application/pdf",
-    "text/plain",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ];
   const validExtensions = [".pdf", ".txt", ".doc", ".docx"];
 
   const hasValidExtension = validExtensions.some((ext) =>
@@ -552,73 +654,19 @@ const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
   return true;
 };
 
-const handleUploadFinish = ({ file, event }: { file: UploadFileInfo, event?: ProgressEvent }) => {
-  if (!file.file) {
-    message.error("文件无效");
-    return;
-  }
-
-  uploading.value = true;
-
-  // 使用 IIFE 包裹异步逻辑
-  (async () => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file.file!);
-      
-      const response = await fetch('/api/admin/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const result = await response.json();
-      
-      if (result.code === 200 && result.data.success) {
-        message.success(`✅ "${file.name}" 上传成功！${result.data.message}`);
-        
-        // 记录上传的文件
-        uploadedFiles.value.push({
-          name: file.name,
-          savedName: result.data.saved_filename,
-          uploadTime: new Date().toLocaleString('zh-CN'),
-          blocksIndexed: result.data.stats?.blocks_indexed || 0
-        });
-
-        // 上传成功后创建文档记录（调用知识库 API）
-        const documentData: AddDocumentParams = {
-          title: file.name.replace(/\.[^/.]+$/, ""), // 去掉文件扩展名作为标题
-          category: 'technical', // 默认分类为技术文档
-          tags: [], // 初始标签为空
-          summary: `上传文件：${file.name}`,
-          description: `文件 ${file.name} 已上传至知识库，共建立 ${result.data.stats?.blocks_indexed || 0} 个文本块索引。`,
-          solution: "可通过 AI 助手检索此文档内容",
-          notes: [`原始文件名：${file.name}`, `保存路径：${result.data.saved_filename}`],
-        };
-
-        // 调用知识库 API 保存文档记录
-        await addDocument(documentData);
-        message.success("📄 文档记录已创建");
-
-        // 刷新文档列表
-        await fetchDocuments();
-      } else {
-        throw new Error(result.message || "上传失败");
-      }
-    } catch (error: any) {
-      console.error('上传错误:', error);
-      message.error(`❌ 上传失败：${error.message}`);
-    } finally {
-      uploading.value = false;
-    }
-  })();
+const handleUploadFinish = () => {
+  // 使用 custom-request 后，此方法不再需要
+  return;
 };
 
-const handleUploadError = ({ file }: { file: UploadFileInfo }) => {
-  message.error(`文件 "${file.name}" 上传失败`);
+const handleUploadError = () => {
+  // 错误已在 custom-request 中处理
   uploading.value = false;
 };
 
 const fetchDocuments = async () => {
+  loadingDocuments.value = true; // 开始加载
+  
   try {
     const response = await getKnowledgeList({
       category: selectedCategory.value || undefined,
@@ -627,14 +675,16 @@ const fetchDocuments = async () => {
     });
     
     // 直接使用后端返回的数据，不做转换
-    if (response.data.code === 200 && response.data.data?.items) {
-      documents.value = response.data.data.items as Document[];
+    if (response.data.code === 200 && (response.data.data as any).list) {
+      documents.value = (response.data.data as any).list as Document[];
     } else {
       throw new Error(response.data.message || '获取失败');
     }
   } catch (error) {
     console.error("[KnowledgeBase] 获取文档列表失败", error);
     message.error('获取文档列表失败');
+  } finally {
+    loadingDocuments.value = false; // 加载完成
   }
 };
 
@@ -652,6 +702,17 @@ onMounted(() => {
 <style scoped>
 .knowledge-base {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.loading-container,
+.empty-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 290px;
 }
 
 /* 拖拽区域样式优化 */

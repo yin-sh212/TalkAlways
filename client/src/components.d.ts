@@ -10,6 +10,7 @@ declare module 'vue' {
     AiAssistantPlaceholder: typeof import('./components/workspace/AiAssistantPlaceholder.vue')['default']
     AIFloatingBall: typeof import('./components/common/AIFloatingBall.vue')['default']
     AnomalyList: typeof import('./components/overview/AnomalyList.vue')['default']
+    ChartAIAnalysis: typeof import('./components/common/ChartAIAnalysis.vue')['default']
     DetailTable: typeof import('./components/alarm/DetailTable.vue')['default']
     DeviceManagement: typeof import('./components/workspace/DeviceManagement.vue')['default']
     DeviceMonitor: typeof import('./components/overview/DeviceMonitor.vue')['default']

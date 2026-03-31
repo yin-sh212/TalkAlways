@@ -1,4 +1,5 @@
 # app/api/statistics_api.py
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime
@@ -446,31 +447,47 @@ async def get_daily_comparison(
         building_id: str,
         dates: List[str] = Query(..., description="日期列表，例如：['2016-07-15', '2016-07-14', '2016-07-08']")
 ):
-    """批量获取多日的能耗数据 - 用于日环比、周同比计算"""
+    """批量获取多日的能耗数据 - 用于日环比、周同比计算（并行优化版）"""
     if not dates:
         raise HTTPException(status_code=400, detail="dates 参数不能为空")
 
-    placeholders = ",".join(["%s"] * len(dates))
-    sql = f"""
-        SELECT 
-            DATE(timestamp) as date,
-            SUM(electricity) as total_elec,
-            AVG(electricity) as avg_elec,
-            COUNT(*) as data_points
-        FROM energy_consumption
-        WHERE building_id = %s 
-            AND DATE(timestamp) IN ({placeholders})
-        GROUP BY DATE(timestamp)
-        ORDER BY DATE(timestamp)
-    """
-
-    params = [building_id] + list(dates)
-    data = await Database.fetch_all(sql, tuple(params))
+    # 并行查询每个日期的数据
+    async def query_single_date(date: str):
+        sql = """
+            SELECT 
+                DATE(timestamp) as date,
+                SUM(electricity) as total_elec,
+                AVG(electricity) as avg_elec,
+                COUNT(*) as data_points
+            FROM energy_consumption
+            WHERE building_id = %s 
+                AND DATE(timestamp) = %s
+            GROUP BY DATE(timestamp)
+        """
+        data = await Database.fetch_one(sql, (building_id, date))
+        
+        # 如果没有数据，返回默认值
+        if not data:
+            return {
+                "date": date,
+                "total_elec": 0,
+                "avg_elec": 0,
+                "data_points": 0
+            }
+        
+        return dict(data)
+    
+    # 并发查询所有日期
+    tasks = [query_single_date(date) for date in dates]
+    results = await asyncio.gather(*tasks)
+    
+    # 按日期排序
+    results_sorted = sorted(results, key=lambda x: x['date'])
 
     return {
         "code": 200,
         "data": {
-            "daily_data": data
+            "daily_data": results_sorted
         }
     }
 

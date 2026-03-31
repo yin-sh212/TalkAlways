@@ -1,4 +1,5 @@
 # app/api/chart_api.py
+import asyncio
 from fastapi import APIRouter, Query
 from typing import Optional
 from datetime import datetime, timedelta
@@ -40,6 +41,7 @@ async def get_trend_data(
             select_time = "DATE(timestamp) as date"
             format_time = lambda item: str(item['date'])
         
+        # 数据库查询
         sql = f"""
             SELECT 
                 {select_time},
@@ -54,7 +56,7 @@ async def get_trend_data(
         """
 
         data = await Database.fetch_all(sql, (building_id, start_date, end_date))
-
+        
         if not data:
             return {
                 "code": 200,
@@ -92,7 +94,7 @@ async def get_trend_data(
                 "lineStyle": {"type": "dashed"}
             }
         ]
-
+        
         return {
             "code": 200,
             "data": {
@@ -232,13 +234,10 @@ async def get_comparison_data(
 ):
     """获取多建筑对比数据（增强版 - 支持多维度对比和综合评分）"""
     ids = building_ids.split(',')
-
-    building_details = []
     
-    # 第一阶段：收集所有建筑的原始数据
-    for building_id in ids:
-        building_id = building_id.strip()
-
+    # 第一阶段：收集所有建筑的原始数据 - 改为并行查询
+    async def query_single_building(building_id: str):
+        """并行查询单个建筑的数据"""
         # 查询能耗数据
         sql = """
             SELECT 
@@ -262,7 +261,7 @@ async def get_comparison_data(
                 "avg_cooling": 0, "avg_heating": 0, "avg_temp": 0,
                 "anomaly_count": 0, "total_count": 0
             }
-
+        
         # 获取建筑信息（包含面积）
         name_sql = "SELECT name, type, area FROM buildings WHERE id = %s"
         name_data = await Database.fetch_one(name_sql, (building_id,))
@@ -297,7 +296,7 @@ async def get_comparison_data(
         # 稳定性 (100 - (峰值系数 - 1) * 50)
         stability_score = max(0, min(100, 100 - (peak_ratio - 1) * 50))
         
-        building_details.append({
+        return {
             "building_id": building_id,
             "building_name": building_name,
             "building_type": building_type,
@@ -310,7 +309,12 @@ async def get_comparison_data(
             "stability_score": stability_score,
             "efficiency_score": 0,  # 第二阶段计算
             "anomaly_rate": anomaly_rate
-        })
+        }
+    
+    # 并行查询所有建筑
+    tasks = [query_single_building(bid.strip()) for bid in ids]
+    building_details = await asyncio.gather(*tasks)
+    building_details = list(building_details)  # 转换为列表
     
     # 第二阶段：基于平均能耗计算节能性评分（相对比较）
     if len(building_details) > 0:
@@ -352,7 +356,7 @@ async def get_comparison_data(
             for b in building_details
         ]
     }
-
+    
     return {
         "code": 200,
         "data": radar_data

@@ -404,7 +404,7 @@ const handleQuery = async (skipValidation: boolean = false) => {
 
     // 使用用户选择的第一个建筑 ID（必须是从后端获取的真实 ID）
     const buildingId = queryForm.buildings[0];
-    const [alarmRes, summaryRes, trendRes, distributionRes, detailRes] =
+    const [alarmRes, summaryRes, trendRes, distributionRes] =
       await Promise.all([
         alarmApi.getAlarmList({
           // 使用告警列表接口 - 添加时间参数
@@ -433,15 +433,6 @@ const handleQuery = async (skipValidation: boolean = false) => {
           start_date: startDate,
           end_date: endDate,
         }),
-        // 获取能耗详情数据 - 使用 statistics API
-        import("@/api/statistics").then((mod) =>
-          mod.getSummary({
-            building_id: buildingId,
-            start_date: startDate,
-            end_date: endDate,
-            time_unit: "day",
-          }),
-        ),
       ]);
 
     // 填充表格数据 - getAlarmList 返回格式：{ code, message, data: { total, page, page_size, items } }
@@ -506,20 +497,6 @@ const handleQuery = async (skipValidation: boolean = false) => {
       categories: [],
       series: [],
     };
-    
-    // 填充能耗详情数据
-    if (detailRes && detailRes.data?.data) {
-      const detailData = detailRes.data.data;
-      energyDetailData.value = detailData.details || [];
-      // SummaryResponse 类型没有 summary 属性，使用 details 中的汇总信息
-      energySummaryData.value = undefined;
-      energyDetailPeriod.value =
-        detailData.period || `${startDate} 至 ${endDate}`;
-    } else {
-      energyDetailData.value = [];
-      energySummaryData.value = undefined;
-      energyDetailPeriod.value = "";
-    }
 
     // 更新图表
     if (alarmTrendRef.value) {

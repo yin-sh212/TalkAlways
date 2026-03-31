@@ -38,6 +38,9 @@ export interface KnowledgeDocument {
   category: string
   tags: string[]
   summary: string
+  description: string
+  solution: string
+  notes: string[]
   created_at: string
   updated_at: string
   views: number
@@ -47,7 +50,7 @@ export interface KnowledgeListData {
   total: number
   page: number
   page_size: number
-  items: KnowledgeDocument[]
+  list: KnowledgeDocument[]  // 修改为 list，与后端返回一致
 }
 
 export const getKnowledgeList = (params?: { 
@@ -57,22 +60,12 @@ export const getKnowledgeList = (params?: {
   keyword?: string
   tag?: string
 }) => {
-  return http.get<ApiResponse<KnowledgeListData>>('/admin/knowledge/list', { params })
+  return http.get<ApiResponse<KnowledgeListData>>('/knowledge/list', { params })
 }
 
 // 获取知识库文档详情
-export interface KnowledgeDetailResponse {
-  code: number
-  message: string
-  data: KnowledgeDocument & {
-    description: string
-    solution: string
-    notes: string
-  }
-}
-
 export const getKnowledgeDetail = (docId: number) => {
-  return http.get<ApiResponse<KnowledgeDetailResponse>>(`/admin/knowledge/detail/${docId}`)
+  return http.get<ApiResponse<KnowledgeDocument>>(`/knowledge/${docId}`)
 }
 
 // 添加文档到知识库
@@ -87,7 +80,7 @@ export interface AddDocumentParams {
 }
 
 export const addDocument = (data: AddDocumentParams) => {
-  return http.post<ApiResponse<{ id: number }>>('/admin/knowledge/add', data)
+  return http.post<ApiResponse<{ id: number }>>('/knowledge/create', data)
 }
 
 // 删除知识库文档
@@ -96,5 +89,5 @@ export interface DeleteDocumentResponse {
 }
 
 export const deleteKnowledgeDocument = (docId: number) => {
-  return http.delete<ApiResponse<DeleteDocumentResponse>>(`/admin/knowledge/${docId}`)
+  return http.delete<ApiResponse<DeleteDocumentResponse>>(`/knowledge/${docId}`)
 }

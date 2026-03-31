@@ -48,12 +48,19 @@
             <n-grid-item>
               <div class="chart-header">
                 <span class="chart-title">能耗 - 环境关联趋势</span>
-                <n-tooltip>
-                  <template #trigger>
-                    <n-icon size="18" :component="InformationCircle" style="cursor: pointer; color: #1890ff;" />
-                  </template>
-                  同图展示电力/冷量/供热曲线 + 气温次 Y 轴，标注异常点
-                </n-tooltip>
+                <n-space :size="8">
+                  <ChartAIAnalysis 
+                    :chart-ref="trendChart"
+                    chart-title="能耗 - 环境关联趋势"
+                    chart-type="line"
+                  />
+                  <n-tooltip>
+                    <template #trigger>
+                      <n-icon size="18" :component="InformationCircle" style="cursor: pointer; color: #1890ff;" />
+                    </template>
+                    同图展示电力/冷量/供热曲线 + 气温次 Y 轴，标注异常点
+                  </n-tooltip>
+                </n-space>
               </div>
               <n-skeleton v-if="loading" :rows="3" :height="120" />
               <div v-show="!loading" ref="trendChartRef" class="chart-container"></div>
@@ -63,12 +70,19 @@
             <n-grid-item>
               <div class="chart-header">
                 <span class="chart-title">建筑综合评分对比</span>
-                <n-tooltip>
-                  <template #trigger>
-                    <n-icon size="18" :component="InformationCircle" style="cursor: pointer; color: #1890ff;" />
-                  </template>
-                  雷达图展示多建筑在节能性、稳定性、健康度、能效比四个维度的综合表现
-                </n-tooltip>
+                <n-space :size="8">
+                  <ChartAIAnalysis 
+                    :chart-ref="compareChart"
+                    chart-title="建筑综合评分对比"
+                    chart-type="radar"
+                  />
+                  <n-tooltip>
+                    <template #trigger>
+                      <n-icon size="18" :component="InformationCircle" style="cursor: pointer; color: #1890ff;" />
+                    </template>
+                    雷达图展示多建筑在节能性、稳定性、健康度、能效比四个维度的综合表现
+                  </n-tooltip>
+                </n-space>
               </div>
               <n-skeleton v-if="loading" :rows="3" :height="120" />
               <div v-show="!loading" ref="compareChartRef" class="chart-container"></div>
@@ -245,6 +259,7 @@ import { detectAnomaly, getSummary } from '@/api/statistics'
 import { getAnalysisInsights } from '@/api/analysis'
 import { addDocument } from '@/api/admin'
 import { useAppStore } from '@/store/app'
+import ChartAIAnalysis from '@/components/common/ChartAIAnalysis.vue'
 
 const router = useRouter()
 const message = useMessage()

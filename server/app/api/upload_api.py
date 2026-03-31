@@ -36,14 +36,58 @@ def extract_text_from_pdf(content: bytes) -> str:
 
 
 def extract_text_from_docx(content: bytes) -> str:
-    """从DOCX提取文本"""
+    """从 DOCX 提取文本"""
     doc = Document(BytesIO(content))
     text = "\n".join([para.text for para in doc.paragraphs])
     return text
 
 
+def extract_text_from_doc(content: bytes) -> str:
+    """从旧版 DOC 格式（Word 97-2003）提取文本"""
+    try:
+        # 方法 1：尝试使用 olefile 读取
+        import olefile
+        ole = olefile.OleFileIO(BytesIO(content))
+        
+        # DOC 文件通常包含 WordDocument 流
+        if ole.exists('WordDocument'):
+            # 简单提取：尝试读取文本内容
+            # 注意：这种方法不完美，复杂 DOC 可能需要专业库
+            text_parts = []
+            for stream in ole.listdir():
+                stream_name = '/'.join(stream)
+                if not stream_name.startswith('1'):  # 跳过二进制流
+                    try:
+                        stream_data = ole.openstream(stream)
+                        text = stream_data.read().decode('utf-8', errors='ignore')
+                        if text.strip():
+                            text_parts.append(text.strip())
+                    except:
+                        pass
+            
+            if text_parts:
+                return '\n'.join(text_parts)
+        
+        # 如果没有找到文本，返回空字符串
+        return ""
+        
+    except ImportError:
+        raise ValueError("需要安装 olefile 库：pip install olefile")
+    except Exception as e:
+        # 如果解析失败，尝试直接返回内容中的可读部分
+        # 作为降级方案
+        try:
+            # 尝试提取可读文本，忽略二进制数据
+            text = content.decode('utf-8', errors='ignore')
+            # 过滤掉非打印字符
+            text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t')
+            return text[:10000]  # 限制长度
+        except:
+            raise ValueError(f"DOC 文件解析失败：{str(e)}")
+
+
 def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
-    """根据文件类型解析为DataFrame"""
+    """根据文件类型解析为 DataFrame"""
     filename = file.filename.lower()
 
     # CSV
@@ -62,7 +106,7 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
         elif isinstance(data, dict):
             return pd.DataFrame([data])
         else:
-            raise ValueError("JSON格式不支持")
+            raise ValueError("JSON 格式不支持")
 
     # XML
     elif filename.endswith('.xml'):
@@ -80,7 +124,7 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
         text = content.decode('utf-8')
         lines = text.strip().split('\n')
         if ',' in lines[0]:
-            # 假设是CSV格式的TXT
+            # 假设是 CSV 格式的 TXT
             return pd.read_csv(StringIO(text))
         else:
             # 纯文本，每行作为一个记录
@@ -97,6 +141,17 @@ def parse_file_to_dataframe(file: UploadFile, content: bytes) -> pd.DataFrame:
         text = extract_text_from_docx(content)
         paragraphs = text.split('\n')
         return pd.DataFrame({'content': paragraphs})
+
+    # DOC（旧版 Word 格式，需要 olefile 和 antiword）
+    elif filename.endswith('.doc'):
+        try:
+            # 尝试使用 antiword 或 win32com 解析
+            # 简单处理：尝试提取文本
+            text = extract_text_from_doc(content)
+            paragraphs = text.split('\n')
+            return pd.DataFrame({'content': paragraphs})
+        except Exception as e:
+            raise ValueError(f"DOC 格式解析失败：{str(e)}。建议使用 DOCX 格式")
 
     else:
         raise ValueError(f"不支持的文件格式: {filename}")
@@ -263,22 +318,34 @@ async def upload_file(file: UploadFile = File(..., description="支持多种格�
 
         # 对于文本类文件（PDF, DOCX, TXT）
         else:
-            # 直接作为知识库文档存储
-            # 这里可以调用知识库服务
+            # 直接存储到数据库，不保存本地文件
             from app.services.knowledge_base import knowledge_base
-
-            # 保存到知识库目录
-            safe_filename = file.filename.replace(' ', '_')
-            file_path = f"data/knowledge/{safe_filename}"
-            os.makedirs("data/knowledge", exist_ok=True)
-
-            with open(file_path, 'wb') as f:
-                f.write(content)
-
-            # 加载到向量库
-            documents = knowledge_base.load_document(file_path)
-
             from app.services.vector_db import vector_db
+            
+            # 提取文本内容
+            if file_type == 'PDF':
+                text_content = extract_text_from_pdf(content)
+            elif file_type == 'DOCX':
+                text_content = extract_text_from_docx(content)
+            else:  # TXT
+                text_content = content.decode('utf-8')
+            
+            # 分割为段落
+            paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
+            
+            # 直接存入向量数据库，不保存本地文件
+            documents = []
+            for i, para in enumerate(paragraphs):
+                documents.append({
+                    'content': para,
+                    'metadata': {
+                        'source': file.filename,
+                        'paragraph_index': i,
+                        'upload_time': datetime.now().isoformat()
+                    }
+                })
+            
+            # 添加到向量库
             vector_db.add_documents(documents)
 
             stats = {
@@ -300,24 +367,6 @@ async def upload_file(file: UploadFile = File(..., description="支持多种格�
             }
         }
 
-    except pd.errors.EmptyDataError:
-        return {
-            "code": 400,
-            "message": "文件为空",
-            "data": None
-        }
-    except json.JSONDecodeError as e:
-        return {
-            "code": 400,
-            "message": f"JSON解析错误: {str(e)}",
-            "data": None
-        }
-    except ET.ParseError as e:
-        return {
-            "code": 400,
-            "message": f"XML解析错误: {str(e)}",
-            "data": None
-        }
     except Exception as e:
         return {
             "code": 500,
@@ -405,402 +454,11 @@ B002,2025-03-01 08:00:00,89.7,8.2,22.3"""
         }
 
 
-# ========== 知识库管理接口 ==========
-
-KNOWLEDGE_DOCUMENTS_FILE = "data/knowledge/documents.json"
-
-def load_documents() -> List[Dict[str, Any]]:
-    """加载知识库文档列表"""
-    if not os.path.exists(KNOWLEDGE_DOCUMENTS_FILE):
-        os.makedirs(os.path.dirname(KNOWLEDGE_DOCUMENTS_FILE), exist_ok=True)
-        return []
-    
-    try:
-        with open(KNOWLEDGE_DOCUMENTS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return []
-
-
-def save_documents(documents: List[Dict[str, Any]]) -> bool:
-    """保存知识库文档列表"""
-    try:
-        os.makedirs(os.path.dirname(KNOWLEDGE_DOCUMENTS_FILE), exist_ok=True)
-        with open(KNOWLEDGE_DOCUMENTS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(documents, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        print(f"保存文档失败：{e}")
-        return False
-
-
-@router.post(
-    "/knowledge/add",
-    responses={
-        200: {
-            "description": "成功添加文档到知识库",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "message": "成功",
-                        "data": {
-                            "success": True,
-                            "document_id": "DOC001",
-                            "title": "中央空调故障处理",
-                            "message": "文档已成功添加到知识库"
-                        }
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "参数错误",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 400,
-                        "message": "缺少必填字段：title",
-                        "data": None
-                    }
-                }
-            }
-        }
-    }
-)
-async def add_knowledge_document(document: Dict[str, Any]):
-    """
-    添加文档到知识库（手动录入）
-    
-    与文件上传不同，此接口用于手动录入结构化的知识文档
-    支持标题、分类、标签、摘要、问题描述、解决方案、注意事项等字段
-    """
-    try:
-        # 参数验证
-        required_fields = ['title', 'category', 'summary', 'description', 'solution']
-        for field in required_fields:
-            if field not in document or not document[field]:
-                return {
-                    "code": 400,
-                    "message": f"缺少必填字段：{field}",
-                    "data": None
-                }
-        
-        # 加载现有文档
-        documents = load_documents()
-        
-        # 生成新文档 ID
-        doc_id = f"DOC{str(len(documents) + 1).zfill(3)}"
-        
-        # 创建文档对象
-        new_doc = {
-            "id": doc_id,
-            "title": document['title'],
-            "category": document['category'],
-            "tags": document.get('tags', []),
-            "summary": document['summary'],
-            "description": document['description'],
-            "solution": document['solution'],
-            "notes": document.get('notes', []),
-            "createDate": datetime.now().strftime("%Y-%m-%d"),
-            "views": 0
-        }
-        
-        # 添加到列表
-        documents.append(new_doc)
-        
-        # 保存到文件
-        if save_documents(documents):
-            # 同时添加到向量数据库（用于AI检索）
-            from app.services.knowledge_base import knowledge_base
-            from app.services.vector_db import vector_db
-            
-            # 创建文档内容用于索引
-            content = f"""标题：{new_doc['title']}
-分类：{new_doc['category']}
-摘要：{new_doc['summary']}
-问题描述：{new_doc['description']}
-解决方案：{new_doc['solution']}
-注意事项：{', '.join(new_doc['notes'])}"""
-            
-            doc_metadata = {
-                'source': f"manual_{doc_id}",
-                'type': 'manual',
-                'document_id': doc_id,
-                'title': new_doc['title']
-            }
-            
-            # 使用 add_documents 方法
-            vector_db.add_documents([{
-                'content': content,
-                'metadata': doc_metadata
-            }])
-            
-            return {
-                "code": 200,
-                "message": "成功",
-                "data": {
-                    "success": True,
-                    "document_id": doc_id,
-                    "title": new_doc['title'],
-                    "message": "文档已成功添加到知识库"
-                }
-            }
-        else:
-            return {
-                "code": 500,
-                "message": "保存文档失败",
-                "data": None
-            }
-            
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"添加文档失败：{str(e)}",
-            "data": None
-        }
-
-
-@router.get(
-    "/knowledge/list",
-    responses={
-        200: {
-            "description": "成功获取知识库文档列表",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "message": "成功",
-                        "data": {
-                            "list": [
-                                {
-                                    "id": "DOC001",
-                                    "title": "中央空调机组夏季运行异常处理",
-                                    "category": "case",
-                                    "tags": ["hvac", "emergency"],
-                                    "summary": "某行政楼中央空调机组在夏季高温期间出现制冷效果下降",
-                                    "createDate": "2024-01-15",
-                                    "views": 156
-                                }
-                            ],
-                            "total": 1
-                        }
-                    }
-                }
-            }
-        }
-    }
-)
-async def get_knowledge_documents(category: Optional[str] = None, tag: Optional[str] = None, search: Optional[str] = None):
-    """
-    获取知识库文档列表
-    
-    支持按分类、标签和搜索关键词筛选
-    """
-    try:
-        documents = load_documents()
-        
-        # 筛选
-        if category:
-            documents = [doc for doc in documents if doc.get('category') == category]
-        
-        if tag:
-            documents = [doc for doc in documents if tag in doc.get('tags', [])]
-        
-        if search:
-            search_lower = search.lower()
-            documents = [
-                doc for doc in documents 
-                if search_lower in doc.get('title', '').lower() 
-                or search_lower in doc.get('summary', '').lower()
-                or any(search_lower in tag.lower() for tag in doc.get('tags', []))
-            ]
-        
-        return {
-            "code": 200,
-            "message": "成功",
-            "data": {
-                "list": documents,
-                "total": len(documents)
-            }
-        }
-        
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取文档列表失败：{str(e)}",
-            "data": None
-        }
-
-
-@router.get(
-    "/knowledge/detail/{doc_id}",
-    responses={
-        200: {
-            "description": "成功获取文档详情",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "message": "成功",
-                        "data": {
-                            "id": "DOC001",
-                            "title": "中央空调机组夏季运行异常处理",
-                            "category": "case",
-                            "tags": ["hvac", "emergency"],
-                            "summary": "某行政楼中央空调机组在夏季高温期间出现制冷效果下降",
-                            "description": "行政楼中央空调机组在环境温度超过 35℃时，制冷效果明显下降",
-                            "solution": "1. 停机并切断电源\n2. 拆卸冷凝器防护罩\n3. 使用专用清洗剂清洗",
-                            "notes": ["清洗前必须断电", "避免水溅到电气元件"],
-                            "createDate": "2024-01-15",
-                            "views": 157
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "description": "文档不存在",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 404,
-                        "message": "文档不存在",
-                        "data": None
-                    }
-                }
-            }
-        }
-    }
-)
-async def get_knowledge_document_detail(doc_id: str):
-    """
-    获取文档详情
-    
-    返回完整的文档内容，包括问题描述、解决方案、注意事项等
-    """
-    try:
-        documents = load_documents()
-        
-        # 查找文档
-        doc = next((d for d in documents if d.get('id') == doc_id), None)
-        
-        if not doc:
-            return {
-                "code": 404,
-                "message": "文档不存在",
-                "data": None
-            }
-        
-        # 增加浏览量
-        doc['views'] = doc.get('views', 0) + 1
-        
-        # 保存更新后的浏览量
-        save_documents(documents)
-        
-        return {
-            "code": 200,
-            "message": "成功",
-            "data": doc
-        }
-        
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取文档详情失败：{str(e)}",
-            "data": None
-        }
-
-
-@router.delete(
-    "/knowledge/delete/{doc_id}",
-    responses={
-        200: {
-            "description": "成功删除文档",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 200,
-                        "message": "成功",
-                        "data": {
-                            "success": True,
-                            "document_id": "DOC001",
-                            "message": "文档已从知识库中删除"
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "description": "文档不存在",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "code": 404,
-                        "message": "文档不存在",
-                        "data": None
-                    }
-                }
-            }
-        }
-    }
-)
-async def delete_knowledge_document(doc_id: str):
-    """
-    从知识库中删除文档
-    
-    删除指定的文档记录，同时从向量数据库中移除
-    """
-    try:
-        documents = load_documents()
-        
-        # 查找文档是否存在
-        doc_index = next((i for i, d in enumerate(documents) if d.get('id') == doc_id), None)
-        
-        if doc_index is None:
-            return {
-                "code": 404,
-                "message": "文档不存在",
-                "data": None
-            }
-        
-        # 保存要删除的文档信息（用于从向量库删除）
-        deleted_doc = documents[doc_index]
-        
-        # 从列表中移除
-        documents.pop(doc_index)
-        
-        # 保存到文件
-        if save_documents(documents):
-            # 从向量数据库中删除（如果已实现）
-            try:
-                from app.services.vector_db import vector_db
-                # 注：这里可以调用 vector_db.delete_document(doc_id) 
-                # 如果向量库支持删除的话
-                print(f"已从知识库删除文档：{doc_id}")
-            except Exception as e:
-                print(f"从向量库删除失败：{e}")
-            
-            return {
-                "code": 200,
-                "message": "成功",
-                "data": {
-                    "success": True,
-                    "document_id": doc_id,
-                    "title": deleted_doc.get('title'),
-                    "message": "文档已从知识库中删除"
-                }
-            }
-        else:
-            return {
-                "code": 500,
-                "message": "删除文档失败",
-                "data": None
-            }
-            
-    except Exception as e:
-        return {
-            "code": 500,
-            "message": f"删除文档失败：{str(e)}",
-            "data": None
-        }
+# ========== 已移除知识库管理接口 ==========
+# 注：知识库功能已迁移至 knowledge_api.py，使用 MySQL 数据库存储
+# 原 JSON 文件存储方式已废弃，相关接口包括：
+# - POST /api/admin/knowledge/add
+# - GET /api/admin/knowledge/list  
+# - GET /api/admin/knowledge/detail/{doc_id}
+# - DELETE /api/admin/knowledge/delete/{doc_id}
+# 请使用 /api/knowledge/* 接口替代

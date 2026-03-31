@@ -12,13 +12,18 @@ class Config:
     DB_PASSWORD = os.getenv("DB_PASSWORD", "your_password")
     DB_NAME = os.getenv("DB_NAME", "energy_management")
 
-    # 数据库连接URL
+    # 数据库连接 URL
     DATABASE_URL = f"mysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
     # 应用配置
     APP_NAME = os.getenv("APP_NAME", "建筑能源管理系统")
     APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
     DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+    
+    # DeepSeek API 配置
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "60"))
 
 
 config = Config()

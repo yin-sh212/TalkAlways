@@ -156,7 +156,6 @@ const updateCOP = async () => {
     const cop = copData?.avg_cop_cooling || 3.5
     kpiData.value.cop = Number(cop.toFixed(2))
   } catch (error) {
-    console.error('更新 COP 失败:', error)
     // 使用默认值
     kpiData.value.cop = 3.5 // 典型 COP 值
   }
@@ -201,8 +200,13 @@ const updateBuildingEnergyData = async () => {
   try {
     const mockToday = appStore.getMockToday()
     
-    // 直接从 buildingStore 获取死数据建筑列表
+    // 直接从 buildingStore 获取建筑列表
     const buildings = buildingStore.buildings
+    
+    if (buildings.length === 0) {
+      generateRankingData([])
+      return
+    }
     
     // 提取所有建筑 ID
     const buildingIds = buildings.map(building => building.id)
@@ -217,15 +221,21 @@ const updateBuildingEnergyData = async () => {
     
     const buildingsData = response.data?.data?.buildings || []
     
-    // 按建筑 ID 汇总
+    // 按建筑 ID 汇总（去除重复的 period 数据）
     const buildingEnergyMap = new Map()
     buildingsData.forEach((item: any) => {
       const buildingId = item.building_id
       const energy = (item.total_elec || 0) / 1000
-      const buildingName = buildings.find(b => b.id === buildingId)?.name || `建筑${buildingId}`
-      const current = buildingEnergyMap.get(buildingId) || { name: buildingName, value: 0 }
+      
+      // 如果该建筑还没有数据，初始化
+      if (!buildingEnergyMap.has(buildingId)) {
+        const buildingName = buildings.find(b => b.id === buildingId)?.name || `建筑${buildingId}`
+        buildingEnergyMap.set(buildingId, { name: buildingName, value: 0 })
+      }
+      
+      // 累加能耗值（如果有多个时间段的数据）
+      const current = buildingEnergyMap.get(buildingId)
       current.value += energy
-      buildingEnergyMap.set(buildingId, current)
     })
     
     // 转换为数组并排序
@@ -242,7 +252,6 @@ const updateBuildingEnergyData = async () => {
     // 生成能耗排名数据
     generateRankingData(filteredBuildingEnergy)
   } catch (error) {
-    console.error('更新建筑能耗数据失败:', error)
     // 使用 mock 数据
     generateRankingData([])
   }
@@ -278,7 +287,6 @@ const fetchCurrentBuildingId = async () => {
       buildingStore.setCurrentBuildingId('B001')
     }
   } catch (error) {
-    console.error('获取建筑 ID 失败:', error)
     // 使用默认值
     buildingStore.setCurrentBuildingId('B001')
   }
@@ -342,8 +350,6 @@ const loadData = async () => {
           end: item.end_time || item.start_time
         }
       }))
-    } else {
-      console.log('⚠️ 无告警数据')
     }
 
     // 等待建筑能耗数据更新完成
@@ -461,7 +467,6 @@ const connectToRealtimeStream = () => {
           disconnectRealtimeStream()
         }
         else if (data.type === 'error') {
-          console.error('❌ 流错误:', data.message)
           message.error(`数据流错误：${data.message}`)
           disconnectRealtimeStream()
         }
@@ -471,13 +476,11 @@ const connectToRealtimeStream = () => {
     }
     
     eventSource.value.onerror = () => {
-      console.error('❌ SSE 连接错误')
       message.error('实时数据连接中断')
       disconnectRealtimeStream()
     }
     
   } catch (error) {
-    console.error('连接实时数据流失败:', error)
     message.error('连接失败')
     isRealtimeConnected.value = false
   }

@@ -136,12 +136,15 @@
       </n-grid-item>
     </n-grid>
 
+    <!-- 加载中状态 -->
+    <div v-if="loadingDocuments" class="loading-container">
+      <n-empty description="加载中..." />
+    </div>
+    
     <!-- 空状态 -->
-    <n-empty
-      v-if="filteredDocuments.length === 0"
-      description="暂无相关文档"
-      style="margin-top: 60px"
-    />
+    <div v-else-if="filteredDocuments.length === 0" class="empty-container">
+      <n-empty description="暂无相关文档" />
+    </div>
 
     <!-- 文档详情弹窗 -->
     <n-modal
@@ -360,6 +363,7 @@ const tagOptions = [
 
 // Mock 文档数据 - 仅用于初始展示，实际数据从 API 加载
 const documents = ref<Document[]>([]);
+const loadingDocuments = ref(false); // 添加列表加载状态
 
 // 过滤后的文档
 const filteredDocuments = computed(() => {
@@ -667,6 +671,8 @@ const handleUploadError = () => {
 };
 
 const fetchDocuments = async () => {
+  loadingDocuments.value = true; // 开始加载
+  
   try {
     const response = await getKnowledgeList({
       category: selectedCategory.value || undefined,
@@ -683,6 +689,8 @@ const fetchDocuments = async () => {
   } catch (error) {
     console.error("[KnowledgeBase] 获取文档列表失败", error);
     message.error('获取文档列表失败');
+  } finally {
+    loadingDocuments.value = false; // 加载完成
   }
 };
 
@@ -700,6 +708,17 @@ onMounted(() => {
 <style scoped>
 .knowledge-base {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.loading-container,
+.empty-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 290px;
 }
 
 /* 拖拽区域样式优化 */

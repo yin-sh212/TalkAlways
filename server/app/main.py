@@ -23,6 +23,7 @@ from app.api import knowledge_api
 from app.api import analysis_api  # 新增：导入能耗分析模块
 from app.api import realtime_api  # 新增：导入实时数据采集模块
 from app.api import ai_analyst  # 新增：导入 AI 数据分析师模块
+from app.api import chart_analysis  # 新增：导入图表 AI 分析模块
 
 from datetime import datetime
 import os
@@ -161,7 +162,7 @@ app.include_router(knowledge_api.router)
 app.include_router(analysis_api.router)  # 新增：注册能耗分析路由
 app.include_router(realtime_api.router)  # 新增：注册实时数据采集路由
 app.include_router(ai_analyst.router)  # 新增：注册 AI 数据分析师路由
-
+app.include_router(chart_analysis.router)  # 新增：注册图表 AI 分析路由
 
 @app.get("/")
 async def root():

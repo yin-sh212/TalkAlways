@@ -635,12 +635,6 @@ const handleCustomUpload = ({ file, onFinish, onError }: UploadCustomRequestOpti
 };
 
 const handleBeforeUpload = ({ file }: { file: UploadFileInfo }) => {
-  const validTypes = [
-    "application/pdf",
-    "text/plain",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ];
   const validExtensions = [".pdf", ".txt", ".doc", ".docx"];
 
   const hasValidExtension = validExtensions.some((ext) =>

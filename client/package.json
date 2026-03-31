@@ -1,7 +1,7 @@
 {
   "name": "talk-always-client",
   "version": "1.0.0",
-  "description": "TalkAlways - AIz��Ks�7�",
+  "description": "TalkAlways - AI",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 8080",
@@ -13,6 +13,7 @@
     "axios": "^1.6.5",
     "echarts": "^6.0.0",
     "element-plus": "^2.13.3",
+    "html2pdf.js": "^0.10.2",
     "lodash-es": "^4.17.23",
     "marked": "^17.0.4",
     "naive-ui": "^2.38.2",
@@ -21,6 +22,7 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@types/html2pdf.js": "^0.10.0",
     "@types/lodash-es": "^4.17.12",
     "@vitejs/plugin-vue": "^5.0.3",
     "mockjs": "^1.1.0",

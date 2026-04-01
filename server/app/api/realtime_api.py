@@ -49,7 +49,8 @@ async def detect_anomalies_for_batch(data: List[Dict]) -> List[Dict[str, Any]]:
         pool = await Database.get_pool()
         conn = await pool.acquire()
         try:
-            async with conn.cursor() as cursor:
+            cursor_ctx = conn.cursor()
+            async with cursor_ctx as cursor:
                 for anomaly in anomalies:
                     # 从数据中找到对应的记录，获取 building_id
                     matching_records = [r for r in data if r['timestamp'] == anomaly['timestamp']]

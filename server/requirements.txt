@@ -49,4 +49,4 @@ tencentcloud-sdk-python==3.0.1187
 
 # 缓存
 fastapi-cache2[redis]==0.2.1
-redis==5.0.1
+redis==4.6.0

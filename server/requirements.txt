@@ -8,8 +8,8 @@ PyMySQL==1.1.1
 cryptography==42.0.5
 
 # 数据处理（使用预编译版本，避免 Render 编译失败）
-pandas==2.2.1 --only-binary pandas
-numpy==1.26.4 --only-binary numpy
+pandas>=2.2.0 --only-binary pandas
+numpy>=1.26.0,<3.0.0 --only-binary numpy
 openpyxl==3.1.2
 
 # PDF 导出

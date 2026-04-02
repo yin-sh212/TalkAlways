@@ -12,7 +12,7 @@ services:
       - key: HOST
         value: 0.0.0.0
       - key: PORT
-        value: 10000
+        value: $PORT
       - key: DB_HOST
         value: gateway01.ap-northeast-1.prod.aws.tidbcloud.com
       - key: DB_PORT

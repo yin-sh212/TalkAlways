@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: talk-always-backend
+    env: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start_server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: DB_HOST
+        value: gateway01.ap-northeast-1.prod.aws.tidbcloud.com
+      - key: DB_PORT
+        value: 4000
+      - key: DB_NAME
+        value: energy_management
+      - key: DB_USER
+        value: rLZxFGpCHUXzhD1.root
+      - key: DB_PASSWORD
+        value: 0xrt1Qt2lOxxL79k
+      - key: TIDB_SSL_CA
+        value: ./certs/ca-cert.pem
+      - key: SSL_MODE
+        value: VERIFY_IDENTITY

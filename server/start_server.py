@@ -28,15 +28,23 @@ DB_USER = os.getenv("DB_USER", "root")
 # TiDB Cloud 检测
 IS_TIDB_CLOUD = "tidbcloud.com" in DB_HOST.lower()
 
-print(f"🚀 正在启动服务器...")
-print(f"📍 地址：http://localhost:{PORT}")
+# Render 部署检测
+IS_RENDER = os.getenv("RENDER", False)
+if IS_RENDER:
+    PORT = int(os.getenv("PORT", 10000))
+    print(f"[OK] Render 环境检测成功")
+    print(f"[OK] 端口：{PORT}")
+
+print(f"\n{'='*50}")
+print(f"[START] 正在启动服务器...")
+print(f"[INFO] 地址：http://localhost:{PORT}")
 
 if IS_TIDB_CLOUD:
-    print(f"☁️  数据库：TiDB Cloud (远程)")
+    print(f"[INFO] 数据库：TiDB Cloud (远程)")
 else:
-    print(f"💾 数据库：{DB_HOST}:{DB_PORT}")
+    print(f"[INFO] 数据库：{DB_HOST}:{DB_PORT}")
 
-print("=" * 50)
+print(f"{'='*50}\n")
 
 # 启动应用
 if __name__ == "__main__":
@@ -45,10 +53,10 @@ if __name__ == "__main__":
             "app.main:app",
             host=HOST,
             port=PORT,
-            reload=True,
+            reload=False,  # Render 生产环境关闭热重载
             log_level="info"
         )
     except KeyboardInterrupt:
-        print("\n👋 服务器已关闭")
+        print("\n[INFO] 服务器已关闭")
     except Exception as e:
-        print(f"\n❌ 启动失败：{str(e)}")
+        print(f"\n[ERROR] 启动失败：{str(e)}")

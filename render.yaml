@@ -5,14 +5,14 @@ services:
     region: singapore
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python start_server.py
+    startCommand: python start_server.py  # 保持你原来的！
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
+        value: 3.11.9          # 必须改成这个
       - key: HOST
         value: 0.0.0.0
-      - key: PORT
-        value: $PORT
+      # - key: PORT
+      #   value: $PORT
       - key: DB_HOST
         value: gateway01.ap-northeast-1.prod.aws.tidbcloud.com
       - key: DB_PORT

@@ -4,8 +4,8 @@
   "description": "TalkAlways - AI",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 8080",
-    "build": "vue-tsc --noEmit && vite build",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -7,8 +7,8 @@ aiomysql==0.2.0
 PyMySQL==1.1.1
 cryptography==42.0.5
 
-# 数据处理
-pandas==2.2.2
+# 数据处理（使用预编译版本，避免 Render 编译失败）
+pandas==2.2.1
 numpy==1.26.4
 openpyxl==3.1.2
 

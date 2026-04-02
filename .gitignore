@@ -43,11 +43,8 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
-<<<<<<< HEAD
 *.pkl
 *.faiss
-=======
->>>>>>> origin/backend
 
 # Java
 *.class
@@ -82,3 +79,17 @@ lpt6
 lpt7
 lpt8
 lpt9
+.vercel
+# Render 部署忽略文件
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.env
+certs/
+*.log
+.DS_Store
+Thumbs.db

@@ -118,7 +118,7 @@ import { marked } from 'marked'
 
 // Props: 接收图表实例引用
 const props = defineProps<{
-  chartRef: echarts.ECharts | null
+  chartRef: HTMLElement | null
   chartTitle: string
   chartType?: string
 }>()
@@ -156,9 +156,9 @@ const chartDataSummary = computed(() => {
 
 // 处理分析
 const handleAnalyze = async () => {
-  const chartInstance = props.chartRef
+  const chartElement = props.chartRef
   
-  if (!chartInstance) {
+  if (!chartElement) {
     message.error('图表未初始化')
     return
   }
@@ -179,7 +179,7 @@ const handleAnalyze = async () => {
     loadingTip.value = '正在提取图表数据...'
     progress.value = 10
     
-    const chartData = extractChartData(chartInstance, {
+    const chartData = extractChartData(chartElement, {
       title: props.chartTitle,
       type: props.chartType
     })

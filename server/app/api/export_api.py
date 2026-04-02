@@ -78,13 +78,25 @@ async def export_csv(
 
 @router.get("/excel")
 async def export_excel(
-        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        building_ids: str = Query(..., description="建筑编号列表，逗号分隔，如：Eagle_education_Cassie,Eagle_education_Bob"),
         start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
         end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD，例如：2016-07-31")
 ):
-    """导出Excel格式报表 - 适配新数据"""
+    """导出 Excel 格式报表 - 支持多建筑"""
     try:
-        sql = """
+        # 解析建筑 ID 列表
+        building_id_list = [bid.strip() for bid in building_ids.split(',') if bid.strip()]
+        
+        if not building_id_list:
+            return {
+                "code": 400,
+                "message": "建筑编号不能为空",
+                "data": None
+            }
+        
+        # 构建 IN 查询条件
+        placeholders = ','.join(['%s'] * len(building_id_list))
+        sql = f"""
             SELECT 
                 building_id,
                 meter_id,
@@ -96,10 +108,11 @@ async def export_excel(
                 pressure,
                 is_anomaly
             FROM energy_consumption 
-            WHERE building_id = %s AND DATE(timestamp) BETWEEN %s AND %s
-            ORDER BY timestamp
+            WHERE building_id IN ({placeholders}) AND DATE(timestamp) BETWEEN %s AND %s
+            ORDER BY building_id, timestamp
         """
-        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+        query_params = tuple(building_id_list) + (start_date, end_date)
+        data = await Database.fetch_all(sql, query_params)
 
         if not data:
             return {
@@ -108,51 +121,73 @@ async def export_excel(
                 "data": None
             }
 
-        # 转为DataFrame
+        # 转为 DataFrame
         df = pd.DataFrame(data)
 
-        # 重命名列为中文
+        # 重命名列
         df = df.rename(columns={
             'building_id': '建筑编号',
             'meter_id': '设备编号',
             'timestamp': '时间戳',
-            'electricity': '电力消耗(kW)',
+            'electricity': '电力消耗 (kW)',
             'cooling_load': '冷冻水冷量',
             'heating_load': '供热能耗',
-            'ambient_temp': '气温(℃)',
-            'pressure': '气压(hPa)',
+            'ambient_temp': '气温 (℃)',
+            'pressure': '气压 (hPa)',
             'is_anomaly': '是否异常'
         })
 
-        # 生成Excel
+        # 生成 Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             # 写入数据表
             df.to_excel(writer, index=False, sheet_name='能耗数据')
 
-            # 添加统计信息sheet
-            stats_df = pd.DataFrame({
-                '统计项': ['总记录数', '开始日期', '结束日期', '平均用电量', '最大用电量', '异常点数'],
+            # 添加统计信息 sheet - 按建筑分组统计
+            stats_data = []
+            for building_id in building_id_list:
+                building_df = df[df['建筑编号'] == building_id]
+                if len(building_df) > 0:
+                    stats_data.append({
+                        '建筑编号': building_id,
+                        '总记录数': len(building_df),
+                        '平均用电量': f"{building_df['电力消耗 (kW)'].mean():.2f}",
+                        '最大用电量': f"{building_df['电力消耗 (kW)'].max():.2f}",
+                        '最小用电量': f"{building_df['电力消耗 (kW)'].min():.2f}",
+                        '异常点数': int(building_df['是否异常'].sum())
+                    })
+            
+            stats_df = pd.DataFrame(stats_data)
+            stats_df.to_excel(writer, index=False, sheet_name='分建筑统计')
+            
+            # 总体统计
+            overall_stats = pd.DataFrame({
+                '统计项': ['总记录数', '开始日期', '结束日期', '平均用电量', '最大用电量', '总异常点数'],
                 '数值': [
                     len(df),
                     start_date,
                     end_date,
-                    f"{df['电力消耗(kW)'].mean():.2f}",
-                    f"{df['电力消耗(kW)'].max():.2f}",
-                    df['是否异常'].sum()
+                    f"{df['电力消耗 (kW)'].mean():.2f}",
+                    f"{df['电力消耗 (kW)'].max():.2f}",
+                    int(df['是否异常'].sum())
                 ]
             })
-            stats_df.to_excel(writer, index=False, sheet_name='统计信息')
+            overall_stats.to_excel(writer, index=False, sheet_name='总体统计')
 
+        # 生成文件名
+        building_suffix = '_'.join(building_id_list[:3])  # 最多取 3 个建筑
+        if len(building_id_list) > 3:
+            building_suffix += f"_etc{len(building_id_list)-3}"
+        
         return Response(
             content=output.getvalue(),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=energy_{building_id}_{start_date}.xlsx"}
+            headers={"Content-Disposition": f"attachment; filename=energy_{building_suffix}_{start_date}.xlsx"}
         )
     except Exception as e:
         return {
             "code": 500,
-            "message": f"导出失败: {str(e)}",
+            "message": f"导出失败：{str(e)}",
             "data": None
         }
 

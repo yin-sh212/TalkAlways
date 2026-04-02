@@ -56,16 +56,6 @@ export const queryAlarms = (data: AlarmQueryParams) => {
   return http.post<AlarmResponse>('/query/query', data)
 }
 
-// 获取告警统计摘要
-export const getAlarmSummary = (params: {
-  building_id?: string
-  start_date?: string
-  end_date?: string
-  time_unit?: string
-}) => {
-  return http.get('/statistics/summary', { params })
-}
-
 // 获取告警趋势数据 - 使用新的告警专用接口
 export const getAlarmTrend = (params: {
   building_id?: string
@@ -171,7 +161,7 @@ export interface ExportParams {
 export const exportCSV = (params: ExportParams): Promise<Blob> => {
   return http.get('/export/csv', {
     params: {
-      building_id: params.building_ids[0] || 'B001',
+      building_ids: params.building_ids.join(','),
       start_date: new Date(params.startTime).toISOString().split('T')[0],
       end_date: new Date(params.endTime).toISOString().split('T')[0]
     },
@@ -179,10 +169,10 @@ export const exportCSV = (params: ExportParams): Promise<Blob> => {
   })
 }
 
-export const exportExcel = (params: ExportParams): Promise<Blob> => {
+export const exportExcel = (params: ExportParams): Promise<any> => {
   return http.get('/export/excel', {
     params: {
-      building_id: params.building_ids[0] || 'B001',
+      building_ids: params.building_ids.join(','),
       start_date: new Date(params.startTime).toISOString().split('T')[0],
       end_date: new Date(params.endTime).toISOString().split('T')[0]
     },
@@ -190,10 +180,10 @@ export const exportExcel = (params: ExportParams): Promise<Blob> => {
   })
 }
 
-export const exportPDF = (params: ExportParams): Promise<Blob> => {
+export const exportPDF = (params: ExportParams): Promise<any> => {
   return http.get('/export/pdf', {
     params: {
-      building_id: params.building_ids[0] || 'B001',
+      building_ids: params.building_ids.join(','),
       start_date: new Date(params.startTime).toISOString().split('T')[0],
       end_date: new Date(params.endTime).toISOString().split('T')[0]
     },

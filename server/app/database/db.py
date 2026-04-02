@@ -150,6 +150,11 @@ class ConnectionWrapper:
             def __init__(self, connection):
                 self.cursor = connection.cursor()
             
+            @property
+            def rowcount(self):
+                """代理 rowcount 属性"""
+                return self.cursor.rowcount
+            
             def __enter__(self):
                 self.cursor.__enter__()
                 return self
@@ -177,4 +182,16 @@ class ConnectionWrapper:
             async def __aexit__(self, exc_type, exc_val, exc_tb):
                 self.cursor.close()
         
-        return CursorWrapper(self.conn)
+        # 让 cursor() 方法本身也支持异步上下文管理器
+        class AsyncCursorContextManager:
+            def __init__(self, connection):
+                self.connection = connection
+            
+            async def __aenter__(self):
+                wrapper = CursorWrapper(self.connection)
+                return wrapper
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+        
+        return AsyncCursorContextManager(self.conn)

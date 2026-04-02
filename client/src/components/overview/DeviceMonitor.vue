@@ -63,6 +63,13 @@
 
     <n-grid-item>
       <n-card title="监测点类型分布" :bordered="false" content-style="padding: 20px;">
+        <template #header-extra>
+          <ChartAIAnalysis 
+            :chart-ref="deviceChartRef"
+            chart-title="监测点类型分布"
+            chart-type="pie"
+          />
+        </template>
         <n-skeleton v-if="loading" :rows="4" />
         <template v-else>
           <div ref="deviceChartRef" class="device-chart-container"></div>
@@ -79,8 +86,7 @@ import { getBasePieChartConfig } from '@/utils/echarts-config'
 import { getMeters } from '@/api/query'
 import { CheckmarkCircleOutline as CheckCircle } from '@vicons/ionicons5'
 import { AlertOutline as Alert } from '@vicons/ionicons5'
-import { WarningOutline as Warning } from '@vicons/ionicons5'
-import { LayersOutline as Layers } from '@vicons/ionicons5'
+import ChartAIAnalysis from '@/components/common/ChartAIAnalysis.vue'
 
 interface DeviceStats {
   totalCount: number

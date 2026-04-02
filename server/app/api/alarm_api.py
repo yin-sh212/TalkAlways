@@ -66,11 +66,15 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
         """
 
         pool = await Database.get_pool()
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
+        conn = await pool.acquire()
+        try:
+            cursor_ctx = conn.cursor()
+            async with cursor_ctx as cursor:
                 await cursor.execute(update_sql, request.alarm_ids)
                 affected_rows = cursor.rowcount
                 await conn.commit()
+        finally:
+            await conn.release()
 
         print(f"更新影响行数: {affected_rows}")  # 调试用
 
@@ -123,11 +127,15 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
         """
 
         pool = await Database.get_pool()
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
+        conn = await pool.acquire()
+        try:
+            cursor_ctx = conn.cursor()
+            async with cursor_ctx as cursor:
                 await cursor.execute(update_sql, request.alarm_ids)
                 affected_rows = cursor.rowcount
                 await conn.commit()
+        finally:
+            await conn.release()
 
         print(f"解决影响行数: {affected_rows}")  # 调试用
 
@@ -654,9 +662,11 @@ async def get_alarm_detail(alarm_id: int):
 
 async def init_alarm_dict_tables():
     """初始化告警字典表"""
-    pool = await Database.get_pool()  # 修复：先 await
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cursor:
+    pool = await Database.get_pool()
+    conn = await pool.acquire()
+    try:
+        cursor_ctx = conn.cursor()
+        async with cursor_ctx as cursor:
             # 创建告警类型表（如果不存在）
             await cursor.execute("""
                 CREATE TABLE IF NOT EXISTS alarm_types (
@@ -718,6 +728,8 @@ async def init_alarm_dict_tables():
             """)
 
             await conn.commit()
+    finally:
+        await conn.release()
 
 
 # ========== 告警分析接口 ==========

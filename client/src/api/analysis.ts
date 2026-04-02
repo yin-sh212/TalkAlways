@@ -157,7 +157,7 @@ export const exportExcel = (params: AnalysisExportParams): Promise<Blob> => {
   })
 }
 
-export const exportPDF = (params: AnalysisExportParams): Promise<Blob> => {
+export const exportPDF = (params: AnalysisExportParams): Promise<any> => {
   // 确保使用从后端获取的真实建筑 ID
   if (!params.buildings || params.buildings.length === 0) {
     throw new Error('必须指定建筑 ID')

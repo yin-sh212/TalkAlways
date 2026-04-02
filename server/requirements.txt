@@ -1,15 +1,15 @@
 # 核心框架
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+fastapi==0.104.1
+uvicorn==0.24.0
 
 # 数据库
 aiomysql==0.2.0
 PyMySQL==1.1.1
 cryptography==42.0.5
 
-# 数据处理（使用预编译版本，避免 Render 编译失败）
-pandas>=2.2.0 --only-binary pandas
-numpy>=1.26.0,<3.0.0 --only-binary numpy
+# 数据处理（强制使用预编译版本）
+pandas==2.1.0 --only-binary pandas
+numpy==1.26.4 --only-binary numpy
 openpyxl==3.1.2
 
 # PDF 导出
@@ -17,9 +17,9 @@ reportlab==4.2.0
 
 # 工具
 python-dotenv==1.0.1
-pydantic==2.9.2
-pydantic-core==2.23.4
-python-multipart==0.0.9
+pydantic==2.4.1
+pydantic-core==2.10.1 --only-binary pydantic-core
+python-multipart==0.0.6
 httpx==0.27.0
 
 # RAG 相关

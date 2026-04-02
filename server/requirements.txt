@@ -9,7 +9,7 @@ cryptography==42.0.5
 
 # 数据处理（强制使用预编译版本）
 pandas==2.3.3 --only-binary pandas
-numpy==2.0.0 --only-binary numpy
+numpy==1.26.4 --only-binary numpy
 openpyxl==3.1.2
 
 # PDF 导出

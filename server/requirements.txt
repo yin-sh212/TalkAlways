@@ -44,7 +44,7 @@ passlib==1.7.4
 bcrypt==4.1.3
 
 # 短信服务
-aliyun-python-sdk-core==2.15.1
+aliyun-python-sdk-core==2.13.10
 tencentcloud-sdk-python==3.0.1187
 
 # 缓存

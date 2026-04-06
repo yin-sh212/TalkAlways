@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://talkalways-dnuh.onrender.com/api/$1"
+      "destination": "http://8.156.95.158:3000/api/$1"
     }
   ]
 }

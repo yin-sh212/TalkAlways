@@ -1,4 +1,3 @@
-# app/main.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,17 +12,17 @@ from app.api import statistics_api
 from app.api import chart_api
 from app.api import chat_api
 from app.api import mcp_api
-from app.api import export_api  # 新增：导入报表导出模块
+from app.api import export_api
 from app.api import upload_api
 from app.api import auth_api
 from app.api import alarm_api
 from app.api import device_api
 from app.api import energy_api
 from app.api import knowledge_api
-from app.api import analysis_api  # 新增：导入能耗分析模块
-from app.api import realtime_api  # 新增：导入实时数据采集模块
-from app.api import ai_analyst  # 新增：导入 AI 数据分析师模块
-from app.api import chart_analysis  # 新增：导入图表 AI 分析模块
+from app.api import analysis_api
+from app.api import realtime_api
+from app.api import ai_analyst
+from app.api import chart_analysis
 
 from datetime import datetime
 import os
@@ -33,7 +32,6 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时执行 - 测试数据库连接
     try:
         await Database.fetch_one("SELECT 1 as test")
         print("✅ 数据库连接成功")
@@ -41,13 +39,7 @@ async def lifespan(app: FastAPI):
         print(f"❌ 数据库连接失败：{e}")
     
     print(f"✅ {config.APP_NAME} v{config.APP_VERSION} 启动成功")
-    print(f"📚 接口文档：http://localhost:{PORT}/docs")
-    print(f"💻 前端页面：http://localhost:{PORT}/")
-
-    yield  # 这里会暂停，应用运行期间会保持
-
-    # 关闭时执行 - PyMySQL 不需要显式关闭连接池
-    print("👋 应用已关闭")
+    yield
 
 app = FastAPI(
     title=config.APP_NAME,
@@ -56,6 +48,23 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# ======================================
+# 第二步：立即配置 CORS！！（必须放在注册路由前面）
+# ======================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://competitions-shenghui-yins-projects.vercel.app",
+        "*"  # 临时全开，确保能连上
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ======================================
+# 第三步：自定义接口文档
+# ======================================
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -134,53 +143,43 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
-
 app.openapi = custom_openapi
 
-# 配置CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 注册所有路由
+# ======================================
+# 第四步：最后才注册路由！！
+# ======================================
 app.include_router(query_api.router)
 app.include_router(statistics_api.router)
 app.include_router(chart_api.router)
 app.include_router(chat_api.router)
 app.include_router(mcp_api.router)
-app.include_router(export_api.router)  # 新增：注册报表导出路由
+app.include_router(export_api.router)
 app.include_router(upload_api.router)
 app.include_router(auth_api.router)
-app.include_router(alarm_api.router)  # 新增：注册告警管理路由
+app.include_router(alarm_api.router)
 app.include_router(device_api.router)
 app.include_router(energy_api.router)
 app.include_router(knowledge_api.router)
-app.include_router(analysis_api.router)  # 新增：注册能耗分析路由
-app.include_router(realtime_api.router)  # 新增：注册实时数据采集路由
-app.include_router(ai_analyst.router)  # 新增：注册 AI 数据分析师路由
-app.include_router(chart_analysis.router)  # 新增：注册图表 AI 分析路由
+app.include_router(analysis_api.router)
+app.include_router(realtime_api.router)
+app.include_router(ai_analyst.router)
+app.include_router(chart_analysis.router)
 
+# ======================================
+# 接口
+# ======================================
 @app.get("/")
 async def root():
-    """根路径"""
     return {
         "app_name": config.APP_NAME,
         "version": config.APP_VERSION,
         "status": "running",
-        "docs": "/docs",
-        "redoc": "/redoc"
+        "docs": "/docs"
     }
-
 
 @app.get("/api/health")
 async def health_check():
-    """健康检查"""
     try:
-        # 测试数据库连接
         await Database.fetch_one("SELECT 1 as health")
         db_status = "connected"
     except Exception as e:
@@ -192,7 +191,9 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
-# app/main.py 文件末尾添加
+# ======================================
+# 启动
+# ======================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3000, reload=True)
+    uvicorn.run("app.main:app", host=HOST, port=PORT, reload=True)

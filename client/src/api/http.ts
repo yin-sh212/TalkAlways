@@ -9,8 +9,8 @@ const getBaseURL = () => {
     return '/api'
   }
   // 生产环境使用完整 URL
-  const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://8.156.95.158:3000'
-  return `${apiUrl}/api`
+  const apiUrl = (import.meta as any).env.VITE_API_URL || '/api'
+  return `${apiUrl}`
 }
 
 // 创建 axios 实例

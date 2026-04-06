@@ -25,6 +25,7 @@
     "@types/html2pdf.js": "^0.10.0",
     "@types/lodash-es": "^4.17.12",
     "@vitejs/plugin-vue": "^5.0.3",
+    "esbuild": "^0.21.5",
     "mockjs": "^1.1.0",
     "sass": "^1.70.0",
     "typescript": "^5.3.3",

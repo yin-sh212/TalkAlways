@@ -1,0 +1,104 @@
+name: Deploy to Alibaba Cloud ECS
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  PROJECT_NAME: energy-management-system
+  SERVER_DIR: /opt/energy-system
+  BACKUP_DIR: /opt/energy-system-backup
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        cd server
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov httpx
+    
+    - name: Run tests
+      run: |
+        cd server
+        python -m pytest tests/ --tb=short -v
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./server/coverage.xml
+        flags: unittests
+
+  build-and-deploy:
+    name: Build and Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        cd server
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Build frontend
+      working-directory: client
+      run: |
+        npm ci
+        npm run build
+    
+    - name: Package application
+      run: |
+        mkdir -p deploy-package
+        cp -r server deploy-package/
+        cp -r client/dist deploy-package/client-dist/
+        cp deploy.sh deploy-package/
+        cp rollback.sh deploy-package/
+        tar -czf deploy-package.tar.gz deploy-package/
+    
+    - name: Deploy to ECS
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.ECS_HOST }}
+        username: ${{ secrets.ECS_USERNAME }}
+        key: ${{ secrets.ECS_SSH_KEY }}
+        port: ${{ secrets.ECS_PORT || 22 }}
+        source: "deploy-package.tar.gz"
+        target: "/tmp/"
+    
+    - name: Execute deployment
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.ECS_HOST }}
+        username: ${{ secrets.ECS_USERNAME }}
+        key: ${{ secrets.ECS_SSH_KEY }}
+        port: ${{ secrets.ECS_PORT || 22 }}
+        script: |
+          cd /tmp
+          tar -xzf deploy-package.tar.gz
+          cd deploy-package
+          chmod +x deploy.sh
+          bash deploy.sh ${{ env.SERVER_DIR }} ${{ env.BACKUP_DIR }}
+          rm -rf /tmp/deploy-package*

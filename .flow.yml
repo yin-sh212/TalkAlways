@@ -1,0 +1,141 @@
+# 阿里云云效 Flow 流水线配置
+# 文件位置: .flow.yml
+
+version: '1.0'
+
+name: energy-system-deployment
+description: 能源管理系统自动化部署流水线
+
+stages:
+  # 第一阶段：代码检查与测试
+  - stage: test
+    name: 代码测试
+    jobs:
+      - job: unit-test
+        name: 单元测试
+        runs-on: ubuntu-latest
+        steps:
+          - uses: checkout@v1
+          - uses: setup-python@v1
+            with:
+              python-version: '3.10'
+          - run: |
+              cd server
+              pip install -r requirements.txt
+              pip install pytest pytest-asyncio pytest-cov httpx
+              python -m pytest tests/ --tb=short -v
+          - uses: upload-artifact@v1
+            with:
+              name: test-results
+              path: server/htmlcov/
+
+  # 第二阶段：构建应用
+  - stage: build
+    name: 构建应用
+    dependsOn: test
+    jobs:
+      - job: build-app
+        name: 打包应用
+        runs-on: ubuntu-latest
+        steps:
+          - uses: checkout@v1
+          - uses: setup-node@v1
+            with:
+              node-version: '16'
+          - run: |
+              cd client
+              npm ci
+              npm run build
+          - uses: setup-python@v1
+            with:
+              python-version: '3.10'
+          - run: |
+              cd server
+              pip install -r requirements.txt
+          - run: |
+              mkdir -p deploy-package
+              cp -r server deploy-package/
+              cp -r client/dist deploy-package/client-dist/
+              cp deploy.sh rollback.sh deploy-package/
+              tar -czf deploy-package.tar.gz deploy-package/
+          - uses: upload-artifact@v1
+            with:
+              name: deploy-package
+              path: deploy-package.tar.gz
+
+  # 第三阶段：部署到 ECS
+  - stage: deploy
+    name: 部署到生产环境
+    dependsOn: build
+    jobs:
+      - job: deploy-to-ecs
+        name: 部署到ECS
+        runs-on: ubuntu-latest
+        steps:
+          - uses: download-artifact@v1
+            with:
+              name: deploy-package
+          - uses: aliyun/ssh-action@v1
+            with:
+              host: ${{ secrets.ECS_HOST }}
+              username: ${{ secrets.ECS_USERNAME }}
+              password: ${{ secrets.ECS_PASSWORD }}
+              port: 22
+              script: |
+                mkdir -p /tmp/deploy
+          - uses: aliyun/scp-action@v1
+            with:
+              host: ${{ secrets.ECS_HOST }}
+              username: ${{ secrets.ECS_USERNAME }}
+              password: ${{ secrets.ECS_PASSWORD }}
+              port: 22
+              source: deploy-package.tar.gz
+              target: /tmp/deploy/
+          - uses: aliyun/ssh-action@v1
+            with:
+              host: ${{ secrets.ECS_HOST }}
+              username: ${{ secrets.ECS_USERNAME }}
+              password: ${{ secrets.ECS_PASSWORD }}
+              port: 22
+              script: |
+                cd /tmp/deploy
+                tar -xzf deploy-package.tar.gz
+                cd deploy-package
+                chmod +x deploy.sh
+                bash deploy.sh /opt/energy-system /opt/energy-system-backup
+                rm -rf /tmp/deploy
+
+  # 第四阶段：健康检查
+  - stage: verify
+    name: 部署验证
+    dependsOn: deploy
+    jobs:
+      - job: health-check
+        name: 健康检查
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              sleep 10
+              curl -f http://${{ secrets.ECS_HOST }}:8000/api/health || exit 1
+          - run: |
+              echo "部署成功！"
+              echo "访问地址: http://${{ secrets.ECS_HOST }}:8000"
+
+# 触发规则
+triggers:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+
+# 通知配置
+notifications:
+  success:
+    - type: dingtalk
+      webhook: ${{ secrets.DINGTALK_WEBHOOK }}
+  failure:
+    - type: dingtalk
+      webhook: ${{ secrets.DINGTALK_WEBHOOK }}

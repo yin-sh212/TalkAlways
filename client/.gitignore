@@ -1,5 +1,5 @@
 # Dependencies
-**/node_modules/
+node_modules/
 /.pnp
 .pnp.js
 
@@ -9,12 +9,9 @@
 # Production
 /dist
 /build
-/.next
-/out
 
 # Misc
 .DS_Store
-*.log
 .env
 .env.local
 .env.development.local
@@ -37,20 +34,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
-*.swp
-*.swo
-*~
 
 # Vite
 .vite
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-.venv/
-venv/
-ENV/
-env/

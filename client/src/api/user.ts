@@ -9,17 +9,17 @@ import type {
 
 // 用户登录 - 使用 LoginParams 和 LoginResponse 类型
 export const login = (data: LoginParams) => {
-  return http.post<ApiResponse<LoginResponse>>('/user/login', data)
+  return http.post<ApiResponse<LoginResponse>>('/auth/login', data)
 }
 
 // 用户注册 - 使用 RegisterParams 类型
 export const register = (data: RegisterParams) => {
-  return http.post<ApiResponse<LoginResponse>>('/user/register', data)
+  return http.post<ApiResponse<LoginResponse>>('/auth/register', data)
 }
 
 // 获取当前用户信息 - 使用 User 类型
 export const getCurrentUser = () => {
-  return http.get<ApiResponse<User>>('/user/info')
+  return http.get<ApiResponse<User>>('/auth/me')
 }
 
 // 更新用户信息 - 使用 User 类型
@@ -37,7 +37,7 @@ export const changePassword = (data: {
 
 // 退出登录
 export const logout = () => {
-  return http.post<ApiResponse<{ success: boolean }>>('/user/logout')
+  return http.post<ApiResponse<{ success: boolean }>>('/auth/logout')
 }
 
 // 发送验证码

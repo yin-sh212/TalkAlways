@@ -1,4 +1,4 @@
-name: Deploy to Alibaba Cloud ECS
+name: Deploy to Alibaba Cloud ECS (Windows)
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
 
 env:
   PROJECT_NAME: energy-management-system
-  SERVER_DIR: /opt/energy-system
-  BACKUP_DIR: /opt/energy-system-backup
+  SERVER_DIR: D:\energy-system
+  BACKUP_DIR: D:\energy-system-backup
 
 jobs:
   test:
@@ -44,7 +44,7 @@ jobs:
         flags: unittests
 
   build-and-deploy:
-    name: Build and Deploy
+    name: Build and Deploy to Windows ECS
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -74,31 +74,33 @@ jobs:
         mkdir -p deploy-package
         cp -r server deploy-package/
         cp -r client/dist deploy-package/client-dist/
-        cp deploy.sh deploy-package/
-        cp rollback.sh deploy-package/
+        cp deploy_windows.ps1 deploy-package/
+        cp rollback_windows.ps1 deploy-package/
         tar -czf deploy-package.tar.gz deploy-package/
     
-    - name: Deploy to ECS
+    - name: Deploy to Windows ECS via WinRM
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.ECS_HOST }}
         username: ${{ secrets.ECS_USERNAME }}
-        key: ${{ secrets.ECS_SSH_KEY }}
-        port: ${{ secrets.ECS_PORT || 22 }}
+        password: ${{ secrets.ECS_PASSWORD }}
+        port: ${{ secrets.ECS_PORT || 5986 }}
         source: "deploy-package.tar.gz"
-        target: "/tmp/"
+        target: "C:/Temp/"
+        timeout: 120s
     
-    - name: Execute deployment
-      uses: appleboy/ssh-action@master
+    - name: Execute deployment on Windows
+      uses: appleboy/winrm-action@master
       with:
         host: ${{ secrets.ECS_HOST }}
         username: ${{ secrets.ECS_USERNAME }}
-        key: ${{ secrets.ECS_SSH_KEY }}
-        port: ${{ secrets.ECS_PORT || 22 }}
+        password: ${{ secrets.ECS_PASSWORD }}
+        port: ${{ secrets.ECS_PORT || 5986 }}
         script: |
-          cd /tmp
+          cd C:\Temp
+          if (Test-Path "deploy-package") { Remove-Item -Recurse -Force "deploy-package" }
           tar -xzf deploy-package.tar.gz
           cd deploy-package
-          chmod +x deploy.sh
-          bash deploy.sh ${{ env.SERVER_DIR }} ${{ env.BACKUP_DIR }}
-          rm -rf /tmp/deploy-package*
+          powershell -ExecutionPolicy Bypass -File deploy_windows.ps1 -TargetDir "${{ env.SERVER_DIR }}" -BackupDir "${{ env.BACKUP_DIR }}"
+          Remove-Item -Force "deploy-package.tar.gz"
+          Remove-Item -Recurse -Force "deploy-package"

@@ -25,11 +25,15 @@ export const askQuestion = (query: string) => {
   return http.post<ApiResponse<AskResponse>>('/chat/ask', params)
 }
 
-// 智能问答 - 流式模式（逐字输出）
+// 智能问答 - 流式模式(逐字输出)
 export const askQuestionStream = (query: string, onChunk: (chunk: string) => void) => {
   const controller = new AbortController()
   
-  const fetchPromise = fetch('http://localhost:3000/api/chat/ask/stream', {
+  // 使用环境变量或相对路径
+  const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api'
+  const streamUrl = `${apiBaseUrl}/chat/ask/stream`
+  
+  const fetchPromise = fetch(streamUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

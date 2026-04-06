@@ -49,7 +49,7 @@ export const uploadDocument = (file: File): Promise<any> => {
   const formData = new FormData()
   formData.append('file', file)
   
-  return http.post<any>('/upload/document', formData, {
+  return http.post<any>('/admin/upload/document', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }

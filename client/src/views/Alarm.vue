@@ -135,17 +135,6 @@
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
       <n-space>
-        <n-button 
-          type="success" 
-          @click="handleGenerateAlarms" 
-          :loading="generateLoading"
-        >
-          <template #icon>
-            <n-icon :component="Alert" />
-          </template>
-          {{ generateLoading ? "生成中..." : "从异常数据生成告警" }}
-        </n-button>
-        
         <n-button type="primary" @click="handleExport" :loading="exportLoading">
           <template #icon>
             <n-icon :component="Download" />
@@ -161,22 +150,17 @@
 import { ref, reactive, onMounted, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
-import { Download, Alert } from "@vicons/ionicons5";
+import { Download } from "@vicons/ionicons5";
 import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
 import AlarmTrend from "@/components/alarm/Trend.vue";
 import AlarmDistribution from "@/components/alarm/Distribution.vue";
 import AlarmList from "@/components/alarm/List.vue";
-import AlarmDetailTable from "@/components/alarm/DetailTable.vue";
 import * as alarmApi from "@/api/alarm";
 import type {
-  AlarmItem,
-  AlarmQueryParams,
-  AlarmListItem,
   AlarmTypeDict,
   AlarmLevelDict,
 } from "@/api/alarm";
 import type {
-  BuildingEnergyDetailResponse,
   BuildingEnergyDetail,
   EnergySummary,
 } from "@/types/analysis";
@@ -186,7 +170,6 @@ import { useBuildingStore } from "@/store/building";
 const message = useMessage();
 const appStore = useAppStore();
 const buildingStore = useBuildingStore();
-const router = useRouter();
 const route = useRoute();
 
 // 状态
@@ -195,7 +178,6 @@ const tableLoading = ref(false);
 const metricsLoading = ref(false);
 const chartLoading = ref(false);
 const exportLoading = ref(false);
-const generateLoading = ref(false);
 
 // 查询表单
 const queryFormRef = ref<any>(null);
@@ -793,80 +775,6 @@ const handleBatchResolve = async (alarmIds: string[]) => {
     handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
     message.error("批量解决失败：" + (error.message || "未知错误"));
-  }
-};
-
-// 从异常数据生成告警（使用真实算法）
-const handleGenerateAlarms = async () => {
-  // 确保选择了建筑
-  if (!queryForm.buildings || queryForm.buildings.length === 0) {
-    message.warning("请选择建筑");
-    return;
-  }
-  
-  generateLoading.value = true;
-  
-  try {
-    // 准备查询参数
-    const startDate = queryForm.timeRange
-      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
-      : appStore.getMockToday();
-    const endDate = queryForm.timeRange
-      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
-      : appStore.getMockToday();
-    
-    // 验证时间范围（2016-07-01 至 2016-09-30）
-    const validStartDate = "2016-07-01";
-    const validEndDate = "2016-09-30";
-    
-    if (
-      startDate < validStartDate ||
-      startDate > validEndDate ||
-      endDate < validStartDate ||
-      endDate > validEndDate
-    ) {
-      message.error(`生成时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
-      generateLoading.value = false;
-      return;
-    }
-    
-    // 调用新接口 - 使用真实检测算法
-    const response = await alarmApi.generateRealAlarms({
-      start_date: startDate,
-      end_date: endDate,
-      building_ids: queryForm.buildings.join(','), // 逗号分隔的建筑 ID 列表
-      metric: 'electricity', // 默认检测用电量
-      dynamic_window: 24, // 24 小时窗口
-      dynamic_threshold: 2.5, // 2.5 倍标准差
-      trend_window: 6, // 6 个点趋势检测
-      min_trend_decline: 0.15 // 最小下降 15%
-    });
-    
-    const generatedCount = response.data?.data?.generated_count || 0;
-    
-    if (generatedCount > 0) {
-      const severityDist = response.data?.data?.severity_distribution || {};
-      const methodDist = response.data?.data?.method_distribution || {};
-      
-      let messageDetail = `成功生成 ${generatedCount} 条真实告警\n`;
-      messageDetail += `动态基线：${methodDist.dynamic_baseline || 0} 条\n`;
-      messageDetail += `趋势下降：${methodDist.trend_decline || 0} 条\n`;
-      if (severityDist.critical > 0) messageDetail += `严重：${severityDist.critical} 条 `;
-      if (severityDist.high > 0) messageDetail += `警告：${severityDist.high} 条 `;
-      if (severityDist.medium > 0) messageDetail += `中等：${severityDist.medium} 条 `;
-      if (severityDist.low > 0) messageDetail += `提示：${severityDist.low} 条`;
-      
-      message.success(messageDetail);
-      
-      // 生成成功后自动刷新当前查询结果
-      handleQuery(true);
-    } else {
-      message.warning("没有检测到异常数据，无法生成告警");
-    }
-  } catch (error: any) {
-    message.error("生成告警失败：" + (error.message || "未知错误"));
-  } finally {
-    generateLoading.value = false;
   }
 };
 

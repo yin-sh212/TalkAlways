@@ -173,17 +173,6 @@
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
       <n-space>
-        <n-button 
-          type="success" 
-          @click="handleGenerateAlarms" 
-          :loading="generateLoading"
-        >
-          <template #icon>
-            <n-icon :component="Alert" />
-          </template>
-          {{ generateLoading ? "生成中..." : "从异常数据生成告警" }}
-        </n-button>
-        
         <n-button type="primary" @click="handleExport" :loading="exportLoading">
           <template #icon>
             <n-icon :component="Download" />
@@ -197,9 +186,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
-import { Download,Alert } from "@vicons/ionicons5";
+import { Download } from "@vicons/ionicons5";
 import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
 import AlarmTrend from "@/components/alarm/Trend.vue";
 import AlarmDistribution from "@/components/alarm/Distribution.vue";

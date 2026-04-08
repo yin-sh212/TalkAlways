@@ -541,11 +541,11 @@ async def generate_real_alarms(
                 print(f"⚠️  {building_id}: 数据量不足 ({len(data)} 条)，跳过")
                 continue
             
-            # 提取指定指标的数据
-            values = [row[1] for row in data if row[1] is not None] if metric == 'electricity' else \
-                     [row[2] for row in data if row[2] is not None] if metric == 'cooling_load' else \
-                     [row[3] for row in data if row[3] is not None]
-            timestamps = [str(row[0]) for row in data if (row[1] if metric == 'electricity' else row[2] if metric == 'cooling_load' else row[3]) is not None]
+            # 提取指定指标的数据 - 使用字段名而非索引
+            values = [row['electricity'] for row in data if row['electricity'] is not None] if metric == 'electricity' else \
+                     [row['cooling_load'] for row in data if row['cooling_load'] is not None] if metric == 'cooling_load' else \
+                     [row['heating_load'] for row in data if row['heating_load'] is not None]
+            timestamps = [str(row['timestamp']) for row in data if (row['electricity'] if metric == 'electricity' else row['cooling_load'] if metric == 'cooling_load' else row['heating_load']) is not None]
             
             if len(values) < 10:
                 print(f"⚠️  {building_id}: 有效数据不足 ({len(values)} 条)，跳过")
@@ -568,10 +568,11 @@ async def generate_real_alarms(
                 "medium": {"level": 2, "name": "警告"},  # 合并到警告
                 "low": {"level": 3, "name": "提示"}
             }
-            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
 
             # 插入动态基线告警
             for anomaly in detection_result['baseline_anomalies']:
+                # 根据当前告警的严重程度获取级别
+                severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
                 alarm_level = severity_info["level"]
                 alarm_type_str = "过高" if anomaly['type'] == "过高" else "过低"
                 description = f"{metric} {alarm_type_str}，值为{anomaly['value']:.2f}，超出动态基线范围 [{anomaly['lower_bound']:.2f}, {anomaly['upper_bound']:.2f}]"

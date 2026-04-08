@@ -124,6 +124,7 @@
         :tableData="tableData"
         :loading="tableLoading"
         :pagination="pagination"
+        :resolvingAlarmIds="resolvingAlarmIds"
         @update="handleTableUpdate"
         @acknowledge="handleAcknowledge"
         @resolve="handleResolve"
@@ -132,9 +133,57 @@
       />
     </div>
 
+    <n-modal
+      v-model:show="showResolveModal"
+      preset="card"
+      title="填写解决办法"
+      style="width: 560px"
+      :mask-closable="!resolveSubmitting"
+      :closable="!resolveSubmitting"
+    >
+      <n-space vertical :size="12">
+        <div class="resolve-modal-hint">
+          将解决 {{ resolveForm.alarmIds.length }} 条告警。填写的解决办法会写回告警记录，并在解决后沉淀到知识库。
+        </div>
+        <n-input
+          v-model:value="resolveForm.resolution"
+          type="textarea"
+          placeholder="请输入排查过程、处理措施和最终结论"
+          :rows="6"
+          maxlength="1000"
+          show-count
+        />
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="closeResolveModal" :disabled="resolveSubmitting">
+            取消
+          </n-button>
+          <n-button
+            type="success"
+            @click="submitResolve"
+            :loading="resolveSubmitting"
+          >
+            确认解决并入库
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
       <n-space>
+        <n-button 
+          type="success" 
+          @click="handleGenerateAlarms" 
+          :loading="generateLoading"
+        >
+          <template #icon>
+            <n-icon :component="Alert" />
+          </template>
+          {{ generateLoading ? "生成中..." : "从异常数据生成告警" }}
+        </n-button>
+        
         <n-button type="primary" @click="handleExport" :loading="exportLoading">
           <template #icon>
             <n-icon :component="Download" />
@@ -150,7 +199,7 @@
 import { ref, reactive, onMounted, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
-import { Download } from "@vicons/ionicons5";
+import { Download,Alert } from "@vicons/ionicons5";
 import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
 import AlarmTrend from "@/components/alarm/Trend.vue";
 import AlarmDistribution from "@/components/alarm/Distribution.vue";
@@ -178,6 +227,10 @@ const tableLoading = ref(false);
 const metricsLoading = ref(false);
 const chartLoading = ref(false);
 const exportLoading = ref(false);
+const generateLoading = ref(false);
+const showResolveModal = ref(false);
+const resolveSubmitting = ref(false);
+const resolvingAlarmIds = ref<string[]>([]);
 
 // 查询表单
 const queryFormRef = ref<any>(null);
@@ -187,6 +240,11 @@ const queryForm = reactive({
   severity: [] as string[],
   alarmType: [] as string[],
   timeRange: null as [number, number] | null,
+});
+
+const resolveForm = reactive({
+  alarmIds: [] as number[],
+  resolution: "",
 });
 
 // 验证规则
@@ -696,18 +754,122 @@ const handleAcknowledge = async (alarmId: string) => {
   }
 };
 
-// 解决告警 - 对接真实接口
-const handleResolve = async (alarmId: string) => {
-  try {
-    // 使用新接口的单个解决（通过批量接口实现）
-    await alarmApi.batchResolveAlarms({
-      alarm_ids: [parseInt(alarmId) || 0],
-    });
-    message.success("告警已解决");
-    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
-  } catch (error: any) {
-    message.error("解决失败：" + (error.message || "未知错误"));
+const resetResolveModal = () => {
+  showResolveModal.value = false;
+  resolveForm.alarmIds = [];
+  resolveForm.resolution = "";
+};
+
+const closeResolveModal = () => {
+  if (resolveSubmitting.value) {
+    return;
   }
+
+  resetResolveModal();
+};
+
+const appendResolvingAlarmIds = (alarmIds: string[]) => {
+  const merged = new Set([
+    ...resolvingAlarmIds.value,
+    ...alarmIds.map((id) => String(id)),
+  ]);
+  resolvingAlarmIds.value = Array.from(merged);
+};
+
+const removeResolvingAlarmIds = (alarmIds: string[]) => {
+  const pending = new Set(alarmIds.map((id) => String(id)));
+  resolvingAlarmIds.value = resolvingAlarmIds.value.filter(
+    (id) => !pending.has(String(id)),
+  );
+};
+
+const openResolveModal = (alarmIds: string[]) => {
+  const ids = alarmIds
+    .map((id) => parseInt(id) || 0)
+    .filter((id) => id !== 0);
+  const pendingIds = ids.filter(
+    (id) => !resolvingAlarmIds.value.includes(String(id)),
+  );
+
+  if (pendingIds.length === 0) {
+    message.warning("所选告警正在后台处理中");
+    return;
+  }
+
+  resolveForm.alarmIds = pendingIds;
+  resolveForm.resolution = "";
+  showResolveModal.value = true;
+};
+
+const resolveInBackground = async (alarmIds: string[], resolution: string) => {
+  try {
+    const response = await alarmApi.batchResolveAlarms({
+      alarm_ids: alarmIds.map((id) => parseInt(id) || 0),
+      resolution,
+    });
+
+    const result = response.data?.data;
+    const successCount = result?.resolved_count || 0;
+    const failedCount = result?.failed_ids?.length || 0;
+    const knowledgeSyncedCount = result?.knowledge_synced_count || 0;
+
+    if (successCount > 0) {
+      const knowledgeText =
+        knowledgeSyncedCount > 0 ? `，已沉淀 ${knowledgeSyncedCount} 条知识` : "";
+      message.success(`成功解决 ${successCount} 条告警${knowledgeText}`);
+    }
+
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
+    }
+
+    await handleQuery(true);
+  } catch (error: any) {
+    message.error(
+      "解决失败：" +
+        (error.response?.data?.message || error.message || "未知错误"),
+    );
+  } finally {
+    removeResolvingAlarmIds(alarmIds);
+  }
+};
+
+const submitResolve = async () => {
+  const resolution = resolveForm.resolution.trim();
+
+  if (resolveForm.alarmIds.length === 0) {
+    message.warning("没有可解决的告警");
+    closeResolveModal();
+    return;
+  }
+
+  if (!resolution) {
+    message.warning("请先填写解决办法");
+    return;
+  }
+
+  try {
+    resolveSubmitting.value = true;
+    const alarmIds = resolveForm.alarmIds.map((id) => String(id));
+
+    appendResolvingAlarmIds(alarmIds);
+    resetResolveModal();
+    resolveSubmitting.value = false;
+    message.info("已提交解决请求，后台处理中");
+
+    void resolveInBackground(alarmIds, resolution);
+  } catch (error: any) {
+    resolveSubmitting.value = false;
+    message.error(
+      "解决失败：" +
+        (error.response?.data?.message || error.message || "未知错误"),
+    );
+  }
+};
+
+// 解决告警 - 打开解决弹窗
+const handleResolve = (alarmId: string) => {
+  openResolveModal([alarmId]);
 };
 
 // 批量确认告警 - 新增
@@ -744,37 +906,82 @@ const handleBatchAcknowledge = async (alarmIds: string[]) => {
   }
 };
 
-// 批量解决告警 - 新增
-const handleBatchResolve = async (alarmIds: string[]) => {
-  try {
-    const ids = alarmIds
-      .map((id) => parseInt(id) || 0)
-      .filter((id) => id !== 0);
+// 批量解决告警 - 打开统一解决弹窗
+const handleBatchResolve = (alarmIds: string[]) => {
+  openResolveModal(alarmIds);
+};
 
-    if (ids.length === 0) {
-      message.warning("没有有效的告警 ID");
+// 从异常数据生成告警（使用真实算法）
+const handleGenerateAlarms = async () => {
+  // 确保选择了建筑
+  if (!queryForm.buildings || queryForm.buildings.length === 0) {
+    message.warning("请选择建筑");
+    return;
+  }
+  
+  generateLoading.value = true;
+  
+  try {
+    // 准备查询参数
+    const startDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[0]).toISOString().split("T")[0]
+      : appStore.getMockToday();
+    const endDate = queryForm.timeRange
+      ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
+      : appStore.getMockToday();
+    
+    // 验证时间范围（2016-07-01 至 2016-09-30）
+    const validStartDate = "2016-07-01";
+    const validEndDate = "2016-09-30";
+    
+    if (
+      startDate < validStartDate ||
+      startDate > validEndDate ||
+      endDate < validStartDate ||
+      endDate > validEndDate
+    ) {
+      message.error(`生成时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
+      generateLoading.value = false;
       return;
     }
-
-    const response = await alarmApi.batchResolveAlarms({
-      alarm_ids: ids,
+    
+    // 调用新接口 - 使用真实检测算法
+    const response = await alarmApi.generateRealAlarms({
+      start_date: startDate,
+      end_date: endDate,
+      building_ids: queryForm.buildings.join(','), // 逗号分隔的建筑 ID 列表
+      metric: 'electricity', // 默认检测用电量
+      dynamic_window: 24, // 24 小时窗口
+      dynamic_threshold: 2.5, // 2.5 倍标准差
+      trend_window: 6, // 6 个点趋势检测
+      min_trend_decline: 0.15 // 最小下降 15%
     });
-
-    const result = response.data?.data;
-    const successCount = result?.resolved_count || 0;
-    const failedCount = result?.failed_ids?.length || 0;
-
-    if (successCount > 0) {
-      message.success(`成功解决 ${successCount} 条告警`);
+    
+    const generatedCount = response.data?.data?.generated_count || 0;
+    
+    if (generatedCount > 0) {
+      const severityDist = response.data?.data?.severity_distribution || {};
+      const methodDist = response.data?.data?.method_distribution || {};
+      
+      let messageDetail = `成功生成 ${generatedCount} 条真实告警\n`;
+      messageDetail += `动态基线：${methodDist.dynamic_baseline || 0} 条\n`;
+      messageDetail += `趋势下降：${methodDist.trend_decline || 0} 条\n`;
+      if (severityDist.critical > 0) messageDetail += `严重：${severityDist.critical} 条 `;
+      if (severityDist.high > 0) messageDetail += `警告：${severityDist.high} 条 `;
+      if (severityDist.medium > 0) messageDetail += `中等：${severityDist.medium} 条 `;
+      if (severityDist.low > 0) messageDetail += `提示：${severityDist.low} 条`;
+      
+      message.success(messageDetail);
+      
+      // 生成成功后自动刷新当前查询结果
+      handleQuery(true);
+    } else {
+      message.warning("没有检测到异常数据，无法生成告警");
     }
-
-    if (failedCount > 0) {
-      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
-    }
-
-    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
   } catch (error: any) {
-    message.error("批量解决失败：" + (error.message || "未知错误"));
+    message.error("生成告警失败：" + (error.message || "未知错误"));
+  } finally {
+    generateLoading.value = false;
   }
 };
 
@@ -950,6 +1157,11 @@ onMounted(async () => {
 
 .detail-section {
   margin-bottom: 16px;
+}
+
+.resolve-modal-hint {
+  color: var(--n-text-color-2);
+  line-height: 1.7;
 }
 
 .bottom-bar {

@@ -31,8 +31,11 @@ class RAGPipeline:
 
     def retrieve(self, query: str, k: int = 5) -> List[Dict]:
         """检索相关文档（真正的语义检索）"""
-        if not self.initialized:
+        has_documents = bool(getattr(self.vector_db, 'documents', []))
+        if not self.initialized and not has_documents:
             return []
+        if has_documents:
+            self.initialized = True
         return self.vector_db.search(query, k)
 
     def generate_prompt(self, query: str, contexts: List[Dict]) -> str:

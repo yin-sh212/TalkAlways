@@ -334,6 +334,7 @@ interface UploadFileRecord {
 
 const message = useMessage();
 const dialog = useDialog();
+const route = useRoute();
 
 // 搜索和筛选
 const searchQuery = ref("");
@@ -454,6 +455,28 @@ const showDocumentDetail = async (doc: Document) => {
     currentDoc.value = doc;
   } finally {
     loadingDetail.value = false; // 加载完成
+  }
+};
+
+const openDocumentById = async (docId: number) => {
+  if (!docId) return;
+
+  showDetailModal.value = true;
+  loadingDetail.value = true;
+
+  try {
+    const response = await getKnowledgeDetail(docId);
+    if (response.data.code === 200 && response.data.data) {
+      currentDoc.value = response.data.data as Document;
+    } else {
+      throw new Error(response.data.message || "获取文档详情失败");
+    }
+  } catch (error) {
+    console.error("获取文档详情失败:", error);
+    message.error("获取文档详情失败");
+    showDetailModal.value = false;
+  } finally {
+    loadingDetail.value = false;
   }
 };
 
@@ -719,8 +742,13 @@ watch([selectedCategory, selectedTag, searchQuery], () => {
 });
 
 // 组件挂载时加载数据
-onMounted(() => {
-  fetchDocuments();
+onMounted(async () => {
+  await fetchDocuments();
+
+  const docId = Number(route.query.docId || 0);
+  if (docId > 0) {
+    await openDocumentById(docId);
+  }
 });
 </script>
 

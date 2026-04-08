@@ -250,6 +250,7 @@ export interface AlarmListItem {
 // 批量操作请求
 export interface BatchOperationRequest {
   alarm_ids: number[]
+  resolution?: string
 }
 
 // 批量操作响应
@@ -259,6 +260,7 @@ export interface BatchOperationResponse {
   data: {
     confirmed_count?: number
     resolved_count?: number
+    knowledge_synced_count?: number
     failed_ids: number[]
   }
 }

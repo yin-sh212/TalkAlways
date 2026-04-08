@@ -124,6 +124,7 @@
         :tableData="tableData"
         :loading="tableLoading"
         :pagination="pagination"
+        :resolvingAlarmIds="resolvingAlarmIds"
         @update="handleTableUpdate"
         @acknowledge="handleAcknowledge"
         @resolve="handleResolve"
@@ -131,6 +132,43 @@
         @batch-resolve="handleBatchResolve"
       />
     </div>
+
+    <n-modal
+      v-model:show="showResolveModal"
+      preset="card"
+      title="填写解决办法"
+      style="width: 560px"
+      :mask-closable="!resolveSubmitting"
+      :closable="!resolveSubmitting"
+    >
+      <n-space vertical :size="12">
+        <div class="resolve-modal-hint">
+          将解决 {{ resolveForm.alarmIds.length }} 条告警。填写的解决办法会写回告警记录，并在解决后沉淀到知识库。
+        </div>
+        <n-input
+          v-model:value="resolveForm.resolution"
+          type="textarea"
+          placeholder="请输入排查过程、处理措施和最终结论"
+          :rows="6"
+          maxlength="1000"
+          show-count
+        />
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="closeResolveModal" :disabled="resolveSubmitting">
+            取消
+          </n-button>
+          <n-button
+            type="success"
+            @click="submitResolve"
+            :loading="resolveSubmitting"
+          >
+            确认解决并入库
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
 
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
@@ -196,6 +234,9 @@ const metricsLoading = ref(false);
 const chartLoading = ref(false);
 const exportLoading = ref(false);
 const generateLoading = ref(false);
+const showResolveModal = ref(false);
+const resolveSubmitting = ref(false);
+const resolvingAlarmIds = ref<string[]>([]);
 
 // 查询表单
 const queryFormRef = ref<any>(null);
@@ -205,6 +246,11 @@ const queryForm = reactive({
   severity: [] as string[],
   alarmType: [] as string[],
   timeRange: null as [number, number] | null,
+});
+
+const resolveForm = reactive({
+  alarmIds: [] as number[],
+  resolution: "",
 });
 
 // 验证规则
@@ -714,18 +760,122 @@ const handleAcknowledge = async (alarmId: string) => {
   }
 };
 
-// 解决告警 - 对接真实接口
-const handleResolve = async (alarmId: string) => {
-  try {
-    // 使用新接口的单个解决（通过批量接口实现）
-    await alarmApi.batchResolveAlarms({
-      alarm_ids: [parseInt(alarmId) || 0],
-    });
-    message.success("告警已解决");
-    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
-  } catch (error: any) {
-    message.error("解决失败：" + (error.message || "未知错误"));
+const resetResolveModal = () => {
+  showResolveModal.value = false;
+  resolveForm.alarmIds = [];
+  resolveForm.resolution = "";
+};
+
+const closeResolveModal = () => {
+  if (resolveSubmitting.value) {
+    return;
   }
+
+  resetResolveModal();
+};
+
+const appendResolvingAlarmIds = (alarmIds: string[]) => {
+  const merged = new Set([
+    ...resolvingAlarmIds.value,
+    ...alarmIds.map((id) => String(id)),
+  ]);
+  resolvingAlarmIds.value = Array.from(merged);
+};
+
+const removeResolvingAlarmIds = (alarmIds: string[]) => {
+  const pending = new Set(alarmIds.map((id) => String(id)));
+  resolvingAlarmIds.value = resolvingAlarmIds.value.filter(
+    (id) => !pending.has(String(id)),
+  );
+};
+
+const openResolveModal = (alarmIds: string[]) => {
+  const ids = alarmIds
+    .map((id) => parseInt(id) || 0)
+    .filter((id) => id !== 0);
+  const pendingIds = ids.filter(
+    (id) => !resolvingAlarmIds.value.includes(String(id)),
+  );
+
+  if (pendingIds.length === 0) {
+    message.warning("所选告警正在后台处理中");
+    return;
+  }
+
+  resolveForm.alarmIds = pendingIds;
+  resolveForm.resolution = "";
+  showResolveModal.value = true;
+};
+
+const resolveInBackground = async (alarmIds: string[], resolution: string) => {
+  try {
+    const response = await alarmApi.batchResolveAlarms({
+      alarm_ids: alarmIds.map((id) => parseInt(id) || 0),
+      resolution,
+    });
+
+    const result = response.data?.data;
+    const successCount = result?.resolved_count || 0;
+    const failedCount = result?.failed_ids?.length || 0;
+    const knowledgeSyncedCount = result?.knowledge_synced_count || 0;
+
+    if (successCount > 0) {
+      const knowledgeText =
+        knowledgeSyncedCount > 0 ? `，已沉淀 ${knowledgeSyncedCount} 条知识` : "";
+      message.success(`成功解决 ${successCount} 条告警${knowledgeText}`);
+    }
+
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
+    }
+
+    await handleQuery(true);
+  } catch (error: any) {
+    message.error(
+      "解决失败：" +
+        (error.response?.data?.message || error.message || "未知错误"),
+    );
+  } finally {
+    removeResolvingAlarmIds(alarmIds);
+  }
+};
+
+const submitResolve = async () => {
+  const resolution = resolveForm.resolution.trim();
+
+  if (resolveForm.alarmIds.length === 0) {
+    message.warning("没有可解决的告警");
+    closeResolveModal();
+    return;
+  }
+
+  if (!resolution) {
+    message.warning("请先填写解决办法");
+    return;
+  }
+
+  try {
+    resolveSubmitting.value = true;
+    const alarmIds = resolveForm.alarmIds.map((id) => String(id));
+
+    appendResolvingAlarmIds(alarmIds);
+    resetResolveModal();
+    resolveSubmitting.value = false;
+    message.info("已提交解决请求，后台处理中");
+
+    void resolveInBackground(alarmIds, resolution);
+  } catch (error: any) {
+    resolveSubmitting.value = false;
+    message.error(
+      "解决失败：" +
+        (error.response?.data?.message || error.message || "未知错误"),
+    );
+  }
+};
+
+// 解决告警 - 打开解决弹窗
+const handleResolve = (alarmId: string) => {
+  openResolveModal([alarmId]);
 };
 
 // 批量确认告警 - 新增
@@ -762,38 +912,9 @@ const handleBatchAcknowledge = async (alarmIds: string[]) => {
   }
 };
 
-// 批量解决告警 - 新增
-const handleBatchResolve = async (alarmIds: string[]) => {
-  try {
-    const ids = alarmIds
-      .map((id) => parseInt(id) || 0)
-      .filter((id) => id !== 0);
-
-    if (ids.length === 0) {
-      message.warning("没有有效的告警 ID");
-      return;
-    }
-
-    const response = await alarmApi.batchResolveAlarms({
-      alarm_ids: ids,
-    });
-
-    const result = response.data?.data;
-    const successCount = result?.resolved_count || 0;
-    const failedCount = result?.failed_ids?.length || 0;
-
-    if (successCount > 0) {
-      message.success(`成功解决 ${successCount} 条告警`);
-    }
-
-    if (failedCount > 0) {
-      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
-    }
-
-    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
-  } catch (error: any) {
-    message.error("批量解决失败：" + (error.message || "未知错误"));
-  }
+// 批量解决告警 - 打开统一解决弹窗
+const handleBatchResolve = (alarmIds: string[]) => {
+  openResolveModal(alarmIds);
 };
 
 // 从异常数据生成告警（使用真实算法）
@@ -1042,6 +1163,11 @@ onMounted(async () => {
 
 .detail-section {
   margin-bottom: 16px;
+}
+
+.resolve-modal-hint {
+  color: var(--n-text-color-2);
+  line-height: 1.7;
 }
 
 .bottom-bar {

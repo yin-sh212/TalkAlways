@@ -1,6 +1,5 @@
 import type { ChartAnalysisRequest, SSEMessage } from '@/types/chart-analysis'
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3000'
+import { resolveApiUrl } from './base'
 
 /**
  * 使用 SSE 流式分析图表
@@ -32,7 +31,7 @@ export const analyzeChartWithAIStream = (
         reject(new Error('请求超时，请重试'))
       }, 60000) // 60 秒超时
       
-      const response = await fetch(`${API_BASE_URL}/api/chart/analyze/stream`, {
+      const response = await fetch(resolveApiUrl('/chart/analyze/stream'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

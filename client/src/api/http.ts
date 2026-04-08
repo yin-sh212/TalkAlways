@@ -1,21 +1,11 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosResponse } from 'axios'
 import type { ApiResponse } from '@/types/user'
-
-// 获取 API 基础地址
-const getBaseURL = () => {
-  // 开发环境使用相对路径,通过 Vite 代理转发
-  if ((import.meta as any).env.DEV) {
-    return '/api'
-  }
-  // 生产环境使用完整 URL
-  const apiUrl = (import.meta as any).env.VITE_API_URL || '/api'
-  return `${apiUrl}`
-}
+import { getApiBaseURL } from './base'
 
 // 创建 axios 实例
 const http: AxiosInstance = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: getApiBaseURL(),
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'

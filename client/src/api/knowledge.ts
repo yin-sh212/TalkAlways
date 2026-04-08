@@ -1,6 +1,5 @@
 import axios from 'axios'
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3000'
+import { resolveApiUrl } from './base'
 
 export interface KnowledgeDocument {
   id: number | string
@@ -32,12 +31,12 @@ export interface SaveToKnowledgeRequest {
 export const saveToKnowledge = async (data: SaveToKnowledgeRequest): Promise<{ success: boolean; documentId: number }> => {
   try {
     // 先调用 create 接口保存
-    const response = await axios.post(`${API_BASE_URL}/api/knowledge/create`, data)
+    const response = await axios.post(resolveApiUrl('/knowledge/create'), data)
     
     if (response.data.code === 200) {
       // 后端没有返回 ID，我们需要查询最新的一条记录
       // 通过标题和创建时间获取刚创建的文档 ID
-      const listResponse = await axios.get(`${API_BASE_URL}/api/knowledge/list`, {
+      const listResponse = await axios.get(resolveApiUrl('/knowledge/list'), {
         params: {
           search: data.title,
           page: 1,
@@ -77,7 +76,7 @@ export const getKnowledgeDocuments = async (params?: {
   page_size?: number
 }): Promise<KnowledgeDocument[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/knowledge/list`, { params })
+    const response = await axios.get(resolveApiUrl('/knowledge/list'), { params })
     
     if (response.data.code === 200) {
       return response.data.data.list || []
@@ -95,7 +94,7 @@ export const getKnowledgeDocuments = async (params?: {
  */
 export const getDocumentDetail = async (docId: number | string): Promise<KnowledgeDocument | null> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/knowledge/${docId}`)
+    const response = await axios.get(resolveApiUrl(`/knowledge/${docId}`))
     
     if (response.data.code === 200) {
       return response.data.data

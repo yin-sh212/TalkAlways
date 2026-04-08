@@ -43,6 +43,7 @@ import EnergyCharts from '@/components/overview/EnergyCharts.vue'
 import KpiCards from '@/components/overview/KpiCards.vue'
 import { getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings } from '@/api/query'
+import { resolveApiUrl } from '@/api/base'
 
 // 声明全局 Window 类型
 declare global {
@@ -391,7 +392,7 @@ const connectToRealtimeStream = () => {
       batch_hours: '1' // 每次推送 1 小时的数据，每隔 1 小时推送一次
     })
     
-    const url = `http://localhost:3000/api/realtime/stream?${params}`
+    const url = `${resolveApiUrl('/realtime/stream')}?${params}`
     
     eventSource.value = new EventSource(url)
     isRealtimeConnected.value = true

@@ -8,6 +8,7 @@ import type {
   ChatHistory
 } from '@/types/chat'
 import type { ApiResponse } from '@/types/user'
+import { resolveApiUrl } from './base'
 
 // 配置机器学习模型 - 使用 MLModelConfig 类型
 export const configureMLModel = (config: MLModelConfig) => {
@@ -29,7 +30,7 @@ export const askQuestion = (query: string) => {
 export const askQuestionStream = (query: string, onChunk: (chunk: string) => void) => {
   const controller = new AbortController()
   
-  const fetchPromise = fetch('http://localhost:3000/api/chat/ask/stream', {
+  const fetchPromise = fetch(resolveApiUrl('/chat/ask/stream'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

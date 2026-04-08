@@ -126,6 +126,7 @@
 <script setup>
 import { ref, reactive, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { resolveApiUrl } from '@/api/base'
 
 const isPlaying = ref(false)
 const currentTime = ref(null)
@@ -162,7 +163,7 @@ const startPlayback = async () => {
     
     // 连接到 SSE 流
     eventSource = new EventSource(
-      `http://localhost:3000/api/realtime/stream?${params}`
+      `${resolveApiUrl('/realtime/stream')}?${params}`
     )
     
     eventSource.onmessage = (event) => {

@@ -1,0 +1,103 @@
+{
+  "gateway_id": "building-edge-01",
+  "site_id": "eagle-edu",
+  "output": {
+    "batch_size": 20,
+    "flush_interval_s": 2.0,
+    "stdout_enabled": true,
+    "http": {
+      "enabled": false,
+      "endpoint": "https://your-ecs-host/api/iot/ingest/batch",
+      "auth_token": "replace-me",
+      "timeout_s": 5.0,
+      "verify_tls": true
+    },
+    "spool": {
+      "enabled": true,
+      "path": "data/spool.db",
+      "retry_interval_s": 5.0,
+      "retry_batch_size": 20
+    }
+  },
+  "bacnet": {
+    "enabled": true,
+    "local_address": null,
+    "local_device_instance": 599001,
+    "local_device_name": "SemanticEdgeGateway",
+    "vendor_identifier": 999,
+    "network": 0,
+    "foreign": null,
+    "ttl": 300
+  },
+  "devices": [
+    {
+      "device_id": "modbus-meter-01",
+      "name": "Main Power Meter",
+      "building_id": "Eagle_education_Cassie",
+      "device_type": "power_meter",
+      "protocol": "modbus_tcp",
+      "host": "192.168.10.20",
+      "port": 502,
+      "enabled": false,
+      "poll_interval_ms": 5000,
+      "timeout_s": 3.0,
+      "unit_id": 1,
+      "address_style": "reference",
+      "retry_policy": {
+        "base_delay_s": 1.0,
+        "max_delay_s": 30.0,
+        "multiplier": 2.0
+      },
+      "points": [
+        {
+          "point_id": "main_power_kw",
+          "tag": "Eagle_Edu_MainPower",
+          "standard_tag": "power",
+          "unit": "kW",
+          "scale": 0.1,
+          "offset": 0.0,
+          "deadband": 0.2,
+          "register_type": "holding",
+          "address": 40001,
+          "data_type": "float32",
+          "register_count": 2,
+          "byte_order": "big",
+          "word_order": "big"
+        }
+      ]
+    },
+    {
+      "device_id": "bacnet-ahu-01",
+      "name": "AHU Controller",
+      "building_id": "Eagle_education_Cassie",
+      "device_type": "ahu",
+      "protocol": "bacnet_ip",
+      "host": "192.168.10.40",
+      "port": 47808,
+      "enabled": false,
+      "poll_interval_ms": 5000,
+      "timeout_s": 3.0,
+      "retry_policy": {
+        "base_delay_s": 1.0,
+        "max_delay_s": 30.0,
+        "multiplier": 2.0
+      },
+      "points": [
+        {
+          "point_id": "ahu_supply_temp",
+          "tag": "Eagle_Edu_AHU01_SupplyTemp",
+          "standard_tag": "temperature",
+          "unit": "degC",
+          "scale": 1.0,
+          "offset": 0.0,
+          "deadband": 0.2,
+          "object_type": "analog-value",
+          "object_instance": 1,
+          "property_identifier": "present-value",
+          "array_index": null
+        }
+      ]
+    }
+  ]
+}
+

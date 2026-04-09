@@ -27,6 +27,7 @@ from app.api import floor_api
 from app.api import space_api
 from app.api import meter_binding_api
 from app.api import space_energy_api
+from app.api import iot_ingest_api
 
 from datetime import datetime
 import os
@@ -104,6 +105,7 @@ def custom_openapi():
         "报表导出": "CSV/Excel/PDF格式导出",
         "数据管理": "数据上传和模板下载",
         "认证": "用户登录、注册、信息查询",
+        "物联网接入": "接收边缘采集网关的批量上报数据",
     }
 
     for tag in openapi_schema.get("tags", []):
@@ -172,6 +174,7 @@ app.include_router(floor_api.router)
 app.include_router(space_api.router)
 app.include_router(meter_binding_api.router)
 app.include_router(space_energy_api.router)
+app.include_router(iot_ingest_api.router)
 
 # ======================================
 # 接口

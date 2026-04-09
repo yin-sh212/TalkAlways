@@ -250,6 +250,7 @@ export interface AlarmListItem {
 // 批量操作请求
 export interface BatchOperationRequest {
   alarm_ids: number[]
+  resolution?: string
 }
 
 // 批量操作响应
@@ -259,6 +260,7 @@ export interface BatchOperationResponse {
   data: {
     confirmed_count?: number
     resolved_count?: number
+    knowledge_synced_count?: number
     failed_ids: number[]
   }
 }
@@ -276,6 +278,26 @@ export const getAlarmLevels = () => {
 // 获取告警列表 - 使用 AlarmListParams 和 AlarmListResponse 类型
 export const getAlarmList = (params?: AlarmListParams) => {
   return http.get<AlarmListResponse>('/alarm/list', { params })
+}
+
+// 获取告警统计指标
+export interface AlarmStatsResponse {
+  code: number
+  message: string
+  data: {
+    totalAlarms: number
+    unresolvedCount: number
+    criticalCount: number
+    acknowledgedCount: number
+  }
+}
+
+export const getAlarmStats = (params?: {
+  building_id?: string
+  start_date?: string
+  end_date?: string
+}) => {
+  return http.get<AlarmStatsResponse>('/alarm/stats', { params })
 }
 
 // 批量确认告警 - 使用 BatchOperationRequest 和 BatchOperationResponse 类型

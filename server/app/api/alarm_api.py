@@ -1,10 +1,12 @@
 # app/api/alarm_api.py
 import json
+import re
 from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from app.database.db import Database
 from app.services.anomaly_detector import detect_combined_alarm
+from app.services.knowledge_sync import save_knowledge_document, search_knowledge_documents
 from datetime import datetime
 
 router = APIRouter(prefix="/api/alarm", tags=["告警管理"])
@@ -15,6 +17,7 @@ router = APIRouter(prefix="/api/alarm", tags=["告警管理"])
 class AlarmBatchRequest(BaseModel):
     """批量操作请求"""
     alarm_ids: List[int]
+    resolution: Optional[str] = None
 
 
 class AlarmResponse(BaseModel):
@@ -30,6 +33,177 @@ class AlarmResponse(BaseModel):
     value: Optional[float]
     threshold: Optional[float]
     solution: Optional[str]
+
+
+def get_default_alarm_solution(alarm_type: str) -> str:
+    solution_map = {
+        "dynamic_baseline": "1. 对比近 24 小时负荷曲线\n2. 检查控制参数是否偏移\n3. 排查短时异常启停设备",
+        "trend_decline": "1. 检查设备效率和关键部件磨损\n2. 对比历史同工况数据\n3. 评估是否需要保养或更换部件",
+        "energy": "1. 检查空调系统运行参数\n2. 核对高负荷时段运行策略\n3. 排查异常能耗设备",
+        "equipment": "1. 查看设备运行状态和告警代码\n2. 排查故障部件\n3. 结合现场巡检确认处理方式",
+        "environment": "1. 校验环境传感器数据\n2. 对比同区域监测点\n3. 检查采集链路是否异常",
+    }
+    return solution_map.get(
+        alarm_type,
+        "1. 核对告警触发条件\n2. 检查相关设备和采集链路\n3. 记录处理结果并复盘"
+    )
+
+
+async def prepare_alarm_analysis_context(alarm: Dict[str, Any]) -> Dict[str, Any]:
+    building_id = alarm["building_id"]
+    start_time = alarm["start_time"]
+
+    env_sql = """
+        SELECT 
+            timestamp,
+            electricity,
+            ambient_temp,
+            pressure,
+            cooling_load,
+            heating_load
+        FROM energy_consumption 
+        WHERE building_id = %s 
+            AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 6 HOUR) AND DATE_ADD(%s, INTERVAL 6 HOUR)
+        ORDER BY timestamp
+    """
+    env_data = await Database.fetch_all(env_sql, (building_id, start_time, start_time))
+
+    normal_period_sql = """
+        SELECT 
+            AVG(electricity) as avg_electricity,
+            AVG(ambient_temp) as avg_temp,
+            AVG(cooling_load) as avg_cooling,
+            AVG(pressure) as avg_pressure
+        FROM energy_consumption 
+        WHERE building_id = %s 
+            AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 30 DAY) AND %s
+            AND is_anomaly = 0
+            AND HOUR(timestamp) = HOUR(%s)
+    """
+    normal_stats = await Database.fetch_one(normal_period_sql, (building_id, start_time, start_time, start_time))
+    alarm_point = next((e for e in env_data if e["timestamp"] == start_time), None)
+
+    return {
+        "alarm_info": {
+            "type": alarm["alarm_type"],
+            "level": alarm["alarm_level"],
+            "description": alarm["description"],
+            "start_time": str(start_time)
+        },
+        "current_data": alarm_point,
+        "normal_stats": normal_stats,
+        "environment_trend": env_data[:12]
+    }
+
+
+def extract_alarm_keywords(alarm_type: str, cause: str) -> List[str]:
+    base_keywords = {
+        "dynamic_baseline": ["动态基线", "能耗异常", "负荷波动"],
+        "trend_decline": ["趋势下降", "性能衰减", "设备老化"],
+        "energy": ["能耗异常", "节能", "空调系统"],
+        "equipment": ["设备故障", "维修", "巡检"],
+        "environment": ["环境监测", "传感器", "校准"],
+    }.get(alarm_type, ["告警处置", "故障复盘"])
+
+    extracted = re.findall(r"[\u4e00-\u9fffA-Za-z0-9_]{2,12}", cause or "")
+    return base_keywords + extracted[:5]
+
+
+async def archive_alarms_to_knowledge(alarm_ids: List[int], action: str) -> int:
+    if not alarm_ids:
+        return 0
+
+    placeholders = ",".join(["%s"] * len(alarm_ids))
+    alarms = await Database.fetch_all(
+        f"""
+        SELECT
+            id,
+            building_id,
+            meter_id,
+            alarm_type,
+            alarm_level,
+            description,
+            start_time,
+            end_time,
+            status,
+            value,
+            threshold,
+            solution
+        FROM alarms
+        WHERE id IN ({placeholders})
+        ORDER BY start_time DESC
+        """,
+        tuple(alarm_ids)
+    )
+
+    synced_count = 0
+    for alarm in alarms:
+        try:
+            analysis_result: Dict[str, Any] = {}
+            if action == "resolved":
+                try:
+                    analysis_context = await prepare_alarm_analysis_context(alarm)
+                    analysis_result = await analyze_with_ai(analysis_context)
+                except Exception as exc:
+                    print(f"⚠️ 告警 {alarm['id']} AI 整理失败，使用基础整理：{exc}")
+
+            solution = (
+                alarm.get("solution")
+                or analysis_result.get("quick_solution")
+                or get_default_alarm_solution(alarm.get("alarm_type", ""))
+            )
+            main_cause = analysis_result.get("main_cause") or alarm.get("description") or "告警已处理，建议结合现场记录复盘。"
+            top_factors = analysis_result.get("top_factors") or []
+
+            status_label = "已解决" if action == "resolved" else "已确认"
+            title = f"告警{status_label}复盘 #{alarm['id']} - {alarm['building_id']}"
+            summary = f"{alarm['building_id']} 的 {alarm['alarm_type']} 告警已{status_label}，建议纳入运维复盘知识。"
+            description = "\n".join([
+                f"告警编号：{alarm['id']}",
+                f"建筑：{alarm['building_id']}",
+                f"设备/测点：{alarm.get('meter_id') or '未记录'}",
+                f"告警类型：{alarm.get('alarm_type') or '未记录'}",
+                f"告警级别：{alarm.get('alarm_level') or '未记录'}",
+                f"触发时间：{alarm.get('start_time')}",
+                f"当前状态：{alarm.get('status')}",
+                f"告警描述：{alarm.get('description') or '无'}",
+                f"解决办法：{solution}",
+                f"根因整理：{main_cause}",
+            ])
+            if alarm.get("value") is not None:
+                description += f"\n触发值：{alarm['value']}"
+            if alarm.get("threshold") is not None:
+                description += f"\n阈值：{alarm['threshold']}"
+
+            notes = [
+                f"source_alarm_id={alarm['id']}",
+                f"archived_action={action}",
+                f"alarm_status={alarm.get('status')}",
+            ]
+            for factor in top_factors[:3]:
+                factor_name = factor.get("factor", "未知因素")
+                factor_desc = factor.get("description", "")
+                notes.append(f"影响因素：{factor_name} - {factor_desc}")
+
+            await save_knowledge_document({
+                "title": title,
+                "category": "case",
+                "tags": [
+                    "alarm-case",
+                    alarm.get("alarm_type") or "unknown",
+                    status_label,
+                    alarm.get("building_id") or "unknown-building",
+                ],
+                "summary": summary,
+                "description": description,
+                "solution": solution,
+                "notes": notes,
+            })
+            synced_count += 1
+        except Exception as exc:
+            print(f"⚠️ 告警 {alarm.get('id')} 落知识库失败：{exc}")
+
+    return synced_count
 
 
 # ========== 批量确认告警 ==========
@@ -77,13 +251,15 @@ async def batch_confirm_alarms(request: AlarmBatchRequest):
             await conn.release()
 
         print(f"更新影响行数: {affected_rows}")  # 调试用
+        knowledge_synced_count = 0
 
         return {
             "code": 200,
             "message": f"成功确认 {affected_rows} 条告警",
             "data": {
                 "confirmed_count": affected_rows,
-                "failed_ids": []  # 简化，不返回失败ID
+                "failed_ids": [],  # 简化，不返回失败ID
+                "knowledge_synced_count": knowledge_synced_count,
             }
         }
 
@@ -108,6 +284,14 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
             "data": None
         }
 
+    resolution = (request.resolution or "").strip()
+    if not resolution:
+        return {
+            "code": 400,
+            "message": "解决告警时必须填写解决办法",
+            "data": None
+        }
+
     try:
         placeholders = ','.join(['%s'] * len(request.alarm_ids))
 
@@ -122,29 +306,34 @@ async def batch_resolve_alarms(request: AlarmBatchRequest):
         # 2. 执行更新（所有告警都可以被解决，不管当前状态）
         update_sql = f"""
             UPDATE alarms 
-            SET status = 'resolved', end_time = NOW(), updated_at = NOW()
+            SET status = 'resolved', solution = %s, end_time = NOW(), updated_at = NOW()
             WHERE id IN ({placeholders})
         """
+        update_params = (resolution, *request.alarm_ids)
 
         pool = await Database.get_pool()
         conn = await pool.acquire()
         try:
             cursor_ctx = conn.cursor()
             async with cursor_ctx as cursor:
-                await cursor.execute(update_sql, request.alarm_ids)
+                await cursor.execute(update_sql, update_params)
                 affected_rows = cursor.rowcount
                 await conn.commit()
         finally:
             await conn.release()
 
         print(f"解决影响行数: {affected_rows}")  # 调试用
+        knowledge_synced_count = 0
+        if affected_rows > 0:
+            knowledge_synced_count = await archive_alarms_to_knowledge(request.alarm_ids, "resolved")
 
         return {
             "code": 200,
             "message": f"成功解决 {affected_rows} 条告警",
             "data": {
                 "resolved_count": affected_rows,
-                "failed_ids": []
+                "failed_ids": [],
+                "knowledge_synced_count": knowledge_synced_count,
             }
         }
 
@@ -317,7 +506,7 @@ async def generate_real_alarms(
             # 查询所有建筑
             buildings_sql = "SELECT DISTINCT building_id FROM energy_consumption"
             buildings_result = await Database.fetch_all(buildings_sql)
-            target_buildings = [b[0] for b in buildings_result]
+            target_buildings = [b['building_id'] for b in buildings_result]
         
         print(f"🏢 待检测建筑数量：{len(target_buildings)}")
 
@@ -352,11 +541,11 @@ async def generate_real_alarms(
                 print(f"⚠️  {building_id}: 数据量不足 ({len(data)} 条)，跳过")
                 continue
             
-            # 提取指定指标的数据
-            values = [row[1] for row in data if row[1] is not None] if metric == 'electricity' else \
-                     [row[2] for row in data if row[2] is not None] if metric == 'cooling_load' else \
-                     [row[3] for row in data if row[3] is not None]
-            timestamps = [str(row[0]) for row in data if (row[1] if metric == 'electricity' else row[2] if metric == 'cooling_load' else row[3]) is not None]
+            # 提取指定指标的数据 - 使用字段名而非索引
+            values = [row['electricity'] for row in data if row['electricity'] is not None] if metric == 'electricity' else \
+                     [row['cooling_load'] for row in data if row['cooling_load'] is not None] if metric == 'cooling_load' else \
+                     [row['heating_load'] for row in data if row['heating_load'] is not None]
+            timestamps = [str(row['timestamp']) for row in data if (row['electricity'] if metric == 'electricity' else row['cooling_load'] if metric == 'cooling_load' else row['heating_load']) is not None]
             
             if len(values) < 10:
                 print(f"⚠️  {building_id}: 有效数据不足 ({len(values)} 条)，跳过")
@@ -379,10 +568,11 @@ async def generate_real_alarms(
                 "medium": {"level": 2, "name": "警告"},  # 合并到警告
                 "low": {"level": 3, "name": "提示"}
             }
-            severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
 
             # 插入动态基线告警
             for anomaly in detection_result['baseline_anomalies']:
+                # 根据当前告警的严重程度获取级别
+                severity_info = severity_map.get(anomaly['severity'], {"level": 3, "name": "提示"})
                 alarm_level = severity_info["level"]
                 alarm_type_str = "过高" if anomaly['type'] == "过高" else "过低"
                 description = f"{metric} {alarm_type_str}，值为{anomaly['value']:.2f}，超出动态基线范围 [{anomaly['lower_bound']:.2f}, {anomaly['upper_bound']:.2f}]"
@@ -482,17 +672,93 @@ async def generate_real_alarms(
         }
 
 
+# ========== 获取告警统计指标 ==========
+
+@router.get("/stats")
+async def get_alarm_stats(
+        building_id: Optional[str] = Query(None, description="建筑编号，支持逗号分隔多个ID"),
+        start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
+        end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）")
+):
+    """获取告警统计指标（总数、未解决、紧急、已确认）"""
+    try:
+        # 构建查询条件
+        conditions = ["1=1"]
+        params = []
+        
+        # 支持多建筑查询
+        if building_id:
+            building_ids = [bid.strip() for bid in building_id.split(',') if bid.strip()]
+            if len(building_ids) == 1:
+                conditions.append("building_id = %s")
+                params.append(building_ids[0])
+            elif len(building_ids) > 1:
+                placeholders = ','.join(['%s'] * len(building_ids))
+                conditions.append(f"building_id IN ({placeholders})")
+                params.extend(building_ids)
+        
+        # 时间范围
+        if start_date:
+            conditions.append("DATE(start_time) >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(start_time) <= %s")
+            params.append(end_date)
+        
+        where_clause = " AND ".join(conditions)
+        query_params = tuple(params) if params else None
+        
+        # 查询总告警数
+        total_sql = f"SELECT COUNT(*) as total FROM alarms WHERE {where_clause}"
+        total_result = await Database.fetch_one(total_sql, query_params)
+        totalAlarms = total_result['total'] if total_result else 0
+        
+        # 查询未解决告警（pending + confirmed）
+        unresolved_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND status IN ('pending', 'confirmed')"
+        unresolved_result = await Database.fetch_one(unresolved_sql, query_params)
+        unresolvedCount = unresolved_result['count'] if unresolved_result else 0
+        
+        # 查询紧急告警（alarm_level <= 2）
+        critical_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND alarm_level <= 2"
+        critical_result = await Database.fetch_one(critical_sql, query_params)
+        criticalCount = critical_result['count'] if critical_result else 0
+        
+        # 查询已确认告警（confirmed + resolved）
+        acknowledged_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND status IN ('confirmed', 'resolved')"
+        acknowledged_result = await Database.fetch_one(acknowledged_sql, query_params)
+        acknowledgedCount = acknowledged_result['count'] if acknowledged_result else 0
+        
+        return {
+            "code": 200,
+            "message": "成功",
+            "data": {
+                "totalAlarms": totalAlarms,
+                "unresolvedCount": unresolvedCount,
+                "criticalCount": criticalCount,
+                "acknowledgedCount": acknowledgedCount
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ 查询告警统计失败: {e}")
+        return {
+            "code": 500,
+            "message": f"查询失败: {str(e)}",
+            "data": None
+        }
+
+
 # ========== 获取告警列表 ==========
 
 @router.get("/list")
 async def get_alarm_list(
         status: Optional[str] = Query(None, description="过滤状态：pending/confirmed/resolved"),
-        building_id: Optional[str] = Query(None, description="建筑编号"),
+        building_id: Optional[str] = Query(None, description="建筑编号，支持逗号分隔多个ID"),
         alarm_level: Optional[int] = Query(None, description="告警级别"),
         start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
         end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）"),
         page: int = Query(1, ge=1, description="页码"),
-        page_size: int = Query(20, ge=1, le=100, description="每页数量")
+        page_size: int = Query(10, ge=1, le=100, description="每页数量")
 ):
     """获取告警列表"""
     try:
@@ -503,9 +769,18 @@ async def get_alarm_list(
         if status:
             conditions.append("status = %s")
             params.append(status)
+        
+        # 支持多建筑查询（逗号分隔）
         if building_id:
-            conditions.append("building_id = %s")
-            params.append(building_id)
+            building_ids = [bid.strip() for bid in building_id.split(',') if bid.strip()]
+            if len(building_ids) == 1:
+                conditions.append("building_id = %s")
+                params.append(building_ids[0])
+            elif len(building_ids) > 1:
+                placeholders = ','.join(['%s'] * len(building_ids))
+                conditions.append(f"building_id IN ({placeholders})")
+                params.extend(building_ids)
+        
         if alarm_level:
             conditions.append("alarm_level = %s")
             params.append(alarm_level)
@@ -830,56 +1105,14 @@ async def analyze_alarm(alarm_id: int):
             }
 
         building_id = alarm['building_id']
-        start_time = alarm['start_time']
-
-        # 2. 查询告警发生时的环境数据
-        env_sql = """
-            SELECT 
-                timestamp,
-                electricity,
-                ambient_temp,
-                pressure,
-                cooling_load,
-                heating_load
-            FROM energy_consumption 
-            WHERE building_id = %s 
-                AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 6 HOUR) AND DATE_ADD(%s, INTERVAL 6 HOUR)
-            ORDER BY timestamp
-        """
-        env_data = await Database.fetch_all(env_sql, (building_id, start_time, start_time))
-
-        # 3. 计算对比数据
-        normal_period_sql = """
-            SELECT 
-                AVG(electricity) as avg_electricity,
-                AVG(ambient_temp) as avg_temp,
-                AVG(cooling_load) as avg_cooling,
-                AVG(pressure) as avg_pressure
-            FROM energy_consumption 
-            WHERE building_id = %s 
-                AND timestamp BETWEEN DATE_SUB(%s, INTERVAL 30 DAY) AND %s
-                AND is_anomaly = 0
-                AND HOUR(timestamp) = HOUR(%s)
-        """
-        normal_stats = await Database.fetch_one(normal_period_sql, (building_id, start_time, start_time, start_time))
-
-        # 4. 准备分析数据
-        alarm_point = next((e for e in env_data if e['timestamp'] == start_time), None)
-        
-        data_context = {
-            "alarm_info": {
-                "type": alarm['alarm_type'],
-                "level": alarm['alarm_level'],
-                "description": alarm['description'],
-                "start_time": str(start_time)
-            },
-            "current_data": alarm_point,
-            "normal_stats": normal_stats,
-            "environment_trend": env_data[:12]  # 前后 6 小时的数据
-        }
+        data_context = await prepare_alarm_analysis_context(alarm)
 
         # 5. 调用 AI Agent 进行智能分析
         ai_analysis = await analyze_with_ai(data_context)
+        related_knowledge = await search_related_knowledge(
+            alarm['alarm_type'],
+            ai_analysis.get('main_cause', alarm.get('description', ''))
+        )
 
         # 6. 返回 AI 分析结果
         return {
@@ -895,7 +1128,7 @@ async def analyze_alarm(alarm_id: int):
                 "main_cause": ai_analysis.get('main_cause', '分析中...'),
                 "top_factors": ai_analysis.get('top_factors', []),
                 "quick_solution": ai_analysis.get('quick_solution', '建议进一步分析'),
-                "related_knowledge": ai_analysis.get('related_knowledge', [])
+                "related_knowledge": related_knowledge
             }
         }
 
@@ -1199,28 +1432,11 @@ async def batch_analyze_alarms(request: BatchAnalysisRequest):
 
 async def search_related_knowledge(alarm_type: str, cause: str) -> List[Dict]:
     """
-    搜索相关知识库条目（需要接入 RAG）
+    搜索相关知识库条目
     """
     try:
-        # 这里可以调用你的 RAG 服务
-        # 暂时返回模拟数据
-        knowledge_base = {
-            "energy": [
-                {"title": "空调系统节能运行规范", "url": "/knowledge/1"},
-                {"title": "能耗异常排查指南", "url": "/knowledge/2"},
-                {"title": "制冷系统维护手册", "url": "/knowledge/3"}
-            ],
-            "equipment": [
-                {"title": "设备故障代码对照表", "url": "/knowledge/4"},
-                {"title": "冷水机组维修手册", "url": "/knowledge/5"}
-            ],
-            "environment": [
-                {"title": "环境监测规范", "url": "/knowledge/6"},
-                {"title": "传感器校准指南", "url": "/knowledge/7"}
-            ]
-        }
-
-        return knowledge_base.get(alarm_type, [])
+        keywords = extract_alarm_keywords(alarm_type, cause)
+        return await search_knowledge_documents(keywords, limit=5)
 
     except Exception as e:
         print(f"知识库搜索失败：{e}")
@@ -1416,3 +1632,80 @@ async def detect_real_alarms(request: AlarmDetectionRequest):
             "message": f"检测失败：{str(e)}",
             "data": None
         }
+
+
+@router.get("/space/active-alarms")
+async def get_space_active_alarms(floor_id: str = Query(..., description="楼层ID")):
+    """获取楼层下所有空间的活跃告警,用于平面图告警联动"""
+    sql = """
+        SELECT 
+            smb.space_id,
+            a.id as alarm_id,
+            a.alarm_level,
+            a.alarm_type,
+            a.description,
+            a.start_time,
+            a.status
+        FROM space_meter_binding smb
+        INNER JOIN alarms a ON a.meter_id = smb.meter_id
+        WHERE smb.space_id IN (
+            SELECT id FROM spaces WHERE floor_id = %s
+        )
+        AND a.status IN ('pending', 'confirmed')
+        ORDER BY a.alarm_level DESC, a.start_time DESC
+    """
+    
+    alarms = await Database.fetch_all(sql, (floor_id,))
+    
+    # 按space_id分组
+    space_alarms = {}
+    for alarm in alarms:
+        space_id = alarm['space_id']
+        if space_id not in space_alarms:
+            space_alarms[space_id] = []
+        space_alarms[space_id].append(dict(alarm))
+    
+    return {
+        "code": 200,
+        "message": "成功",
+        "data": space_alarms
+    }
+
+
+@router.get("/floor/stats")
+async def get_floor_stats(floor_id: str = Query(..., description="楼层ID")):
+    """获取楼层统计数据"""
+    # 查询空间总数和高能耗数量
+    space_sql = """
+        SELECT 
+            COUNT(*) as total_spaces,
+            SUM(CASE WHEN energy_per_sqm > 5 THEN 1 ELSE 0 END) as high_energy_spaces,
+            SUM(CASE WHEN energy_per_sqm > 10 THEN 1 ELSE 0 END) as abnormal_spaces,
+            COALESCE(SUM(total_energy), 0) as total_energy
+        FROM spaces
+        WHERE floor_id = %s
+    """
+    space_stats = await Database.fetch_one(space_sql, (floor_id,))
+    
+    # 查询活跃告警数量
+    alarm_sql = """
+        SELECT COUNT(DISTINCT a.id) as active_alarms
+        FROM alarms a
+        INNER JOIN space_meter_binding smb ON smb.meter_id = a.meter_id
+        INNER JOIN spaces s ON s.id = smb.space_id
+        WHERE s.floor_id = %s
+        AND a.status IN ('pending', 'confirmed')
+    """
+    alarm_stats = await Database.fetch_one(alarm_sql, (floor_id,))
+    
+    return {
+        "code": 200,
+        "message": "成功",
+        "data": {
+            "total_spaces": space_stats['total_spaces'] if space_stats else 0,
+            "high_energy_spaces": space_stats['high_energy_spaces'] if space_stats else 0,
+            "abnormal_spaces": space_stats['abnormal_spaces'] if space_stats else 0,
+            "total_energy": round(space_stats['total_energy'], 2) if space_stats else 0,
+            "active_alarms": alarm_stats['active_alarms'] if alarm_stats else 0
+        }
+    }

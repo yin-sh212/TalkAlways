@@ -5,6 +5,7 @@ from app.database.db import Database
 from datetime import datetime
 from pydantic import BaseModel
 import json
+from app.services.knowledge_sync import save_knowledge_document
 
 router = APIRouter(prefix="/api/knowledge", tags=["知识库"])
 
@@ -32,28 +33,20 @@ class KnowledgeUpdate(BaseModel):
 @router.post("/create")
 async def create_knowledge(knowledge: KnowledgeCreate):
     """新增知识库条目"""
-    
-    sql = """
-        INSERT INTO knowledge_documents 
-        (title, category, tags, summary, description, solution, notes, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    
-    await Database.execute(sql, (
-        knowledge.title,
-        knowledge.category,
-        ','.join(knowledge.tags),
-        knowledge.summary,
-        knowledge.description,
-        knowledge.solution,
-        json.dumps(knowledge.notes, ensure_ascii=False),
-        datetime.now()
-    ))
-    
+    result = await save_knowledge_document({
+        "title": knowledge.title,
+        "category": knowledge.category,
+        "tags": knowledge.tags,
+        "summary": knowledge.summary,
+        "description": knowledge.description,
+        "solution": knowledge.solution,
+        "notes": knowledge.notes,
+    })
+
     return {
         "code": 200,
         "message": "知识条目创建成功",
-        "data": {"is_success": True}
+        "data": result
     }
 
 
@@ -226,4 +219,3 @@ async def delete_knowledge(knowledge_id: int):
         "message": "知识条目删除成功",
         "data": {"is_success": True}
     }
-

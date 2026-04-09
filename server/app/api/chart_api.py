@@ -115,13 +115,25 @@ async def get_trend_data(
 
 @router.get("/alarm-trend")
 async def get_alarm_trend_data(
-        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        building_id: str = Query(..., description="建筑编号，支持逗号分隔多个建筑"),
         start_date: Optional[str] = Query(default=None, description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
         end_date: str = Query(default="2016-08-15", description="截止日期，格式：YYYY-MM-DD，例如：2016-08-15"),
         days: Optional[int] = Query(default=None, ge=1, le=365, description="天数，可选，若未提供则根据 start_date 和 end_date 计算")
 ):
-    """获取告警趋势图数据（ECharts 格式）- 按时间统计各告警级别的数量"""
+    """获取告警趋势图数据（ECharts 格式）- 按时间统计各告警级别的数量（支持多建筑）"""
     try:
+        # 解析建筑 ID 列表
+        building_ids = [bid.strip() for bid in building_id.split(',') if bid.strip()]
+        
+        # 构建建筑查询条件
+        if len(building_ids) == 1:
+            building_condition = "building_id = %s"
+            building_params = [building_ids[0]]
+        else:
+            placeholders = ','.join(['%s'] * len(building_ids))
+            building_condition = f"building_id IN ({placeholders})"
+            building_params = building_ids
+        
         # 如果提供了 start_date，则根据 start_date 和 end_date 计算实际天数
         if start_date:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -156,20 +168,20 @@ async def get_alarm_trend_data(
                 categories.append(current_dt.strftime("%Y-%m-%d"))
                 current_dt += timedelta(days=1)
         
-        # 查询告警数量，按级别统计
+        # 查询告警数量，按级别统计（支持多建筑）
         sql = f"""
             SELECT 
                 {select_time},
                 alarm_level,
                 COUNT(*) as alarm_count
             FROM alarms
-            WHERE building_id = %s 
+            WHERE {building_condition}
                 AND DATE(start_time) BETWEEN %s AND %s
             GROUP BY {group_by}, alarm_level
             ORDER BY date ASC, alarm_level ASC
         """
 
-        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+        data = await Database.fetch_all(sql, (*building_params, start_date, end_date))
 
         # 初始化系列数据，所有时间点都初始化为 0
         series_data = {
@@ -365,46 +377,65 @@ async def get_comparison_data(
 
 @router.get("/distribution")
 async def get_alarm_distribution(
-        building_id: str = Query(..., description="建筑编号，如：Eagle_education_Cassie"),
+        building_id: str = Query(..., description="建筑编号，支持逗号分隔多个建筑"),
         start_date: str = Query(default="2016-08-14", description="开始日期，格式：YYYY-MM-DD"),
         end_date: str = Query(default="2016-08-15", description="结束日期，格式：YYYY-MM-DD")
 ):
-    """获取告警类型分布数据（饼图）- 按告警类型统计数量"""
+    """获取告警类型分布数据（饼图）- 按告警类型统计数量（支持多建筑）"""
     try:
+        # 解析建筑 ID 列表
+        building_ids = [bid.strip() for bid in building_id.split(',') if bid.strip()]
+        
+        # 构建建筑查询条件
+        if len(building_ids) == 1:
+            building_condition = "building_id = %s"
+            building_params = [building_ids[0]]
+        else:
+            placeholders = ','.join(['%s'] * len(building_ids))
+            building_condition = f"building_id IN ({placeholders})"
+            building_params = building_ids
+        
         # 按告警类型统计数量
-        sql = """
+        sql = f"""
             SELECT 
                 alarm_type,
                 COUNT(*) as count
             FROM alarms
-            WHERE building_id = %s 
+            WHERE {building_condition}
                 AND DATE(start_time) BETWEEN %s AND %s
             GROUP BY alarm_type
             ORDER BY count DESC
         """
         
-        data = await Database.fetch_all(sql, (building_id, start_date, end_date))
+        data = await Database.fetch_all(sql, (*building_params, start_date, end_date))
         
-        # 转换为饼图数据格式
-        result = []
+        # 转换为 ECharts 饼图格式
+        series_data = []
+        
+        type_names = {
+            'dynamic_baseline': '动态基线告警',
+            'trend_decline': '趋势下降告警',
+        }
+        
         for item in data:
             alarm_type = item['alarm_type'] or '未知类型'
             count = int(item['count']) if item['count'] else 0
             
-            # 根据告警类型设置名称
-            type_names = {
-                'dynamic_baseline': '动态基线告警',
-                'trend_decline': '趋势下降告警',
-            }
-            
-            result.append({
+            series_data.append({
                 "name": type_names.get(alarm_type, alarm_type),
                 "value": count
             })
         
         return {
             "code": 200,
-            "data": result
+            "data": {
+                "categories": [item["name"] for item in series_data],
+                "series": [{
+                    "name": "告警类型",
+                    "type": "pie",
+                    "data": series_data
+                }]
+            }
         }
     
     except Exception as e:
@@ -412,7 +443,7 @@ async def get_alarm_distribution(
         return {
             "code": 500,
             "message": f"获取告警分布失败：{str(e)}",
-            "data": []
+            "data": {"categories": [], "series": []}
         }
 
 

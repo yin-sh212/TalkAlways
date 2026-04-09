@@ -62,11 +62,17 @@ class RegisterRequest(BaseModel):
 
 
 def validate_phone(phone: str) -> bool:
+    """验证手机号格式"""
+    if not phone or not isinstance(phone, str):
+        return False
     pattern = r'^1[3-9]\d{9}$'
     return re.match(pattern, phone) is not None
 
 
 def validate_email(email: str) -> bool:
+    """验证邮箱格式"""
+    if not email or not isinstance(email, str):
+        return False
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
@@ -104,12 +110,21 @@ def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -
 
 
 async def get_current_user(authorization: str = Header(None)) -> Dict:
+    """获取当前用户信息"""
     if not authorization:
         raise HTTPException(status_code=401, detail="未提供认证信息")
     try:
-        scheme, token = authorization.split()
-        if scheme.lower() != "bearer":
-            raise HTTPException(status_code=401, detail="认证方案错误")
+        # 处理token格式，支持 "Bearer token" 或直接 "token"
+        parts = authorization.split()
+        if len(parts) == 2:
+            scheme, token = parts
+            if scheme.lower() != "bearer":
+                raise HTTPException(status_code=401, detail="认证方案错误")
+        elif len(parts) == 1:
+            token = parts[0]
+        else:
+            raise HTTPException(status_code=401, detail="认证信息格式错误")
+        
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
@@ -130,6 +145,8 @@ async def get_current_user(authorization: str = Header(None)) -> Dict:
         raise HTTPException(status_code=401, detail="token 已过期")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="无效的 token")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="认证信息格式错误")
 
 
 # ==================== 统一响应模型（扁平化结构） ====================
@@ -326,7 +343,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     }
 
 
-@router.post("/register", response_model=RegisterResponse, responses={
+@router.post("/register", responses={
     200: {
         "description": "注册成功",
         "content": {

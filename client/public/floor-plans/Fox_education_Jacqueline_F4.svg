@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 4</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间4A -->
+  <polygon points="20,50 181,50 181,162 20,162" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="100.5" y="106.0" font-size="12" text-anchor="middle" fill="#333">4A</text>
+  <!-- 房间4B -->
+  <polygon points="200,50 367,50 367,161 200,161" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="283.5" y="105.5" font-size="12" text-anchor="middle" fill="#333">4B</text>
+  <!-- 房间4C -->
+  <polygon points="380,50 551,50 551,172 380,172" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="465.5" y="111.0" font-size="12" text-anchor="middle" fill="#333">4C</text>
+  <!-- 房间4D -->
+  <polygon points="560,50 727,50 727,164 560,164" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="643.5" y="107.0" font-size="12" text-anchor="middle" fill="#333">4D</text>
+  <!-- 房间4E -->
+  <polygon points="20,180 188,180 188,300 20,300" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="104.0" y="240.0" font-size="12" text-anchor="middle" fill="#333">4E</text>
+  <!-- 房间4F -->
+  <polygon points="200,180 378,180 378,299 200,299" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="289.0" y="239.5" font-size="12" text-anchor="middle" fill="#333">4F</text>
+  <!-- 房间4G -->
+  <polygon points="380,180 553,180 553,303 380,303" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="466.5" y="241.5" font-size="12" text-anchor="middle" fill="#333">4G</text>
+  <!-- 房间4H -->
+  <polygon points="560,180 720,180 720,302 560,302" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="640.0" y="241.0" font-size="12" text-anchor="middle" fill="#333">4H</text>
+  <!-- 房间4I -->
+  <polygon points="20,310 195,310 195,426 20,426" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="107.5" y="368.0" font-size="12" text-anchor="middle" fill="#333">4I</text>
+  <!-- 房间4J -->
+  <polygon points="200,310 371,310 371,437 200,437" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="285.5" y="373.5" font-size="12" text-anchor="middle" fill="#333">4J</text>
+  <!-- 房间4K -->
+  <polygon points="380,310 548,310 548,440 380,440" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="464.0" y="375.0" font-size="12" text-anchor="middle" fill="#333">4K</text>
+  <!-- 房间4L -->
+  <polygon points="560,310 729,310 729,433 560,433" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="644.5" y="371.5" font-size="12" text-anchor="middle" fill="#333">4L</text>
+  <!-- 房间4M -->
+  <polygon points="20,440 183,440 183,563 20,563" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="101.5" y="501.5" font-size="12" text-anchor="middle" fill="#333">4M</text>
+</svg>

@@ -130,21 +130,44 @@ async def generate_quick_suggestions(
         
         response = ai_agent.llm.generate(prompt, max_tokens=300)
         
-        # 解析 JSON
+        # 解析 JSON 数组
         import json
-        start_idx = response.find('{')
-        end_idx = response.rfind('}') + 1
         
         suggestions = []
+        
+        # 先尝试解析数组格式 ["问题 1", "问题 2", "问题 3"]
+        start_idx = response.find('[')
+        end_idx = response.rfind(']') + 1
+        
         if start_idx >= 0 and end_idx > start_idx:
             try:
                 parsed = json.loads(response[start_idx:end_idx])
                 if isinstance(parsed, list):
-                    suggestions = parsed[:3]
-            except:
-                # 如果不是 JSON，尝试从文本中提取
-                lines = [line.strip() for line in response.split('\n') if line.strip() and not line.startswith('{') and not line.startswith('[')]
-                suggestions = [line.lstrip('0123456789. -').strip() for line in lines[:3]]
+                    suggestions = [str(item) for item in parsed[:3]]
+            except Exception as e:
+                print(f"解析 JSON 数组失败: {e}")
+        
+        # 如果数组解析失败,尝试对象格式 {"suggestions": [...]}
+        if not suggestions:
+            start_idx = response.find('{')
+            end_idx = response.rfind('}') + 1
+            
+            if start_idx >= 0 and end_idx > start_idx:
+                try:
+                    parsed = json.loads(response[start_idx:end_idx])
+                    if isinstance(parsed, dict):
+                        # 尝试从常见字段中提取数组
+                        for key in ['suggestions', 'questions', 'data', 'items']:
+                            if key in parsed and isinstance(parsed[key], list):
+                                suggestions = [str(item) for item in parsed[key][:3]]
+                                break
+                except Exception as e:
+                    print(f"解析 JSON 对象失败: {e}")
+        
+        # 如果 JSON 解析都失败,从文本中提取
+        if not suggestions:
+            lines = [line.strip() for line in response.split('\n') if line.strip() and not line.startswith('{') and not line.startswith('[')]
+            suggestions = [line.lstrip('0123456789. -').strip() for line in lines[:3] if line]
         
         # 兜底方案
         if not suggestions:

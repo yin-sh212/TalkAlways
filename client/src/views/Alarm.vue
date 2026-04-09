@@ -124,6 +124,7 @@
         :tableData="tableData"
         :loading="tableLoading"
         :pagination="pagination"
+        :resolvingAlarmIds="resolvingAlarmIds"
         @update="handleTableUpdate"
         @acknowledge="handleAcknowledge"
         @resolve="handleResolve"
@@ -132,20 +133,46 @@
       />
     </div>
 
+    <n-modal
+      v-model:show="showResolveModal"
+      preset="card"
+      title="填写解决办法"
+      style="width: 560px"
+      :mask-closable="!resolveSubmitting"
+      :closable="!resolveSubmitting"
+    >
+      <n-space vertical :size="12">
+        <div class="resolve-modal-hint">
+          将解决 {{ resolveForm.alarmIds.length }} 条告警。填写的解决办法会写回告警记录，并在解决后沉淀到知识库。
+        </div>
+        <n-input
+          v-model:value="resolveForm.resolution"
+          type="textarea"
+          placeholder="请输入排查过程、处理措施和最终结论"
+          :rows="6"
+          maxlength="1000"
+          show-count
+        />
+      </n-space>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="closeResolveModal" :disabled="resolveSubmitting">
+            取消
+          </n-button>
+          <n-button
+            type="success"
+            @click="submitResolve"
+            :loading="resolveSubmitting"
+          >
+            确认解决并入库
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
       <n-space>
-        <n-button 
-          type="success" 
-          @click="handleGenerateAlarms" 
-          :loading="generateLoading"
-        >
-          <template #icon>
-            <n-icon :component="Alert" />
-          </template>
-          {{ generateLoading ? "生成中..." : "从异常数据生成告警" }}
-        </n-button>
-        
         <n-button type="primary" @click="handleExport" :loading="exportLoading">
           <template #icon>
             <n-icon :component="Download" />
@@ -159,24 +186,19 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
-import { Download, Alert } from "@vicons/ionicons5";
+import { Download } from "@vicons/ionicons5";
 import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
 import AlarmTrend from "@/components/alarm/Trend.vue";
 import AlarmDistribution from "@/components/alarm/Distribution.vue";
 import AlarmList from "@/components/alarm/List.vue";
-import AlarmDetailTable from "@/components/alarm/DetailTable.vue";
 import * as alarmApi from "@/api/alarm";
 import type {
-  AlarmItem,
-  AlarmQueryParams,
-  AlarmListItem,
   AlarmTypeDict,
   AlarmLevelDict,
 } from "@/api/alarm";
 import type {
-  BuildingEnergyDetailResponse,
   BuildingEnergyDetail,
   EnergySummary,
 } from "@/types/analysis";
@@ -186,7 +208,6 @@ import { useBuildingStore } from "@/store/building";
 const message = useMessage();
 const appStore = useAppStore();
 const buildingStore = useBuildingStore();
-const router = useRouter();
 const route = useRoute();
 
 // 状态
@@ -196,6 +217,9 @@ const metricsLoading = ref(false);
 const chartLoading = ref(false);
 const exportLoading = ref(false);
 const generateLoading = ref(false);
+const showResolveModal = ref(false);
+const resolveSubmitting = ref(false);
+const resolvingAlarmIds = ref<string[]>([]);
 
 // 查询表单
 const queryFormRef = ref<any>(null);
@@ -205,6 +229,11 @@ const queryForm = reactive({
   severity: [] as string[],
   alarmType: [] as string[],
   timeRange: null as [number, number] | null,
+});
+
+const resolveForm = reactive({
+  alarmIds: [] as number[],
+  resolution: "",
 });
 
 // 验证规则
@@ -243,12 +272,15 @@ const pagination = reactive({
   pageSize: 10,
   pageSizes: [10, 20, 50],
   showSizePicker: true,
+  itemCount: 0, // 总记录数
   onChange: (page: number) => {
     pagination.page = page;
+    handleQuery(); // 触发重新查询
   },
   onUpdatePageSize: (pageSize: number) => {
     pagination.pageSize = pageSize;
     pagination.page = 1;
+    handleQuery(); // 触发重新查询
   },
 });
 
@@ -402,56 +434,47 @@ const handleQuery = async (skipValidation: boolean = false) => {
       return;
     }
 
-    // 支持多建筑查询 - 循环调用 API 并合并结果
-    const allAlarms: any[] = [];
-    const allTrendData: any[] = [];
-    const allDistributionData: any[] = [];
+    // 支持多建筑查询 - 将建筑 ID 列表用逗号拼接传给后端(后端使用 IN 子句)
+    const buildingIds = queryForm.buildings.join(',');
+    
+    const [alarmRes, trendRes, distributionRes, statsRes] = await Promise.all([
+      alarmApi.getAlarmList({
+        // 使用告警列表接口 - 添加时间参数
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+        page: pagination.page,
+        page_size: pagination.pageSize,
+      }),
+      alarmApi.getAlarmTrend({
+        // 趋势图数据 - 支持多建筑聚合
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+      alarmApi.getAlarmDistribution({
+        // 分布图数据 - 支持多建筑聚合
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+      alarmApi.getAlarmStats({
+        // 统计指标数据 - 使用后端统计接口
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+    ]);
 
-    // 为每个建筑获取数据
-    for (const buildingId of queryForm.buildings) {
-      const [alarmRes, trendRes, distributionRes] = await Promise.all([
-        alarmApi.getAlarmList({
-          // 使用告警列表接口 - 添加时间参数
-          building_id: buildingId,
-          start_date: startDate,
-          end_date: endDate,
-          page: pagination.page,
-          page_size: pagination.pageSize,
-        }),
-        alarmApi.getAlarmTrend({
-          // 趋势图数据
-          building_id: buildingId,
-          start_date: startDate,
-          end_date: endDate,
-        }),
-        alarmApi.getAlarmDistribution({
-          // 分布图数据 - 告警类型统计（饼图）
-          building_id: buildingId,
-          start_date: startDate,
-          end_date: endDate,
-        }),
-      ]);
+    // 处理告警列表数据
+    const alarmData = alarmRes.data?.data || { total: 0, page: 1, page_size: 10, items: [] };
+    const alarms = Array.isArray(alarmData.items) ? alarmData.items : [];
+    
+    // 更新分页总数
+    pagination.itemCount = alarmData.total || 0;
 
-      // 收集告警列表
-      const alarmData = alarmRes.data?.data || { total: 0, page: 1, page_size: 10, items: [] };
-      const alarms = Array.isArray(alarmData.items) ? alarmData.items : [];
-      allAlarms.push(...alarms);
-
-      // 收集趋势数据
-      const trendResData = trendRes.data?.data || { categories: [], series: [] };
-      if (trendResData.series && trendResData.series.length > 0) {
-        allTrendData.push(trendResData);
-      }
-
-      // 收集分布数据
-      const distributionResData = distributionRes.data?.data || { categories: [], series: [] };
-      if (distributionResData.series && distributionResData.series.length > 0) {
-        allDistributionData.push(distributionResData);
-      }
-    }
-
-    // 填充表格数据 - 映射所有建筑的告警数据
-    tableData.value = allAlarms.map((item: any, index: number) => {
+    // 填充表格数据 - 映射告警数据
+    tableData.value = alarms.map((item: any, index: number) => {
       // 映射 status 字段
       const mappedStatus = mapStatus(item.status);
       
@@ -484,40 +507,28 @@ const handleQuery = async (skipValidation: boolean = false) => {
       return processedItem;
     });
     
-    // 基于告警列表计算所有 KPI 指标
-    const totalAlarms = allAlarms.length;
-    // 未解决：pending 和 confirmed 状态
-    const unresolvedCount = allAlarms.filter((a) => 
-      a.status === "pending" || a.status === "confirmed"
-    ).length;
-    // 已确认：acknowledged 和 resolved 状态
-    const acknowledgedCount = allAlarms.filter((a) => 
-      a.status === "acknowledged" || a.status === "resolved"
-    ).length;
-    // 紧急告警：alarm_level <= 2（严重和警告）
-    const criticalCount = allAlarms.filter((a) => {
-      const level = a.alarm_level || parseInt(a.severity) || 0;
-      return level <= 2;
-    }).length;
-    
-    metrics.value = {
-      totalAlarms,
-      unresolvedCount,
-      criticalCount,
-      acknowledgedCount,
+    // 使用后端返回的统计指标
+    const statsData = statsRes.data?.data || {
+      totalAlarms: 0,
+      unresolvedCount: 0,
+      criticalCount: 0,
+      acknowledgedCount: 0
     };
     
-    // 合并图表数据 - 支持多建筑数据聚合
-    trendData.value = mergeTrendData(allTrendData);
-    distributionData.value = mergeDistributionData(allDistributionData);
-
-    // 更新图表
+    metrics.value = {
+      totalAlarms: statsData.totalAlarms,
+      unresolvedCount: statsData.unresolvedCount,
+      criticalCount: statsData.criticalCount,
+      acknowledgedCount: statsData.acknowledgedCount,
+    };
+    
+    // 更新图表 - 直接使用接口返回数据
     if (alarmTrendRef.value) {
-      alarmTrendRef.value.updateChart(trendData.value);
+      alarmTrendRef.value.updateChart(trendRes.data?.data || { categories: [], series: [] });
     }
     
     if (alarmDistributionRef.value) {
-      alarmDistributionRef.value.updateChart(distributionData.value);
+      alarmDistributionRef.value.updateChart(distributionRes.data?.data || { categories: [], series: [] });
     }
 
     message.success("查询成功");
@@ -611,7 +622,6 @@ const mergeDistributionData = (distributionDataArray: any[]) => {
   const categories = Array.from(categoryMap.keys());
   const values = Array.from(categoryMap.values());
   const series = [{
-    name: '告警分布',
     type: 'pie',
     data: categories.map((category, index) => ({
       name: category,
@@ -714,18 +724,122 @@ const handleAcknowledge = async (alarmId: string) => {
   }
 };
 
-// 解决告警 - 对接真实接口
-const handleResolve = async (alarmId: string) => {
-  try {
-    // 使用新接口的单个解决（通过批量接口实现）
-    await alarmApi.batchResolveAlarms({
-      alarm_ids: [parseInt(alarmId) || 0],
-    });
-    message.success("告警已解决");
-    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
-  } catch (error: any) {
-    message.error("解决失败：" + (error.message || "未知错误"));
+const resetResolveModal = () => {
+  showResolveModal.value = false;
+  resolveForm.alarmIds = [];
+  resolveForm.resolution = "";
+};
+
+const closeResolveModal = () => {
+  if (resolveSubmitting.value) {
+    return;
   }
+
+  resetResolveModal();
+};
+
+const appendResolvingAlarmIds = (alarmIds: string[]) => {
+  const merged = new Set([
+    ...resolvingAlarmIds.value,
+    ...alarmIds.map((id) => String(id)),
+  ]);
+  resolvingAlarmIds.value = Array.from(merged);
+};
+
+const removeResolvingAlarmIds = (alarmIds: string[]) => {
+  const pending = new Set(alarmIds.map((id) => String(id)));
+  resolvingAlarmIds.value = resolvingAlarmIds.value.filter(
+    (id) => !pending.has(String(id)),
+  );
+};
+
+const openResolveModal = (alarmIds: string[]) => {
+  const ids = alarmIds
+    .map((id) => parseInt(id) || 0)
+    .filter((id) => id !== 0);
+  const pendingIds = ids.filter(
+    (id) => !resolvingAlarmIds.value.includes(String(id)),
+  );
+
+  if (pendingIds.length === 0) {
+    message.warning("所选告警正在后台处理中");
+    return;
+  }
+
+  resolveForm.alarmIds = pendingIds;
+  resolveForm.resolution = "";
+  showResolveModal.value = true;
+};
+
+const resolveInBackground = async (alarmIds: string[], resolution: string) => {
+  try {
+    const response = await alarmApi.batchResolveAlarms({
+      alarm_ids: alarmIds.map((id) => parseInt(id) || 0),
+      resolution,
+    });
+
+    const result = response.data?.data;
+    const successCount = result?.resolved_count || 0;
+    const failedCount = result?.failed_ids?.length || 0;
+    const knowledgeSyncedCount = result?.knowledge_synced_count || 0;
+
+    if (successCount > 0) {
+      const knowledgeText =
+        knowledgeSyncedCount > 0 ? `，已沉淀 ${knowledgeSyncedCount} 条知识` : "";
+      message.success(`成功解决 ${successCount} 条告警${knowledgeText}`);
+    }
+
+    if (failedCount > 0) {
+      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
+    }
+
+    await handleQuery(true);
+  } catch (error: any) {
+    message.error(
+      "解决失败：" +
+        (error.response?.data?.message || error.message || "未知错误"),
+    );
+  } finally {
+    removeResolvingAlarmIds(alarmIds);
+  }
+};
+
+const submitResolve = async () => {
+  const resolution = resolveForm.resolution.trim();
+
+  if (resolveForm.alarmIds.length === 0) {
+    message.warning("没有可解决的告警");
+    closeResolveModal();
+    return;
+  }
+
+  if (!resolution) {
+    message.warning("请先填写解决办法");
+    return;
+  }
+
+  try {
+    resolveSubmitting.value = true;
+    const alarmIds = resolveForm.alarmIds.map((id) => String(id));
+
+    appendResolvingAlarmIds(alarmIds);
+    resetResolveModal();
+    resolveSubmitting.value = false;
+    message.info("已提交解决请求，后台处理中");
+
+    void resolveInBackground(alarmIds, resolution);
+  } catch (error: any) {
+    resolveSubmitting.value = false;
+    message.error(
+      "解决失败：" +
+        (error.response?.data?.message || error.message || "未知错误"),
+    );
+  }
+};
+
+// 解决告警 - 打开解决弹窗
+const handleResolve = (alarmId: string) => {
+  openResolveModal([alarmId]);
 };
 
 // 批量确认告警 - 新增
@@ -762,38 +876,9 @@ const handleBatchAcknowledge = async (alarmIds: string[]) => {
   }
 };
 
-// 批量解决告警 - 新增
-const handleBatchResolve = async (alarmIds: string[]) => {
-  try {
-    const ids = alarmIds
-      .map((id) => parseInt(id) || 0)
-      .filter((id) => id !== 0);
-
-    if (ids.length === 0) {
-      message.warning("没有有效的告警 ID");
-      return;
-    }
-
-    const response = await alarmApi.batchResolveAlarms({
-      alarm_ids: ids,
-    });
-
-    const result = response.data?.data;
-    const successCount = result?.resolved_count || 0;
-    const failedCount = result?.failed_ids?.length || 0;
-
-    if (successCount > 0) {
-      message.success(`成功解决 ${successCount} 条告警`);
-    }
-
-    if (failedCount > 0) {
-      message.warning(`${failedCount} 条告警无法解决（可能已解决）`);
-    }
-
-    handleQuery(true); // 跳过验证，直接刷新列表和 metrics 指标
-  } catch (error: any) {
-    message.error("批量解决失败：" + (error.message || "未知错误"));
-  }
+// 批量解决告警 - 打开统一解决弹窗
+const handleBatchResolve = (alarmIds: string[]) => {
+  openResolveModal(alarmIds);
 };
 
 // 从异常数据生成告警（使用真实算法）
@@ -1042,6 +1127,11 @@ onMounted(async () => {
 
 .detail-section {
   margin-bottom: 16px;
+}
+
+.resolve-modal-hint {
+  color: var(--n-text-color-2);
+  line-height: 1.7;
 }
 
 .bottom-bar {

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 7</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间7A -->
+  <polygon points="20,50 180,50 180,175 20,175" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="100.0" y="112.5" font-size="12" text-anchor="middle" fill="#333">7A</text>
+  <!-- 房间7B -->
+  <polygon points="200,50 367,50 367,172 200,172" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="283.5" y="111.0" font-size="12" text-anchor="middle" fill="#333">7B</text>
+  <!-- 房间7C -->
+  <polygon points="380,50 557,50 557,163 380,163" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="468.5" y="106.5" font-size="12" text-anchor="middle" fill="#333">7C</text>
+  <!-- 房间7D -->
+  <polygon points="560,50 739,50 739,172 560,172" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="649.5" y="111.0" font-size="12" text-anchor="middle" fill="#333">7D</text>
+  <!-- 房间7E -->
+  <polygon points="20,180 189,180 189,307 20,307" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="104.5" y="243.5" font-size="12" text-anchor="middle" fill="#333">7E</text>
+  <!-- 房间7F -->
+  <polygon points="200,180 362,180 362,303 200,303" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="281.0" y="241.5" font-size="12" text-anchor="middle" fill="#333">7F</text>
+  <!-- 房间7G -->
+  <polygon points="380,180 556,180 556,294 380,294" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="468.0" y="237.0" font-size="12" text-anchor="middle" fill="#333">7G</text>
+  <!-- 房间7H -->
+  <polygon points="560,180 736,180 736,303 560,303" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.0" y="241.5" font-size="12" text-anchor="middle" fill="#333">7H</text>
+  <!-- 房间7I -->
+  <polygon points="20,310 197,310 197,438 20,438" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="108.5" y="374.0" font-size="12" text-anchor="middle" fill="#333">7I</text>
+  <!-- 房间7J -->
+  <polygon points="200,310 376,310 376,420 200,420" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.0" y="365.0" font-size="12" text-anchor="middle" fill="#333">7J</text>
+</svg>

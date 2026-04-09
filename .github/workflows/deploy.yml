@@ -1,0 +1,106 @@
+name: Deploy to Alibaba Cloud ECS (Windows)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  PROJECT_NAME: energy-management-system
+  SERVER_DIR: D:\energy-system
+  BACKUP_DIR: D:\energy-system-backup
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        cd server
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov httpx
+    
+    - name: Run tests
+      run: |
+        cd server
+        python -m pytest tests/ --tb=short -v
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./server/coverage.xml
+        flags: unittests
+
+  build-and-deploy:
+    name: Build and Deploy to Windows ECS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        cd server
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Build frontend
+      working-directory: client
+      run: |
+        npm ci
+        npm run build
+    
+    - name: Package application
+      run: |
+        mkdir -p deploy-package
+        cp -r server deploy-package/
+        cp -r client/dist deploy-package/client-dist/
+        cp deploy_windows.ps1 deploy-package/
+        cp rollback_windows.ps1 deploy-package/
+        tar -czf deploy-package.tar.gz deploy-package/
+    
+    - name: Deploy to Windows ECS via WinRM
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.ECS_HOST }}
+        username: ${{ secrets.ECS_USERNAME }}
+        password: ${{ secrets.ECS_PASSWORD }}
+        port: ${{ secrets.ECS_PORT || 5986 }}
+        source: "deploy-package.tar.gz"
+        target: "C:/Temp/"
+        timeout: 120s
+    
+    - name: Execute deployment on Windows
+      uses: appleboy/winrm-action@master
+      with:
+        host: ${{ secrets.ECS_HOST }}
+        username: ${{ secrets.ECS_USERNAME }}
+        password: ${{ secrets.ECS_PASSWORD }}
+        port: ${{ secrets.ECS_PORT || 5986 }}
+        script: |
+          cd C:\Temp
+          if (Test-Path "deploy-package") { Remove-Item -Recurse -Force "deploy-package" }
+          tar -xzf deploy-package.tar.gz
+          cd deploy-package
+          powershell -ExecutionPolicy Bypass -File deploy_windows.ps1 -TargetDir "${{ env.SERVER_DIR }}" -BackupDir "${{ env.BACKUP_DIR }}"
+          Remove-Item -Force "deploy-package.tar.gz"
+          Remove-Item -Recurse -Force "deploy-package"

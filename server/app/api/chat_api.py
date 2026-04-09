@@ -20,6 +20,59 @@ class StreamQuestionRequest(BaseModel):
     query: str = Field(..., description="用户输入的问题文字")
 
 
+def generate_answer_with_rag(query: str) -> Dict[str, Any]:
+    """优先使用 RAG，未命中时降级到普通 LLM。"""
+    rag_result: Dict[str, Any] = {}
+
+    try:
+        rag_result = rag_pipeline.answer(query)
+        if rag_result.get("sources"):
+            return {
+                "answer": rag_result.get("answer", ""),
+                "sources": rag_result.get("sources", []),
+                "mode": "rag",
+            }
+    except Exception as exc:
+        print(f"RAG 回答失败，降级到普通 LLM：{exc}")
+
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
+注意：
+1. 直接回答问题，不要重复自我介绍
+2. 如果是查询类问题，说明需要的数据维度
+3. 如果是故障处理，给出具体的排查步骤
+4. 保持回答在 200-500 字之间"""
+
+    full_prompt = f"{system_prompt}\n\n当前时间：{current_time}\n\n用户问题：{query}"
+    answer = llm_client.generate(full_prompt, use_alt=False)
+
+    if answer is None or (len(answer) > 300 and ("中建八局二建" in answer or "擎翼数字中枢" in answer)):
+        print("⚠️ 主助手无效，尝试使用备用助手...")
+        answer = llm_client.generate(full_prompt, use_alt=True)
+
+    if answer is None or (len(answer) > 300 and ("中建八局二建" in answer or "擎翼数字中枢" in answer)):
+        print("⚠️ 备用助手也无效，使用通用回答模板...")
+        answer = f"""您好！关于"{query}"这个问题，我需要更多上下文信息才能给您准确的回答。
+
+建议您：
+1. **明确建筑/设备编号**：如"A 栋教学楼"、"3 号配电箱"
+2. **指定时间范围**：如"昨天"、"最近一周"、"2024 年 10 月"
+3. **描述具体问题**：如"用电量异常偏高"、"设备频繁报警"
+
+示例提问：
+- "A 栋教学楼昨天的单位建筑面积能耗是多少？"
+- "冷水机组高压报警怎么处理？请给出具体步骤"
+- "分析最近一周 3 号配电箱的用电异常"
+
+我会根据您提供的详细信息，给出更精准的专业建议。"""
+
+    return {
+        "answer": answer,
+        "sources": [],
+        "mode": "llm",
+    }
+
+
 async def stream_generator(full_prompt: str):
     """SSE 流式生成器"""
     try:
@@ -62,43 +115,8 @@ async def ask_question(question: QuestionRequest):
     print(f"收到问题：{question.query}")
 
     try:
-        # 构建更有针对性的提示词
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 优化提示词，让 AI 更好地理解问题
-        system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
-注意：
-1. 直接回答问题，不要重复自我介绍
-2. 如果是查询类问题，说明需要的数据维度
-3. 如果是故障处理，给出具体的排查步骤
-4. 保持回答在 200-500 字之间"""
-
-        full_prompt = f"{system_prompt}\n\n当前时间：{current_time}\n\n用户问题：{question.query}"
-        
-        # 调用 LLM 客户端生成回答（先尝试主助手）
-        answer = llm_client.generate(full_prompt, use_alt=False)
-
-        # 如果主助手返回 None（表示失败或标准欢迎语），尝试使用备用助手
-        if answer is None or (len(answer) > 300 and ("中建八局二建" in answer or "擎翼数字中枢" in answer)):
-            print("⚠️ 主助手无效，尝试使用备用助手...")
-            answer = llm_client.generate(full_prompt, use_alt=True)
-        
-        # 如果备用助手还是返回标准欢迎语或 None，提供一个通用的友好回答
-        if answer is None or (len(answer) > 300 and ("中建八局二建" in answer or "擎翼数字中枢" in answer)):
-            print("⚠️ 备用助手也无效，使用通用回答模板...")
-            answer = f"""您好！关于"{question.query}"这个问题，我需要更多上下文信息才能给您准确的回答。
-
-建议您：
-1. **明确建筑/设备编号**：如"A 栋教学楼"、"3 号配电箱"
-2. **指定时间范围**：如"昨天"、"最近一周"、"2024 年 10 月"
-3. **描述具体问题**：如"用电量异常偏高"、"设备频繁报警"
-
-示例提问：
-- "A 栋教学楼昨天的单位建筑面积能耗是多少？"
-- "冷水机组高压报警怎么处理？请给出具体步骤"
-- "分析最近一周 3 号配电箱的用电异常"
-
-我会根据您提供的详细信息，给出更精准的专业建议。"""
+        result = generate_answer_with_rag(question.query)
+        answer = result["answer"]
 
         print(f"✅ 回答成功，长度：{len(answer)} 字符")
         
@@ -107,7 +125,9 @@ async def ask_question(question: QuestionRequest):
             "code": 200,
             "message": "success",
             "data": {
-                "answer": answer
+                "answer": answer,
+                "mode": result.get("mode", "llm"),
+                "sources": result.get("sources", []),
             }
         }
 
@@ -133,9 +153,32 @@ async def ask_question_stream(question: StreamQuestionRequest):
     print(f"收到流式问题：{question.query}")
 
     try:
-        # 构建提示词
+        rag_result = generate_answer_with_rag(question.query)
+
+        if rag_result.get("mode") == "rag":
+            async def rag_stream():
+                answer = rag_result.get("answer", "")
+                for char in answer:
+                    sse_data = json.dumps({
+                        "code": 200,
+                        "data": {
+                            "content": char
+                        }
+                    }, ensure_ascii=False)
+                    yield f"data: {sse_data}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                rag_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no"
+                }
+            )
+
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
         system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
 注意：
 1. 直接回答问题，不要重复自我介绍

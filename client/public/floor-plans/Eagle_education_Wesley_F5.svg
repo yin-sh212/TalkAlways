@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 5</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间5A -->
+  <polygon points="20,50 197,50 197,163 20,163" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="108.5" y="106.5" font-size="12" text-anchor="middle" fill="#333">5A</text>
+  <!-- 房间5B -->
+  <polygon points="200,50 377,50 377,177 200,177" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.5" y="113.5" font-size="12" text-anchor="middle" fill="#333">5B</text>
+  <!-- 房间5C -->
+  <polygon points="380,50 553,50 553,174 380,174" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="466.5" y="112.0" font-size="12" text-anchor="middle" fill="#333">5C</text>
+  <!-- 房间5D -->
+  <polygon points="560,50 732,50 732,168 560,168" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="646.0" y="109.0" font-size="12" text-anchor="middle" fill="#333">5D</text>
+  <!-- 房间5E -->
+  <polygon points="20,180 185,180 185,309 20,309" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="102.5" y="244.5" font-size="12" text-anchor="middle" fill="#333">5E</text>
+  <!-- 房间5F -->
+  <polygon points="200,180 377,180 377,310 200,310" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.5" y="245.0" font-size="12" text-anchor="middle" fill="#333">5F</text>
+  <!-- 房间5G -->
+  <polygon points="380,180 554,180 554,298 380,298" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="467.0" y="239.0" font-size="12" text-anchor="middle" fill="#333">5G</text>
+  <!-- 房间5H -->
+  <polygon points="560,180 730,180 730,301 560,301" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="645.0" y="240.5" font-size="12" text-anchor="middle" fill="#333">5H</text>
+  <!-- 房间5I -->
+  <polygon points="20,310 189,310 189,438 20,438" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="104.5" y="374.0" font-size="12" text-anchor="middle" fill="#333">5I</text>
+  <!-- 房间5J -->
+  <polygon points="200,310 376,310 376,424 200,424" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.0" y="367.0" font-size="12" text-anchor="middle" fill="#333">5J</text>
+  <!-- 房间5K -->
+  <polygon points="380,310 544,310 544,439 380,439" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="462.0" y="374.5" font-size="12" text-anchor="middle" fill="#333">5K</text>
+  <!-- 房间5L -->
+  <polygon points="560,310 724,310 724,440 560,440" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="642.0" y="375.0" font-size="12" text-anchor="middle" fill="#333">5L</text>
+  <!-- 房间5M -->
+  <polygon points="20,440 186,440 186,556 20,556" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="103.0" y="498.0" font-size="12" text-anchor="middle" fill="#333">5M</text>
+  <!-- 房间5N -->
+  <polygon points="200,440 375,440 375,566 200,566" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.5" y="503.0" font-size="12" text-anchor="middle" fill="#333">5N</text>
+  <!-- 房间5O -->
+  <polygon points="380,440 551,440 551,562 380,562" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="465.5" y="501.0" font-size="12" text-anchor="middle" fill="#333">5O</text>
+</svg>

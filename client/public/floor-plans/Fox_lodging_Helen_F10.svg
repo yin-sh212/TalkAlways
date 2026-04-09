@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 10</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间10A -->
+  <polygon points="20,50 190,50 190,162 20,162" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="105.0" y="106.0" font-size="12" text-anchor="middle" fill="#333">10A</text>
+  <!-- 房间10B -->
+  <polygon points="200,50 361,50 361,179 200,179" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="280.5" y="114.5" font-size="12" text-anchor="middle" fill="#333">10B</text>
+  <!-- 房间10C -->
+  <polygon points="380,50 555,50 555,167 380,167" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="467.5" y="108.5" font-size="12" text-anchor="middle" fill="#333">10C</text>
+  <!-- 房间10D -->
+  <polygon points="560,50 729,50 729,172 560,172" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="644.5" y="111.0" font-size="12" text-anchor="middle" fill="#333">10D</text>
+  <!-- 房间10E -->
+  <polygon points="20,180 186,180 186,297 20,297" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="103.0" y="238.5" font-size="12" text-anchor="middle" fill="#333">10E</text>
+  <!-- 房间10F -->
+  <polygon points="200,180 378,180 378,301 200,301" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="289.0" y="240.5" font-size="12" text-anchor="middle" fill="#333">10F</text>
+  <!-- 房间10G -->
+  <polygon points="380,180 549,180 549,310 380,310" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="464.5" y="245.0" font-size="12" text-anchor="middle" fill="#333">10G</text>
+  <!-- 房间10H -->
+  <polygon points="560,180 731,180 731,293 560,293" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="645.5" y="236.5" font-size="12" text-anchor="middle" fill="#333">10H</text>
+  <!-- 房间10I -->
+  <polygon points="20,310 182,310 182,424 20,424" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="101.0" y="367.0" font-size="12" text-anchor="middle" fill="#333">10I</text>
+  <!-- 房间10J -->
+  <polygon points="200,310 373,310 373,428 200,428" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="286.5" y="369.0" font-size="12" text-anchor="middle" fill="#333">10J</text>
+  <!-- 房间10K -->
+  <polygon points="380,310 549,310 549,434 380,434" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="464.5" y="372.0" font-size="12" text-anchor="middle" fill="#333">10K</text>
+  <!-- 房间10L -->
+  <polygon points="560,310 736,310 736,431 560,431" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.0" y="370.5" font-size="12" text-anchor="middle" fill="#333">10L</text>
+  <!-- 房间10M -->
+  <polygon points="20,440 180,440 180,550 20,550" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="100.0" y="495.0" font-size="12" text-anchor="middle" fill="#333">10M</text>
+</svg>

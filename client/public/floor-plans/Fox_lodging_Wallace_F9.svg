@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 9</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间9A -->
+  <polygon points="20,50 180,50 180,169 20,169" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="100.0" y="109.5" font-size="12" text-anchor="middle" fill="#333">9A</text>
+  <!-- 房间9B -->
+  <polygon points="200,50 364,50 364,165 200,165" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="282.0" y="107.5" font-size="12" text-anchor="middle" fill="#333">9B</text>
+  <!-- 房间9C -->
+  <polygon points="380,50 553,50 553,165 380,165" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="466.5" y="107.5" font-size="12" text-anchor="middle" fill="#333">9C</text>
+  <!-- 房间9D -->
+  <polygon points="560,50 737,50 737,170 560,170" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.5" y="110.0" font-size="12" text-anchor="middle" fill="#333">9D</text>
+  <!-- 房间9E -->
+  <polygon points="20,180 186,180 186,302 20,302" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="103.0" y="241.0" font-size="12" text-anchor="middle" fill="#333">9E</text>
+  <!-- 房间9F -->
+  <polygon points="200,180 371,180 371,300 200,300" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="285.5" y="240.0" font-size="12" text-anchor="middle" fill="#333">9F</text>
+  <!-- 房间9G -->
+  <polygon points="380,180 556,180 556,305 380,305" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="468.0" y="242.5" font-size="12" text-anchor="middle" fill="#333">9G</text>
+  <!-- 房间9H -->
+  <polygon points="560,180 736,180 736,295 560,295" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.0" y="237.5" font-size="12" text-anchor="middle" fill="#333">9H</text>
+  <!-- 房间9I -->
+  <polygon points="20,310 189,310 189,432 20,432" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="104.5" y="371.0" font-size="12" text-anchor="middle" fill="#333">9I</text>
+  <!-- 房间9J -->
+  <polygon points="200,310 375,310 375,432 200,432" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.5" y="371.0" font-size="12" text-anchor="middle" fill="#333">9J</text>
+  <!-- 房间9K -->
+  <polygon points="380,310 555,310 555,438 380,438" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="467.5" y="374.0" font-size="12" text-anchor="middle" fill="#333">9K</text>
+  <!-- 房间9L -->
+  <polygon points="560,310 729,310 729,427 560,427" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="644.5" y="368.5" font-size="12" text-anchor="middle" fill="#333">9L</text>
+</svg>

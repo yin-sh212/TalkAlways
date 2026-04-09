@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 1</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间1A -->
+  <polygon points="20,50 200,50 200,173 20,173" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="110.0" y="111.5" font-size="12" text-anchor="middle" fill="#333">1A</text>
+  <!-- 房间1B -->
+  <polygon points="200,50 374,50 374,179 200,179" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.0" y="114.5" font-size="12" text-anchor="middle" fill="#333">1B</text>
+  <!-- 房间1C -->
+  <polygon points="380,50 556,50 556,175 380,175" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="468.0" y="112.5" font-size="12" text-anchor="middle" fill="#333">1C</text>
+  <!-- 房间1D -->
+  <polygon points="560,50 722,50 722,179 560,179" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="641.0" y="114.5" font-size="12" text-anchor="middle" fill="#333">1D</text>
+  <!-- 房间1E -->
+  <polygon points="20,180 200,180 200,307 20,307" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="110.0" y="243.5" font-size="12" text-anchor="middle" fill="#333">1E</text>
+  <!-- 房间1F -->
+  <polygon points="200,180 374,180 374,292 200,292" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.0" y="236.0" font-size="12" text-anchor="middle" fill="#333">1F</text>
+  <!-- 房间1G -->
+  <polygon points="380,180 554,180 554,300 380,300" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="467.0" y="240.0" font-size="12" text-anchor="middle" fill="#333">1G</text>
+  <!-- 房间1H -->
+  <polygon points="560,180 732,180 732,305 560,305" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="646.0" y="242.5" font-size="12" text-anchor="middle" fill="#333">1H</text>
+  <!-- 房间1I -->
+  <polygon points="20,310 192,310 192,431 20,431" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="106.0" y="370.5" font-size="12" text-anchor="middle" fill="#333">1I</text>
+  <!-- 房间1J -->
+  <polygon points="200,310 369,310 369,433 200,433" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="284.5" y="371.5" font-size="12" text-anchor="middle" fill="#333">1J</text>
+  <!-- 房间1K -->
+  <polygon points="380,310 541,310 541,423 380,423" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="460.5" y="366.5" font-size="12" text-anchor="middle" fill="#333">1K</text>
+  <!-- 房间1L -->
+  <polygon points="560,310 740,310 740,420 560,420" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="650.0" y="365.0" font-size="12" text-anchor="middle" fill="#333">1L</text>
+  <!-- 房间1M -->
+  <polygon points="20,440 195,440 195,564 20,564" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="107.5" y="502.0" font-size="12" text-anchor="middle" fill="#333">1M</text>
+  <!-- 房间1N -->
+  <polygon points="200,440 377,440 377,564 200,564" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.5" y="502.0" font-size="12" text-anchor="middle" fill="#333">1N</text>
+  <!-- 房间1O -->
+  <polygon points="380,440 559,440 559,562 380,562" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="469.5" y="501.0" font-size="12" text-anchor="middle" fill="#333">1O</text>
+</svg>

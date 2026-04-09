@@ -118,7 +118,7 @@
 import { ref, h } from 'vue'
 import { useMessage } from 'naive-ui'
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui'
-import { NButton, NTag, NPopconfirm } from 'naive-ui'
+import { NButton, NTag } from 'naive-ui'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue'
 import * as alarmApi from '@/api/alarm'
 
@@ -141,6 +141,7 @@ const props = defineProps<{
   tableData: AlarmItem[]
   loading?: boolean
   pagination?: any
+  resolvingAlarmIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -152,6 +153,10 @@ const emit = defineEmits<{
 }>()
 
 const checkedRowKeys = ref<DataTableRowKey[]>([])
+
+const isResolving = (alarmId: string | number) => {
+  return (props.resolvingAlarmIds || []).includes(String(alarmId))
+}
 
 // 告警详情相关
 const showDetailModal = ref(false)
@@ -235,7 +240,7 @@ const statusMap: Record<string, any> = {
 const columns: DataTableColumns = [
   {
     type: 'selection',
-    disabled: (row: any) => row.status === 'resolved'
+    disabled: (row: any) => row.status === 'resolved' || isResolving(row.id)
   },
   {
     title: '时间',
@@ -280,14 +285,26 @@ const columns: DataTableColumns = [
   {
     title: '状态',
     key: 'status',
-    width: 100,
+    width: 130,
     render: (row: any) => {
-      const config = statusMap[row.status] || { type: 'default', text: '未知' }
-      return h(NTag, {
-        type: config.type as any,
-        size: 'small',
-        bordered: false
-      }, { default: () => config.text })
+      const resolving = isResolving(row.id)
+      const config = resolving
+        ? { type: 'warning', text: '处理中' }
+        : statusMap[row.status] || { type: 'default', text: '未知' }
+
+      return h('div', { class: 'status-cell' }, [
+        h(NTag, {
+          type: config.type as any,
+          size: 'small',
+          bordered: false
+        }, { default: () => config.text }),
+        resolving
+          ? h('span', {
+            class: 'row-spinner',
+            title: '后台处理中'
+          })
+          : null
+      ])
     }
   },
   {
@@ -296,6 +313,7 @@ const columns: DataTableColumns = [
     width: 260,
     fixed: 'right',
     render: (row: any) => {
+      const resolving = isResolving(row.id)
       return h('div', { style: { display: 'flex', gap: '8px' } }, [
         // 查看详情按钮
         h(NButton, {
@@ -308,22 +326,18 @@ const columns: DataTableColumns = [
         row.status === 'unresolved' ? h(NButton, {
           size: 'small',
           type: 'primary',
+          disabled: resolving,
           onClick: () => emit('acknowledge', row.id)
         }, { default: () => '确认' }) : null,
         
         // 解决按钮
-        row.status !== 'resolved' ? h(NPopconfirm, {
-          onPositiveClick: () => emit('resolve', row.id),
-          positiveText: '确定',
-          negativeText: '取消'
-        }, {
-          trigger: () => h(NButton, {
-            size: 'small',
-            type: 'success',
-            disabled: row.status === 'resolved'
-          }, { default: () => '解决' }),
-          default: () => '确定要解决该告警吗？'
-        }) : null
+        row.status !== 'resolved' ? h(NButton, {
+          size: 'small',
+          type: 'success',
+          disabled: row.status === 'resolved' || resolving,
+          loading: resolving,
+          onClick: () => emit('resolve', row.id)
+        }, { default: () => resolving ? '处理中' : '解决' }) : null
       ])
     }
   }
@@ -390,7 +404,13 @@ const handleBatchResolve = () => {
   }
   
   // 发送批量解决事件到父组件
-  const ids = checkedRowKeys.value.map(id => id as string)
+  const ids = checkedRowKeys.value
+    .map(id => id as string)
+    .filter(id => !isResolving(id))
+  if (ids.length === 0) {
+    message.warning('所选告警正在后台处理中')
+    return
+  }
   emit('batch-resolve', ids)
 }
 
@@ -412,6 +432,21 @@ defineExpose({
   line-height: 1.8;
 }
 
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--n-border-color);
+  border-top-color: #18a058;
+  border-radius: 50%;
+  animation: row-spin 0.8s linear infinite;
+}
+
 .related-data {
   background-color: var(--n-code-background-color);
   padding: 16px;
@@ -421,5 +456,14 @@ defineExpose({
   overflow-x: auto;
   max-height: 300px;
   overflow-y: auto;
+}
+
+@keyframes row-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

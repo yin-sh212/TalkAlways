@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 3</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间3A -->
+  <polygon points="20,50 194,50 194,160 20,160" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="107.0" y="105.0" font-size="12" text-anchor="middle" fill="#333">3A</text>
+  <!-- 房间3B -->
+  <polygon points="200,50 370,50 370,173 200,173" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="285.0" y="111.5" font-size="12" text-anchor="middle" fill="#333">3B</text>
+  <!-- 房间3C -->
+  <polygon points="380,50 553,50 553,174 380,174" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="466.5" y="112.0" font-size="12" text-anchor="middle" fill="#333">3C</text>
+  <!-- 房间3D -->
+  <polygon points="560,50 736,50 736,162 560,162" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.0" y="106.0" font-size="12" text-anchor="middle" fill="#333">3D</text>
+  <!-- 房间3E -->
+  <polygon points="20,180 190,180 190,303 20,303" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="105.0" y="241.5" font-size="12" text-anchor="middle" fill="#333">3E</text>
+  <!-- 房间3F -->
+  <polygon points="200,180 364,180 364,307 200,307" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="282.0" y="243.5" font-size="12" text-anchor="middle" fill="#333">3F</text>
+  <!-- 房间3G -->
+  <polygon points="380,180 542,180 542,303 380,303" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="461.0" y="241.5" font-size="12" text-anchor="middle" fill="#333">3G</text>
+  <!-- 房间3H -->
+  <polygon points="560,180 737,180 737,309 560,309" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.5" y="244.5" font-size="12" text-anchor="middle" fill="#333">3H</text>
+  <!-- 房间3I -->
+  <polygon points="20,310 187,310 187,436 20,436" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="103.5" y="373.0" font-size="12" text-anchor="middle" fill="#333">3I</text>
+  <!-- 房间3J -->
+  <polygon points="200,310 368,310 368,423 200,423" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="284.0" y="366.5" font-size="12" text-anchor="middle" fill="#333">3J</text>
+  <!-- 房间3K -->
+  <polygon points="380,310 544,310 544,426 380,426" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="462.0" y="368.0" font-size="12" text-anchor="middle" fill="#333">3K</text>
+  <!-- 房间3L -->
+  <polygon points="560,310 729,310 729,433 560,433" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="644.5" y="371.5" font-size="12" text-anchor="middle" fill="#333">3L</text>
+  <!-- 房间3M -->
+  <polygon points="20,440 190,440 190,568 20,568" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="105.0" y="504.0" font-size="12" text-anchor="middle" fill="#333">3M</text>
+  <!-- 房间3N -->
+  <polygon points="200,440 365,440 365,568 200,568" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="282.5" y="504.0" font-size="12" text-anchor="middle" fill="#333">3N</text>
+  <!-- 房间3O -->
+  <polygon points="380,440 542,440 542,562 380,562" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="461.0" y="501.0" font-size="12" text-anchor="middle" fill="#333">3O</text>
+</svg>

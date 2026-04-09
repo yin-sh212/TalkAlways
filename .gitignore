@@ -44,6 +44,9 @@ lerna-debug.log*
 # Vite
 .vite
 
+# Vercel
+.vercel/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -54,3 +57,15 @@ __pycache__/
 venv/
 ENV/
 env/
+
+# CI/CD 部署文件
+/deploy-package/
+deploy-package.tar.gz
+/tmp/deploy/
+
+# Docker
+docker-compose.override.yml
+
+# Backup directories
+/opt/energy-system-backup/
+C:\energy-system-backup\

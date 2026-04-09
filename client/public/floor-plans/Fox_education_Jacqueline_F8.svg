@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 8</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间8A -->
+  <polygon points="20,50 193,50 193,177 20,177" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="106.5" y="113.5" font-size="12" text-anchor="middle" fill="#333">8A</text>
+  <!-- 房间8B -->
+  <polygon points="200,50 376,50 376,162 200,162" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.0" y="106.0" font-size="12" text-anchor="middle" fill="#333">8B</text>
+  <!-- 房间8C -->
+  <polygon points="380,50 543,50 543,168 380,168" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="461.5" y="109.0" font-size="12" text-anchor="middle" fill="#333">8C</text>
+  <!-- 房间8D -->
+  <polygon points="560,50 737,50 737,164 560,164" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="648.5" y="107.0" font-size="12" text-anchor="middle" fill="#333">8D</text>
+  <!-- 房间8E -->
+  <polygon points="20,180 200,180 200,304 20,304" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="110.0" y="242.0" font-size="12" text-anchor="middle" fill="#333">8E</text>
+  <!-- 房间8F -->
+  <polygon points="200,180 375,180 375,307 200,307" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.5" y="243.5" font-size="12" text-anchor="middle" fill="#333">8F</text>
+  <!-- 房间8G -->
+  <polygon points="380,180 547,180 547,303 380,303" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="463.5" y="241.5" font-size="12" text-anchor="middle" fill="#333">8G</text>
+  <!-- 房间8H -->
+  <polygon points="560,180 733,180 733,297 560,297" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="646.5" y="238.5" font-size="12" text-anchor="middle" fill="#333">8H</text>
+  <!-- 房间8I -->
+  <polygon points="20,310 191,310 191,431 20,431" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="105.5" y="370.5" font-size="12" text-anchor="middle" fill="#333">8I</text>
+</svg>

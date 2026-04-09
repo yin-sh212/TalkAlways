@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 12</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间12A -->
+  <polygon points="20,50 187,50 187,175 20,175" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="103.5" y="112.5" font-size="12" text-anchor="middle" fill="#333">12A</text>
+  <!-- 房间12B -->
+  <polygon points="200,50 366,50 366,169 200,169" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="283.0" y="109.5" font-size="12" text-anchor="middle" fill="#333">12B</text>
+  <!-- 房间12C -->
+  <polygon points="380,50 556,50 556,172 380,172" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="468.0" y="111.0" font-size="12" text-anchor="middle" fill="#333">12C</text>
+  <!-- 房间12D -->
+  <polygon points="560,50 738,50 738,171 560,171" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="649.0" y="110.5" font-size="12" text-anchor="middle" fill="#333">12D</text>
+  <!-- 房间12E -->
+  <polygon points="20,180 184,180 184,307 20,307" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="102.0" y="243.5" font-size="12" text-anchor="middle" fill="#333">12E</text>
+  <!-- 房间12F -->
+  <polygon points="200,180 377,180 377,293 200,293" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.5" y="236.5" font-size="12" text-anchor="middle" fill="#333">12F</text>
+  <!-- 房间12G -->
+  <polygon points="380,180 541,180 541,310 380,310" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="460.5" y="245.0" font-size="12" text-anchor="middle" fill="#333">12G</text>
+  <!-- 房间12H -->
+  <polygon points="560,180 730,180 730,297 560,297" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="645.0" y="238.5" font-size="12" text-anchor="middle" fill="#333">12H</text>
+  <!-- 房间12I -->
+  <polygon points="20,310 182,310 182,436 20,436" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="101.0" y="373.0" font-size="12" text-anchor="middle" fill="#333">12I</text>
+  <!-- 房间12J -->
+  <polygon points="200,310 375,310 375,433 200,433" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.5" y="371.5" font-size="12" text-anchor="middle" fill="#333">12J</text>
+</svg>

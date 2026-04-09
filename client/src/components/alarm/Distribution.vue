@@ -94,20 +94,10 @@ const updateChart = (data: any) => {
   
   // 情况 2：后端返回 { categories: [], series: [] } - 时间序列数据（折线图），不适用于告警分布
   if (data.categories && data.series) {
-    // 对于告警分布，我们将时间序列数据转换为按类型统计的饼图
-    const series = data.series || []
-    const typeStats: Record<string, number> = {}
-    
-    // 统计每个类型的告警数量
-    series.forEach((s: any) => {
-      const typeName = s.name || '未知类型'
-      const count = s.data?.length || 0
-      typeStats[typeName] = (typeStats[typeName] || 0) + count
-    })
-    
-    const pieData = Object.entries(typeStats).map(([name, value]) => ({
-      name,
-      value
+    // 对于告警分布，直接使用 series[0].data 中的 name 和 value
+    const pieData = (data.series[0]?.data || []).map((item: any) => ({
+      name: item.name,
+      value: item.value
     }))
     
     const option = getBasePieChartConfig(pieData, {

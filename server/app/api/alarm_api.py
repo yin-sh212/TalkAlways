@@ -506,7 +506,7 @@ async def generate_real_alarms(
             # 查询所有建筑
             buildings_sql = "SELECT DISTINCT building_id FROM energy_consumption"
             buildings_result = await Database.fetch_all(buildings_sql)
-            target_buildings = [b[0] for b in buildings_result]
+            target_buildings = [b['building_id'] for b in buildings_result]
         
         print(f"🏢 待检测建筑数量：{len(target_buildings)}")
 
@@ -672,17 +672,93 @@ async def generate_real_alarms(
         }
 
 
+# ========== 获取告警统计指标 ==========
+
+@router.get("/stats")
+async def get_alarm_stats(
+        building_id: Optional[str] = Query(None, description="建筑编号，支持逗号分隔多个ID"),
+        start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
+        end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）")
+):
+    """获取告警统计指标（总数、未解决、紧急、已确认）"""
+    try:
+        # 构建查询条件
+        conditions = ["1=1"]
+        params = []
+        
+        # 支持多建筑查询
+        if building_id:
+            building_ids = [bid.strip() for bid in building_id.split(',') if bid.strip()]
+            if len(building_ids) == 1:
+                conditions.append("building_id = %s")
+                params.append(building_ids[0])
+            elif len(building_ids) > 1:
+                placeholders = ','.join(['%s'] * len(building_ids))
+                conditions.append(f"building_id IN ({placeholders})")
+                params.extend(building_ids)
+        
+        # 时间范围
+        if start_date:
+            conditions.append("DATE(start_time) >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(start_time) <= %s")
+            params.append(end_date)
+        
+        where_clause = " AND ".join(conditions)
+        query_params = tuple(params) if params else None
+        
+        # 查询总告警数
+        total_sql = f"SELECT COUNT(*) as total FROM alarms WHERE {where_clause}"
+        total_result = await Database.fetch_one(total_sql, query_params)
+        totalAlarms = total_result['total'] if total_result else 0
+        
+        # 查询未解决告警（pending + confirmed）
+        unresolved_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND status IN ('pending', 'confirmed')"
+        unresolved_result = await Database.fetch_one(unresolved_sql, query_params)
+        unresolvedCount = unresolved_result['count'] if unresolved_result else 0
+        
+        # 查询紧急告警（alarm_level <= 2）
+        critical_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND alarm_level <= 2"
+        critical_result = await Database.fetch_one(critical_sql, query_params)
+        criticalCount = critical_result['count'] if critical_result else 0
+        
+        # 查询已确认告警（confirmed + resolved）
+        acknowledged_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND status IN ('confirmed', 'resolved')"
+        acknowledged_result = await Database.fetch_one(acknowledged_sql, query_params)
+        acknowledgedCount = acknowledged_result['count'] if acknowledged_result else 0
+        
+        return {
+            "code": 200,
+            "message": "成功",
+            "data": {
+                "totalAlarms": totalAlarms,
+                "unresolvedCount": unresolvedCount,
+                "criticalCount": criticalCount,
+                "acknowledgedCount": acknowledgedCount
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ 查询告警统计失败: {e}")
+        return {
+            "code": 500,
+            "message": f"查询失败: {str(e)}",
+            "data": None
+        }
+
+
 # ========== 获取告警列表 ==========
 
 @router.get("/list")
 async def get_alarm_list(
         status: Optional[str] = Query(None, description="过滤状态：pending/confirmed/resolved"),
-        building_id: Optional[str] = Query(None, description="建筑编号"),
+        building_id: Optional[str] = Query(None, description="建筑编号，支持逗号分隔多个ID"),
         alarm_level: Optional[int] = Query(None, description="告警级别"),
         start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
         end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）"),
         page: int = Query(1, ge=1, description="页码"),
-        page_size: int = Query(20, ge=1, le=100, description="每页数量")
+        page_size: int = Query(10, ge=1, le=100, description="每页数量")
 ):
     """获取告警列表"""
     try:
@@ -693,9 +769,18 @@ async def get_alarm_list(
         if status:
             conditions.append("status = %s")
             params.append(status)
+        
+        # 支持多建筑查询（逗号分隔）
         if building_id:
-            conditions.append("building_id = %s")
-            params.append(building_id)
+            building_ids = [bid.strip() for bid in building_id.split(',') if bid.strip()]
+            if len(building_ids) == 1:
+                conditions.append("building_id = %s")
+                params.append(building_ids[0])
+            elif len(building_ids) > 1:
+                placeholders = ','.join(['%s'] * len(building_ids))
+                conditions.append(f"building_id IN ({placeholders})")
+                params.extend(building_ids)
+        
         if alarm_level:
             conditions.append("alarm_level = %s")
             params.append(alarm_level)

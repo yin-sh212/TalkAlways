@@ -272,12 +272,15 @@ const pagination = reactive({
   pageSize: 10,
   pageSizes: [10, 20, 50],
   showSizePicker: true,
+  itemCount: 0, // 总记录数
   onChange: (page: number) => {
     pagination.page = page;
+    handleQuery(); // 触发重新查询
   },
   onUpdatePageSize: (pageSize: number) => {
     pagination.pageSize = pageSize;
     pagination.page = 1;
+    handleQuery(); // 触发重新查询
   },
 });
 
@@ -431,56 +434,47 @@ const handleQuery = async (skipValidation: boolean = false) => {
       return;
     }
 
-    // 支持多建筑查询 - 循环调用 API 并合并结果
-    const allAlarms: any[] = [];
-    const allTrendData: any[] = [];
-    const allDistributionData: any[] = [];
+    // 支持多建筑查询 - 将建筑 ID 列表用逗号拼接传给后端(后端使用 IN 子句)
+    const buildingIds = queryForm.buildings.join(',');
+    
+    const [alarmRes, trendRes, distributionRes, statsRes] = await Promise.all([
+      alarmApi.getAlarmList({
+        // 使用告警列表接口 - 添加时间参数
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+        page: pagination.page,
+        page_size: pagination.pageSize,
+      }),
+      alarmApi.getAlarmTrend({
+        // 趋势图数据 - 支持多建筑聚合
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+      alarmApi.getAlarmDistribution({
+        // 分布图数据 - 支持多建筑聚合
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+      alarmApi.getAlarmStats({
+        // 统计指标数据 - 使用后端统计接口
+        building_id: buildingIds,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+    ]);
 
-    // 为每个建筑获取数据
-    for (const buildingId of queryForm.buildings) {
-      const [alarmRes, trendRes, distributionRes] = await Promise.all([
-        alarmApi.getAlarmList({
-          // 使用告警列表接口 - 添加时间参数
-          building_id: buildingId,
-          start_date: startDate,
-          end_date: endDate,
-          page: pagination.page,
-          page_size: pagination.pageSize,
-        }),
-        alarmApi.getAlarmTrend({
-          // 趋势图数据
-          building_id: buildingId,
-          start_date: startDate,
-          end_date: endDate,
-        }),
-        alarmApi.getAlarmDistribution({
-          // 分布图数据 - 告警类型统计（饼图）
-          building_id: buildingId,
-          start_date: startDate,
-          end_date: endDate,
-        }),
-      ]);
+    // 处理告警列表数据
+    const alarmData = alarmRes.data?.data || { total: 0, page: 1, page_size: 10, items: [] };
+    const alarms = Array.isArray(alarmData.items) ? alarmData.items : [];
+    
+    // 更新分页总数
+    pagination.itemCount = alarmData.total || 0;
 
-      // 收集告警列表
-      const alarmData = alarmRes.data?.data || { total: 0, page: 1, page_size: 10, items: [] };
-      const alarms = Array.isArray(alarmData.items) ? alarmData.items : [];
-      allAlarms.push(...alarms);
-
-      // 收集趋势数据
-      const trendResData = trendRes.data?.data || { categories: [], series: [] };
-      if (trendResData.series && trendResData.series.length > 0) {
-        allTrendData.push(trendResData);
-      }
-
-      // 收集分布数据
-      const distributionResData = distributionRes.data?.data || { categories: [], series: [] };
-      if (distributionResData.series && distributionResData.series.length > 0) {
-        allDistributionData.push(distributionResData);
-      }
-    }
-
-    // 填充表格数据 - 映射所有建筑的告警数据
-    tableData.value = allAlarms.map((item: any, index: number) => {
+    // 填充表格数据 - 映射告警数据
+    tableData.value = alarms.map((item: any, index: number) => {
       // 映射 status 字段
       const mappedStatus = mapStatus(item.status);
       
@@ -513,40 +507,28 @@ const handleQuery = async (skipValidation: boolean = false) => {
       return processedItem;
     });
     
-    // 基于告警列表计算所有 KPI 指标
-    const totalAlarms = allAlarms.length;
-    // 未解决：pending 和 confirmed 状态
-    const unresolvedCount = allAlarms.filter((a) => 
-      a.status === "pending" || a.status === "confirmed"
-    ).length;
-    // 已确认：acknowledged 和 resolved 状态
-    const acknowledgedCount = allAlarms.filter((a) => 
-      a.status === "acknowledged" || a.status === "resolved"
-    ).length;
-    // 紧急告警：alarm_level <= 2（严重和警告）
-    const criticalCount = allAlarms.filter((a) => {
-      const level = a.alarm_level || parseInt(a.severity) || 0;
-      return level <= 2;
-    }).length;
-    
-    metrics.value = {
-      totalAlarms,
-      unresolvedCount,
-      criticalCount,
-      acknowledgedCount,
+    // 使用后端返回的统计指标
+    const statsData = statsRes.data?.data || {
+      totalAlarms: 0,
+      unresolvedCount: 0,
+      criticalCount: 0,
+      acknowledgedCount: 0
     };
     
-    // 合并图表数据 - 支持多建筑数据聚合
-    trendData.value = mergeTrendData(allTrendData);
-    distributionData.value = mergeDistributionData(allDistributionData);
-
-    // 更新图表
+    metrics.value = {
+      totalAlarms: statsData.totalAlarms,
+      unresolvedCount: statsData.unresolvedCount,
+      criticalCount: statsData.criticalCount,
+      acknowledgedCount: statsData.acknowledgedCount,
+    };
+    
+    // 更新图表 - 直接使用接口返回数据
     if (alarmTrendRef.value) {
-      alarmTrendRef.value.updateChart(trendData.value);
+      alarmTrendRef.value.updateChart(trendRes.data?.data || { categories: [], series: [] });
     }
     
     if (alarmDistributionRef.value) {
-      alarmDistributionRef.value.updateChart(distributionData.value);
+      alarmDistributionRef.value.updateChart(distributionRes.data?.data || { categories: [], series: [] });
     }
 
     message.success("查询成功");
@@ -640,7 +622,6 @@ const mergeDistributionData = (distributionDataArray: any[]) => {
   const categories = Array.from(categoryMap.keys());
   const values = Array.from(categoryMap.values());
   const series = [{
-    name: '告警分布',
     type: 'pie',
     data: categories.map((category, index) => ({
       name: category,

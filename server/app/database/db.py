@@ -175,6 +175,10 @@ class ConnectionWrapper:
             async def fetchone(self):
                 return self.cursor.fetchone()
             
+            async def executemany(self, query, params_list):
+                """批量执行 SQL"""
+                return self.cursor.executemany(query, params_list)
+            
             # 添加异步上下文管理器支持
             async def __aenter__(self):
                 return self

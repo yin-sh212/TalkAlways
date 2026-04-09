@@ -280,6 +280,26 @@ export const getAlarmList = (params?: AlarmListParams) => {
   return http.get<AlarmListResponse>('/alarm/list', { params })
 }
 
+// 获取告警统计指标
+export interface AlarmStatsResponse {
+  code: number
+  message: string
+  data: {
+    totalAlarms: number
+    unresolvedCount: number
+    criticalCount: number
+    acknowledgedCount: number
+  }
+}
+
+export const getAlarmStats = (params?: {
+  building_id?: string
+  start_date?: string
+  end_date?: string
+}) => {
+  return http.get<AlarmStatsResponse>('/alarm/stats', { params })
+}
+
 // 批量确认告警 - 使用 BatchOperationRequest 和 BatchOperationResponse 类型
 export const batchConfirmAlarms = (data: BatchOperationRequest) => {
   return http.post<BatchOperationResponse>('/alarm/batch-confirm', data)

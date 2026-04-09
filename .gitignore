@@ -69,7 +69,3 @@ docker-compose.override.yml
 # Backup directories
 /opt/energy-system-backup/
 C:\energy-system-backup\
-
-# Windows PowerShell 脚本
-*.ps1
-!setup-cicd.sh

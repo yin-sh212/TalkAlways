@@ -38,10 +38,16 @@
                 context.fillStrokeShape(shape)
               },
               fill: getSpaceColor(space),
-              stroke: selectedSpace?.id === space.id ? '#ff4d4f' : '#1890ff',
-              strokeWidth: selectedSpace?.id === space.id ? 3 : 2,
-              opacity: hoveredSpace?.id === space.id ? 0.6 : 0.3,
-              listening: !isDrawingMode
+              stroke: getSpaceStrokeColor(space),
+              strokeWidth: getSpaceStrokeWidth(space),
+              opacity: hoveredSpace?.id === space.id ? 0.7 : getSpaceOpacity(space),
+              listening: !isDrawingMode,
+              shadowColor: isAbnormalSpace(space) ? 'red' : 'transparent',
+              shadowBlur: isAbnormalSpace(space) ? 15 : 0,
+              shadowOffset: { x: 0, y: 0 },
+              shadowOpacity: isAbnormalSpace(space) ? 0.8 : 0,
+              // 告警空间添加闪烁效果
+              dash: hasActiveAlarm(space) ? [10, 5] : []
             }"
             @mouseenter="handleSpaceHover(space)"
             @mouseleave="handleSpaceLeave"
@@ -117,6 +123,27 @@
       <span class="zoom-level">{{ Math.round((scale || 1) * 100) }}%</span>
     </div>
 
+    <!-- 热力图图例 -->
+    <div class="heat-legend">
+      <div class="legend-title">能耗等级</div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #52c41a"></span>
+        <span>正常 (&lt;2 kWh/㎡)</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #faad14"></span>
+        <span>偏高 (2-5 kWh/㎡)</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #ff7a45"></span>
+        <span>较高 (5-10 kWh/㎡)</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #ff4d4f"></span>
+        <span>异常 (&gt;10 kWh/㎡)</span>
+      </div>
+    </div>
+
     <!-- 悬浮提示框 -->
     <div
       v-if="hoveredSpace && tooltipVisible"
@@ -158,6 +185,9 @@ const props = withDefaults(defineProps<Props>(), {
   isDrawingMode: false,
   drawingPoints: () => []
 })
+
+// 解构 selectedSpace 以便在 script 中使用
+const { selectedSpace } = props
 
 const emit = defineEmits<{
   (e: 'space-select', space: Space): void
@@ -209,6 +239,7 @@ const hoveredSpace = ref<Space | null>(null)
 const tooltipVisible = ref(false)
 const tooltipPosition = ref({ x: 0, y: 0 })
 const hoveredSpaceEnergy = ref<any>(null)
+const spaceAlarms = ref<Record<string, any[]>>({}) // 空间告警数据
 
 // 带过期时间的缓存结构
 interface CacheItem {
@@ -217,6 +248,26 @@ interface CacheItem {
 }
 const CACHE_TTL = 5 * 60 * 1000 // 缓存有效期 5 分钟
 const energyCache = new Map<string, CacheItem>() // 能耗数据缓存
+
+// 获取空间活跃告警
+const fetchSpaceAlarms = async () => {
+  if (!props.floor?.id) return
+  
+  try {
+    const response = await fetch(`/api/alarm/space/active-alarms?floor_id=${props.floor.id}`)
+    const result = await response.json()
+    if (result.code === 200) {
+      spaceAlarms.value = result.data
+    }
+  } catch (error) {
+    console.error('获取空间告警失败:', error)
+  }
+}
+
+// 监听楼层变化,重新获取告警数据
+watch(() => props.floor?.id, () => {
+  fetchSpaceAlarms()
+}, { immediate: true })
 
 // 展平多边形坐标
 const flattenPolygon = (polygon: number[][]): number[] => {
@@ -228,8 +279,13 @@ const flattenDrawingPoints = (): number[] => {
   return props.drawingPoints.flat()
 }
 
-// 获取空间颜色（基于能耗）
+// 获取空间颜色（基于能耗和告警）
 const getSpaceColor = (space: Space): string => {
+  // 有活跃告警的空间显示红色
+  if (spaceAlarms.value[space.id] && spaceAlarms.value[space.id].length > 0) {
+    return '#ff4d4f'
+  }
+  
   if (!space.energy_per_sqm) return '#1890ff'
   
   const value = space.energy_per_sqm
@@ -237,6 +293,36 @@ const getSpaceColor = (space: Space): string => {
   if (value < 5) return '#faad14' // 黄色 - 中等
   if (value < 10) return '#ff7a45' // 橙色 - 较高
   return '#ff4d4f' // 红色 - 高能耗
+}
+
+// 获取空间边框颜色
+const getSpaceStrokeColor = (space: Space): string => {
+  return selectedSpace?.id === space.id ? '#ff4d4f' : '#1890ff'
+}
+
+// 获取空间边框宽度
+const getSpaceStrokeWidth = (space: Space): number => {
+  return selectedSpace?.id === space.id ? 3 : 2
+}
+
+// 获取空间透明度
+const getSpaceOpacity = (space: Space): number => {
+  return 0.3
+}
+
+// 判断空间是否有活跃告警
+const hasActiveAlarm = (space: Space): boolean => {
+  return !!(spaceAlarms.value[space.id] && spaceAlarms.value[space.id].length > 0)
+}
+
+// 判断空间是否异常（有告警或能耗过高）
+const isAbnormalSpace = (space: Space): boolean => {
+  // 有活跃告警
+  if (hasActiveAlarm(space)) {
+    return true
+  }
+  // 能耗异常
+  return !!(space.energy_per_sqm && space.energy_per_sqm > 10)
 }
 
 // 获取空间能耗数据的异步函数
@@ -444,8 +530,7 @@ onUnmounted(() => {
 .zoom-level {
   text-align: center;
   font-size: 12px;
-  color: #595959;
-  margin-top: 4px;
+  color: #666;
 }
 
 .tooltip-title {
@@ -459,5 +544,44 @@ onUnmounted(() => {
   font-size: 12px;
   color: #595959;
   margin: 4px 0;
+}
+
+.heat-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: white;
+  padding: 12px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  min-width: 160px;
+}
+
+.legend-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
+.legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 </style>

@@ -1632,3 +1632,80 @@ async def detect_real_alarms(request: AlarmDetectionRequest):
             "message": f"检测失败：{str(e)}",
             "data": None
         }
+
+
+@router.get("/space/active-alarms")
+async def get_space_active_alarms(floor_id: str = Query(..., description="楼层ID")):
+    """获取楼层下所有空间的活跃告警,用于平面图告警联动"""
+    sql = """
+        SELECT 
+            smb.space_id,
+            a.id as alarm_id,
+            a.alarm_level,
+            a.alarm_type,
+            a.description,
+            a.start_time,
+            a.status
+        FROM space_meter_binding smb
+        INNER JOIN alarms a ON a.meter_id = smb.meter_id
+        WHERE smb.space_id IN (
+            SELECT id FROM spaces WHERE floor_id = %s
+        )
+        AND a.status IN ('pending', 'confirmed')
+        ORDER BY a.alarm_level DESC, a.start_time DESC
+    """
+    
+    alarms = await Database.fetch_all(sql, (floor_id,))
+    
+    # 按space_id分组
+    space_alarms = {}
+    for alarm in alarms:
+        space_id = alarm['space_id']
+        if space_id not in space_alarms:
+            space_alarms[space_id] = []
+        space_alarms[space_id].append(dict(alarm))
+    
+    return {
+        "code": 200,
+        "message": "成功",
+        "data": space_alarms
+    }
+
+
+@router.get("/floor/stats")
+async def get_floor_stats(floor_id: str = Query(..., description="楼层ID")):
+    """获取楼层统计数据"""
+    # 查询空间总数和高能耗数量
+    space_sql = """
+        SELECT 
+            COUNT(*) as total_spaces,
+            SUM(CASE WHEN energy_per_sqm > 5 THEN 1 ELSE 0 END) as high_energy_spaces,
+            SUM(CASE WHEN energy_per_sqm > 10 THEN 1 ELSE 0 END) as abnormal_spaces,
+            COALESCE(SUM(total_energy), 0) as total_energy
+        FROM spaces
+        WHERE floor_id = %s
+    """
+    space_stats = await Database.fetch_one(space_sql, (floor_id,))
+    
+    # 查询活跃告警数量
+    alarm_sql = """
+        SELECT COUNT(DISTINCT a.id) as active_alarms
+        FROM alarms a
+        INNER JOIN space_meter_binding smb ON smb.meter_id = a.meter_id
+        INNER JOIN spaces s ON s.id = smb.space_id
+        WHERE s.floor_id = %s
+        AND a.status IN ('pending', 'confirmed')
+    """
+    alarm_stats = await Database.fetch_one(alarm_sql, (floor_id,))
+    
+    return {
+        "code": 200,
+        "message": "成功",
+        "data": {
+            "total_spaces": space_stats['total_spaces'] if space_stats else 0,
+            "high_energy_spaces": space_stats['high_energy_spaces'] if space_stats else 0,
+            "abnormal_spaces": space_stats['abnormal_spaces'] if space_stats else 0,
+            "total_energy": round(space_stats['total_energy'], 2) if space_stats else 0,
+            "active_alarms": alarm_stats['active_alarms'] if alarm_stats else 0
+        }
+    }

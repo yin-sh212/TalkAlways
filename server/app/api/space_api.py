@@ -10,10 +10,24 @@ router = APIRouter(prefix="/api/space", tags=["空间管理"])
 async def list_spaces(floor_id: str = Query(..., description="楼层ID")):
     """获取楼层下所有空间"""
     sql = """
-        SELECT id, floor_id, space_type, name, code, polygon, center_x, center_y, area_sqm, created_at
-        FROM spaces
-        WHERE floor_id = %s
-        ORDER BY code ASC
+        SELECT 
+            s.id, s.floor_id, s.space_type, s.name, s.code, s.polygon, 
+            s.center_x, s.center_y, s.area_sqm, s.created_at,
+            COALESCE(SUM(ec.electricity), 0) as total_energy,
+            CASE 
+                WHEN s.area_sqm > 0 THEN COALESCE(SUM(ec.electricity), 0) / s.area_sqm 
+                ELSE 0 
+            END as energy_per_sqm,
+            COUNT(DISTINCT m.id) as meter_count
+        FROM spaces s
+        LEFT JOIN space_meter_binding smb ON smb.space_id = s.id
+        LEFT JOIN meters m ON m.id = smb.meter_id
+        LEFT JOIN energy_consumption ec ON ec.meter_id = m.id 
+            AND ec.timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+        WHERE s.floor_id = %s
+        GROUP BY s.id, s.floor_id, s.space_type, s.name, s.code, s.polygon, 
+                 s.center_x, s.center_y, s.area_sqm, s.created_at
+        ORDER BY s.code ASC
     """
     
     spaces = await Database.fetch_all(sql, (floor_id,))
@@ -27,6 +41,66 @@ async def list_spaces(floor_id: str = Query(..., description="楼层ID")):
         "code": 200,
         "message": "成功",
         "data": spaces
+    }
+
+
+@router.post("/meter/bind")
+async def bind_space_meter(binding_data: dict):
+    """绑定空间与监测点"""
+    required_fields = ["space_id", "meter_id"]
+    for field in required_fields:
+        if field not in binding_data:
+            raise HTTPException(status_code=400, detail=f"缺少必填字段: {field}")
+    
+    space_id = binding_data["space_id"]
+    meter_id = binding_data["meter_id"]
+    
+    # 检查是否已绑定
+    check_sql = "SELECT id FROM space_meter_binding WHERE space_id = %s AND meter_id = %s"
+    existing = await Database.fetch_one(check_sql, (space_id, meter_id))
+    
+    if existing:
+        return {"code": 200, "message": "已存在绑定关系"}
+    
+    # 创建绑定
+    import uuid
+    binding_id = f"SMB_{uuid.uuid4().hex[:8]}"
+    
+    insert_sql = """
+        INSERT INTO space_meter_binding (id, space_id, meter_id, created_at)
+        VALUES (%s, %s, %s, NOW())
+    """
+    
+    await Database.execute(insert_sql, (binding_id, space_id, meter_id))
+    
+    return {"code": 200, "message": "绑定成功", "data": {"binding_id": binding_id}}
+
+
+@router.delete("/meter/unbind")
+async def unbind_space_meter(space_id: str = Query(...), meter_id: str = Query(...)):
+    """解绑空间与监测点"""
+    sql = "DELETE FROM space_meter_binding WHERE space_id = %s AND meter_id = %s"
+    await Database.execute(sql, (space_id, meter_id))
+    
+    return {"code": 200, "message": "解绑成功"}
+
+
+@router.get("/meter/bound")
+async def get_bound_meters(space_id: str = Query(..., description="空间ID")):
+    """获取空间已绑定的监测点"""
+    sql = """
+        SELECT m.id, m.building_id, m.type, m.status
+        FROM meters m
+        INNER JOIN space_meter_binding smb ON smb.meter_id = m.id
+        WHERE smb.space_id = %s
+    """
+    
+    meters = await Database.fetch_all(sql, (space_id,))
+    
+    return {
+        "code": 200,
+        "message": "成功",
+        "data": meters
     }
 
 

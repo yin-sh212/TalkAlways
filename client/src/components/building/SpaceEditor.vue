@@ -93,13 +93,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import type { Floor, Space } from '@/types/building'
 
 interface Props {
   floor: Floor | null
   spaces: Space[]
+  selectedSpace?: Space | null
 }
 
 const props = defineProps<Props>()
@@ -110,6 +111,13 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+
+// 监听 selectedSpace 变化，自动选中
+watch(() => props.selectedSpace, (newSpace) => {
+  if (newSpace && props.floor?.id === newSpace.floor_id) {
+    selectSpace(newSpace)
+  }
+}, { immediate: true })
 
 // 状态管理
 const isDrawing = ref(false)

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 6</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间6A -->
+  <polygon points="20,50 184,50 184,164 20,164" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="102.0" y="107.0" font-size="12" text-anchor="middle" fill="#333">6A</text>
+  <!-- 房间6B -->
+  <polygon points="200,50 379,50 379,175 200,175" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="289.5" y="112.5" font-size="12" text-anchor="middle" fill="#333">6B</text>
+  <!-- 房间6C -->
+  <polygon points="380,50 546,50 546,168 380,168" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="463.0" y="109.0" font-size="12" text-anchor="middle" fill="#333">6C</text>
+  <!-- 房间6D -->
+  <polygon points="560,50 738,50 738,167 560,167" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="649.0" y="108.5" font-size="12" text-anchor="middle" fill="#333">6D</text>
+  <!-- 房间6E -->
+  <polygon points="20,180 200,180 200,298 20,298" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="110.0" y="239.0" font-size="12" text-anchor="middle" fill="#333">6E</text>
+  <!-- 房间6F -->
+  <polygon points="200,180 375,180 375,308 200,308" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="287.5" y="244.0" font-size="12" text-anchor="middle" fill="#333">6F</text>
+  <!-- 房间6G -->
+  <polygon points="380,180 560,180 560,301 380,301" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="470.0" y="240.5" font-size="12" text-anchor="middle" fill="#333">6G</text>
+  <!-- 房间6H -->
+  <polygon points="560,180 739,180 739,295 560,295" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="649.5" y="237.5" font-size="12" text-anchor="middle" fill="#333">6H</text>
+  <!-- 房间6I -->
+  <polygon points="20,310 196,310 196,429 20,429" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="108.0" y="369.5" font-size="12" text-anchor="middle" fill="#333">6I</text>
+  <!-- 房间6J -->
+  <polygon points="200,310 366,310 366,430 200,430" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="283.0" y="370.0" font-size="12" text-anchor="middle" fill="#333">6J</text>
+  <!-- 房间6K -->
+  <polygon points="380,310 557,310 557,437 380,437" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="468.5" y="373.5" font-size="12" text-anchor="middle" fill="#333">6K</text>
+</svg>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="800" height="600" fill="#f5f5f5"/>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Floor 3</text>
+  
+  <!-- 房间区块 -->
+  <!-- 房间3A -->
+  <polygon points="20,50 180,50 180,161 20,161" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="100.0" y="105.5" font-size="12" text-anchor="middle" fill="#333">3A</text>
+  <!-- 房间3B -->
+  <polygon points="200,50 367,50 367,170 200,170" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="283.5" y="110.0" font-size="12" text-anchor="middle" fill="#333">3B</text>
+  <!-- 房间3C -->
+  <polygon points="380,50 544,50 544,176 380,176" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="462.0" y="113.0" font-size="12" text-anchor="middle" fill="#333">3C</text>
+  <!-- 房间3D -->
+  <polygon points="560,50 723,50 723,168 560,168" fill="#fff3e0" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="641.5" y="109.0" font-size="12" text-anchor="middle" fill="#333">3D</text>
+  <!-- 房间3E -->
+  <polygon points="20,180 196,180 196,303 20,303" fill="#fce4ec" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="108.0" y="241.5" font-size="12" text-anchor="middle" fill="#333">3E</text>
+  <!-- 房间3F -->
+  <polygon points="200,180 377,180 377,303 200,303" fill="#e3f2fd" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="288.5" y="241.5" font-size="12" text-anchor="middle" fill="#333">3F</text>
+  <!-- 房间3G -->
+  <polygon points="380,180 554,180 554,291 380,291" fill="#f3e5f5" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="467.0" y="235.5" font-size="12" text-anchor="middle" fill="#333">3G</text>
+  <!-- 房间3H -->
+  <polygon points="560,180 730,180 730,301 560,301" fill="#e8f5e9" stroke="#666" stroke-width="2" opacity="0.7"/>
+  <text x="645.0" y="240.5" font-size="12" text-anchor="middle" fill="#333">3H</text>
+</svg>

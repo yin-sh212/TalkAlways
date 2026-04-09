@@ -4,6 +4,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# 设置工作目录为 server 文件夹（确保相对路径正确）
+server_dir = Path(__file__).parent
+os.chdir(server_dir)
+
 # 加载环境变量
 load_dotenv()
 

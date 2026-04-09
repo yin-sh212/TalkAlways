@@ -23,6 +23,10 @@ from app.api import analysis_api
 from app.api import realtime_api
 from app.api import ai_analyst
 from app.api import chart_analysis
+from app.api import floor_api
+from app.api import space_api
+from app.api import meter_binding_api
+from app.api import space_energy_api
 
 from datetime import datetime
 import os
@@ -164,6 +168,10 @@ app.include_router(analysis_api.router)
 app.include_router(realtime_api.router)
 app.include_router(ai_analyst.router)
 app.include_router(chart_analysis.router)
+app.include_router(floor_api.router)
+app.include_router(space_api.router)
+app.include_router(meter_binding_api.router)
+app.include_router(space_energy_api.router)
 
 # ======================================
 # 接口

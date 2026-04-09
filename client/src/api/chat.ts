@@ -29,9 +29,8 @@ export const askQuestion = (query: string) => {
 export const askQuestionStream = (query: string, onChunk: (chunk: string) => void) => {
   const controller = new AbortController()
   
-  // 使用环境变量或相对路径
-  const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api'
-  const streamUrl = `${apiBaseUrl}/chat/ask/stream`
+  // 开发环境使用相对路径,通过 Vite 代理转发
+  const streamUrl = '/api/chat/ask/stream'
   
   const fetchPromise = fetch(streamUrl, {
     method: 'POST',

@@ -1,68 +1,63 @@
 <template>
-  <div class="ai-assistant">
-    <!-- 智能对话界面 -->
-    <n-card :bordered="false" class="chat-card">
-      <div class="chat-container">
-        <!-- 消息列表 -->
-        <div ref="messagesContainerRef" class="messages-container">
-          <transition-group name="message-fade">
-            <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.type">
-              <div class="message-avatar">
-                <n-icon v-if="msg.type === 'user'" :component="Person" size="24" />
-                <n-icon v-else :component="Sparkles" size="24" color="#1890ff" />
-              </div>
-              <div class="message-content">
-                <div class="message-bubble">
-                  <n-text v-if="msg.type === 'loading'" depth="3">
-                    <n-spin size="small" /> 思考中...
-                  </n-text>
-                  <markdown-renderer v-else :content="msg.content" />
-                </div>
-                <div class="message-time">{{ msg.time }}</div>
-              </div>
+  <n-card :bordered="false" class="chat-card">
+    <!-- 消息列表 -->
+    <div ref="messagesContainerRef" class="messages-container">
+      <transition-group name="message-fade">
+        <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.type">
+          <div class="message-avatar">
+            <n-icon v-if="msg.type === 'user'" :component="Person" size="24" />
+            <n-icon v-else :component="Sparkles" size="24" color="#1890ff" />
+          </div>
+          <div class="message-content">
+            <div class="message-bubble">
+              <n-text v-if="msg.type === 'loading'" depth="3">
+                <n-spin size="small" /> 思考中...
+              </n-text>
+              <markdown-renderer v-else :content="msg.content" />
             </div>
-          </transition-group>
+            <div class="message-time">{{ msg.time }}</div>
+          </div>
         </div>
+      </transition-group>
+    </div>
 
-        <!-- 输入区域 -->
-        <div class="input-area">
-          <n-input
-            v-model:value="inputValue"
-            type="textarea"
-            placeholder="请输入问题，例如：'xxx建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
-            :rows="3"
-            :disabled="loading"
-            @keydown.enter.exact.prevent="handleSend"
+    <!-- 输入区域 -->
+    <div class="input-area">
+      <n-input
+        v-model:value="inputValue"
+        type="textarea"
+        placeholder="请输入问题，例如：'xxx建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
+        :rows="3"
+        :disabled="loading"
+        @keydown.enter.exact.prevent="handleSend"
+      >
+        <template #suffix>
+          <n-button
+            type="primary"
+            :disabled="!inputValue.trim() || loading"
+            @click="handleSend"
           >
-            <template #suffix>
-              <n-button
-                type="primary"
-                :disabled="!inputValue.trim() || loading"
-                @click="handleSend"
-              >
-                <template #icon>
-                  <n-icon :component="Send" />
-                </template>
-                发送
-              </n-button>
+            <template #icon>
+              <n-icon :component="Send" />
             </template>
-          </n-input>
+            发送
+          </n-button>
+        </template>
+      </n-input>
 
-          <n-space class="quick-questions" :wrap="true">
-            <n-tag
-              v-for="(q, idx) in quickQuestions"
-              :key="idx"
-              checkable
-              :checked="false"
-              @update:checked="() => handleQuickQuestion(q)"
-            >
-              {{ q }}
-            </n-tag>
-          </n-space>
-        </div>
-      </div>
-    </n-card>
-  </div>
+      <n-space class="quick-questions" :wrap="true">
+        <n-tag
+          v-for="(q, idx) in quickQuestions"
+          :key="idx"
+          checkable
+          :checked="false"
+          @update:checked="() => handleQuickQuestion(q)"
+        >
+          {{ q }}
+        </n-tag>
+      </n-space>
+    </div>
+  </n-card>
 </template>
 
 <script setup lang="ts">
@@ -191,24 +186,19 @@ function handleQuickQuestion(question: string) {
 </script>
 
 <style scoped>
-.ai-assistant {
-  height: 100%;
-}
-
 .chat-card {
-  height: calc(100vh - 180px);
-  min-height: 500px;
+  max-height: calc(100vh - 160px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .chat-card :deep(.n-card__content) {
   padding: 0;
   height: 100%;
-}
-
-.chat-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  overflow: hidden;
 }
 
 .messages-container {
@@ -219,7 +209,7 @@ function handleQuickQuestion(question: string) {
   background: var(--n-color-modal);
   border-radius: 8px;
   margin-bottom: 16px;
-  min-height: 0;
+  scroll-behavior: smooth;
 }
 
 .message-item {
@@ -280,6 +270,7 @@ function handleQuickQuestion(question: string) {
 }
 
 .input-area {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;

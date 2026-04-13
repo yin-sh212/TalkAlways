@@ -1675,17 +1675,30 @@ async def get_space_active_alarms(floor_id: str = Query(..., description="楼层
 @router.get("/floor/stats")
 async def get_floor_stats(floor_id: str = Query(..., description="楼层ID")):
     """获取楼层统计数据"""
-    # 查询空间总数和高能耗数量
-    space_sql = """
+    # 先查询该楼层所有空间的单位面积能耗
+    space_energy_sql = """
         SELECT 
-            COUNT(*) as total_spaces,
-            SUM(CASE WHEN energy_per_sqm > 5 THEN 1 ELSE 0 END) as high_energy_spaces,
-            SUM(CASE WHEN energy_per_sqm > 10 THEN 1 ELSE 0 END) as abnormal_spaces,
-            COALESCE(SUM(total_energy), 0) as total_energy
-        FROM spaces
-        WHERE floor_id = %s
+            s.id,
+            s.area_sqm,
+            COALESCE(SUM(ec.electricity), 0) as total_energy,
+            CASE 
+                WHEN s.area_sqm > 0 THEN COALESCE(SUM(ec.electricity), 0) / s.area_sqm
+                ELSE COALESCE(SUM(ec.electricity), 0)
+            END as energy_per_sqm
+        FROM spaces s
+        LEFT JOIN space_meter_binding smb ON smb.space_id = s.id
+        LEFT JOIN energy_consumption ec ON ec.meter_id = smb.meter_id 
+            AND ec.timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+        WHERE s.floor_id = %s
+        GROUP BY s.id, s.area_sqm
     """
-    space_stats = await Database.fetch_one(space_sql, (floor_id,))
+    space_energy_list = await Database.fetch_all(space_energy_sql, (floor_id,))
+    
+    # 在 Python 中计算统计数据
+    total_spaces = len(space_energy_list)
+    high_energy_spaces = sum(1 for row in space_energy_list if row['energy_per_sqm'] > 5)
+    abnormal_spaces = sum(1 for row in space_energy_list if row['energy_per_sqm'] > 10)
+    total_energy = sum(row['total_energy'] for row in space_energy_list)
     
     # 查询活跃告警数量
     alarm_sql = """
@@ -1702,10 +1715,10 @@ async def get_floor_stats(floor_id: str = Query(..., description="楼层ID")):
         "code": 200,
         "message": "成功",
         "data": {
-            "total_spaces": space_stats['total_spaces'] if space_stats else 0,
-            "high_energy_spaces": space_stats['high_energy_spaces'] if space_stats else 0,
-            "abnormal_spaces": space_stats['abnormal_spaces'] if space_stats else 0,
-            "total_energy": round(space_stats['total_energy'], 2) if space_stats else 0,
+            "total_spaces": total_spaces,
+            "high_energy_spaces": high_energy_spaces,
+            "abnormal_spaces": abnormal_spaces,
+            "total_energy": round(total_energy, 2) if total_energy else 0,
             "active_alarms": alarm_stats['active_alarms'] if alarm_stats else 0
         }
     }

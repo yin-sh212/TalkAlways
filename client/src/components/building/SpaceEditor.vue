@@ -3,6 +3,18 @@
     <n-card title="空间编辑器" size="small">
       <!-- 工具栏 -->
       <n-space style="margin-bottom: 16px">
+        <n-upload
+          accept=".dxf"
+          :show-file-list="false"
+          @before-upload="handleCadUpload"
+        >
+          <n-button type="info">
+            导入CAD底图
+          </n-button>
+        </n-upload>
+        
+        <n-divider vertical />
+        
         <n-button 
           type="primary" 
           :disabled="!floor"
@@ -146,25 +158,46 @@ const canSave = computed(() => {
 
 // 顶点表格列定义
 const pointColumns = [
-  { 
-    title: '序号', 
-    key: 'index', 
-    width: 60,
-    render: (_: any, index: number) => index + 1
-  },
-  { 
-    title: 'X', 
-    key: 'x', 
-    width: 80,
-    render: (row: [number, number]) => row[0].toFixed(2)
-  },
-  { 
-    title: 'Y', 
-    key: 'y', 
-    width: 80,
-    render: (row: [number, number]) => row[1].toFixed(2)
-  }
+  { title: '序号', key: 'index', width: 60 },
+  { title: 'X', key: 'x', width: 80 },
+  { title: 'Y', key: 'y', width: 80 }
 ]
+
+// CAD上传处理
+const handleCadUpload = async ({ file }: { file: any }) => {
+  if (!props.floor) {
+    message.warning('请先选择楼层')
+    return false
+  }
+  
+  const formData = new FormData()
+  formData.append('file', file.file)
+  formData.append('floor_id', props.floor.id) // 传递楼层ID
+  
+  try {
+    const response = await fetch('/api/floor/upload-cad', {
+      method: 'POST',
+      body: formData
+    })
+    
+    const result = await response.json()
+    
+    if (result.code === 200) {
+      message.success('CAD底图导入成功,页面将自动刷新')
+      // 延迟刷新以显示提示
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } else {
+      message.error(result.detail || 'CAD转换失败')
+    }
+  } catch (error) {
+    console.error('CAD上传错误:', error)
+    message.error('上传失败，请重试')
+  }
+  
+  return false // 阻止默认上传行为
+}
 
 // 开始绘制
 const startDrawing = () => {

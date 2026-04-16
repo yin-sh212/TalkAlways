@@ -26,22 +26,22 @@ export const askQuestion = (query: string) => {
 }
 
 // 智能问答 - 流式模式(逐字输出)
-export const askQuestionStream = (query: string, onChunk: (chunk: string) => void) => {
+export const askQuestionStream = async (query: string, onChunk: (chunk: string) => void): Promise<void> => {
   const controller = new AbortController()
   
   // 开发环境使用相对路径,通过 Vite 代理转发
   const streamUrl = '/api/chat/ask/stream'
   
-  const fetchPromise = fetch(streamUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query } as AskRequest),
-    signal: controller.signal,
-  })
-  
-  fetchPromise.then(async (response) => {
+  try {
+    const response = await fetch(streamUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query } as AskRequest),
+      signal: controller.signal,
+    })
+    
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -84,12 +84,10 @@ export const askQuestionStream = (query: string, onChunk: (chunk: string) => voi
     } finally {
       reader.releaseLock()
     }
-  }).catch((error) => {
+  } catch (error) {
     console.error('流式请求失败:', error)
     throw error
-  })
-  
-  return controller
+  }
 }
 
 // 获取会话历史 - 使用 ChatHistory 类型

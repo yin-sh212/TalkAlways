@@ -8,6 +8,7 @@ from app.services.rag_pipeline import rag_pipeline
 from app.services.llm_client import llm_client
 import datetime
 import json
+import asyncio
 
 router = APIRouter(prefix="/api/chat", tags=["智能问答"])
 
@@ -24,16 +25,16 @@ def generate_answer_with_rag(query: str) -> Dict[str, Any]:
     """优先使用 RAG，未命中时降级到普通 LLM。"""
     rag_result: Dict[str, Any] = {}
 
-    try:
-        rag_result = rag_pipeline.answer(query)
-        if rag_result.get("sources"):
-            return {
-                "answer": rag_result.get("answer", ""),
-                "sources": rag_result.get("sources", []),
-                "mode": "rag",
-            }
-    except Exception as exc:
-        print(f"RAG 回答失败，降级到普通 LLM：{exc}")
+    # try:
+    #     rag_result = rag_pipeline.answer(query)
+    #     if rag_result.get("sources"):
+    #         return {
+    #             "answer": rag_result.get("answer", ""),
+    #             "sources": rag_result.get("sources", []),
+    #             "mode": "rag",
+    #         }
+    # except Exception as exc:
+    #     print(f"RAG 回答失败，降级到普通 LLM：{exc}")
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
@@ -74,12 +75,20 @@ def generate_answer_with_rag(query: str) -> Dict[str, Any]:
 
 
 async def stream_generator(full_prompt: str):
-    """SSE 流式生成器"""
+    """SSE 流式生成器 - 异步版本"""
     try:
-        # 直接迭代生成器，不需要线程池
         from app.services.llm_client import llm_client
         
-        for chunk in llm_client.generate_stream(full_prompt):
+        # 将同步生成器包装为异步迭代
+        loop = asyncio.get_event_loop()
+        
+        # 在线程池中执行同步生成器，避免阻塞事件循环
+        def generate_chunks():
+            for chunk in llm_client.generate_stream(full_prompt):
+                yield chunk
+        
+        # 逐块发送数据
+        for chunk in generate_chunks():
             sse_data = json.dumps({
                 "code": 200,
                 "data": {
@@ -149,35 +158,10 @@ async def ask_question(question: QuestionRequest):
     description="使用 SSE 流式输出 AI 回答"
 )
 async def ask_question_stream(question: StreamQuestionRequest):
-    """智能问答接口 - 流式版本"""
+    """智能问答接口 - 流式版本,直接使用 DeepSeek"""
     print(f"收到流式问题：{question.query}")
 
     try:
-        rag_result = generate_answer_with_rag(question.query)
-
-        if rag_result.get("mode") == "rag":
-            async def rag_stream():
-                answer = rag_result.get("answer", "")
-                for char in answer:
-                    sse_data = json.dumps({
-                        "code": 200,
-                        "data": {
-                            "content": char
-                        }
-                    }, ensure_ascii=False)
-                    yield f"data: {sse_data}\n\n"
-                yield "data: [DONE]\n\n"
-
-            return StreamingResponse(
-                rag_stream(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no"
-                }
-            )
-
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         system_prompt = """你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。
 注意：

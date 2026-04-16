@@ -1,5 +1,5 @@
 <template>
-  <n-card title="实时异常/报警（最新 5 条）" :bordered="false" content-style="padding: 20px;">
+  <n-card title="实时异常/报警（最新 5 条）" :bordered="false" content-style="padding: 12px;">
     <template #header-extra>
       <n-space align="center">
         <span v-if="currentSimulateTime" class="simulate-time">
@@ -133,12 +133,12 @@ const sortedAnomalyList = computed(() => {
 
 <style scoped lang="scss">
 .refresh-time {
-  font-size: 12px;
+  font-size: 13px;
   color: #999;
 }
 
 .simulate-time {
-  font-size: 12px;
+  font-size: 13px;
   color: #999;
   margin-right: 10px;
 }
@@ -152,18 +152,23 @@ const sortedAnomalyList = computed(() => {
   .timeline-text {
     flex: 1;
     font-weight: 500;
+    font-size: 15px;
   }
   
   .analyze-btn {
     margin-left: 12px;
     flex-shrink: 0;
+    font-size: 14px;
   }
 }
 
 .timeline-description {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-color-secondary);
   line-height: 1.5;
+}
+:deep(.n-timeline-item-content__time) {
+  font-size: 13px;
 }
 </style>

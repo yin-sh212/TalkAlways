@@ -116,29 +116,6 @@
         </template>
       </n-card>
     </n-grid-item>
-
-    <!-- <n-grid-item>
-      <n-card :bordered="false" class="kpi-card" content-style="padding: 14px;">
-        <template #header>
-          <n-space justify="space-between" align="center">
-            <span class="card-title">今日 CO₂减排</span>
-            <n-icon size="20" color="#52c41a">
-              <Leaf />
-            </n-icon>
-          </n-space>
-        </template>
-        <n-skeleton v-if="loading" :rows="2" />
-        <template v-else>
-          <div class="kpi-value">
-            {{ kpiData.co2Reduction.toFixed(1) }}
-            <span class="unit">kg</span>
-          </div>
-          <div class="kpi-subtitle">
-            <span class="sub-text">根据能耗换算</span>
-          </div>
-        </template>
-      </n-card>
-    </n-grid-item> -->
   </n-grid>
 </template>
 
@@ -170,7 +147,7 @@ const props = defineProps<Props>();
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 
     .card-title {
-      font-size: 13px;
+      font-size: 16px;
       color: #666;
       font-weight: 500;
     }
@@ -179,10 +156,9 @@ const props = defineProps<Props>();
       font-size: 26px;
       font-weight: bold;
       color: #333;
-      margin: 10px 0;
 
       .unit {
-        font-size: 12px;
+        font-size: 14px;
         color: #999;
         margin-left: 4px;
       }
@@ -197,7 +173,7 @@ const props = defineProps<Props>();
         display: flex;
         align-items: center;
         gap: 3px;
-        font-size: 12px;
+        font-size: 13px;
 
         &.is-up {
           color: #f5222d;
@@ -208,7 +184,7 @@ const props = defineProps<Props>();
         }
 
         .change-label {
-          font-size: 11px;
+          font-size: 12px;
           color: #999;
           margin-left: 3px;
         }
@@ -219,7 +195,7 @@ const props = defineProps<Props>();
       margin-top: 6px;
 
       .sub-text {
-        font-size: 11px;
+        font-size: 13px;
         color: #999;
       }
     }

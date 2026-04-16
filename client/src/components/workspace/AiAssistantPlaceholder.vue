@@ -1,67 +1,62 @@
 <template>
-  <div class="ai-assistant">
-    <!-- 智能对话界面 -->
-    <n-card :bordered="false" class="chat-card">
-      <div class="chat-container">
-        <!-- 消息列表 -->
-        <div ref="messagesContainerRef" class="messages-container">
-          <transition-group name="message-fade">
-            <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.type">
-              <div class="message-avatar">
-                <n-icon v-if="msg.type === 'user'" :component="Person" size="24" />
-                <n-icon v-else :component="Sparkles" size="24" color="#1890ff" />
-              </div>
-              <div class="message-content">
-                <div class="message-bubble">
-                  <n-text v-if="msg.type === 'loading'" depth="3">
-                    <n-spin size="small" /> 思考中...
-                  </n-text>
-                  <markdown-renderer v-else :content="msg.content" />
-                </div>
-                <div class="message-time">{{ msg.time }}</div>
-              </div>
+  <div class="chat-wrapper">
+    <!-- 消息列表 -->
+    <div ref="messagesContainerRef" class="messages-container">
+      <transition-group name="message-fade">
+        <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.type">
+          <div class="message-avatar">
+            <n-icon v-if="msg.type === 'user'" :component="Person" size="24" />
+            <n-icon v-else :component="Sparkles" size="24" color="#1890ff" />
+          </div>
+          <div class="message-content">
+            <div class="message-bubble">
+              <n-text v-if="msg.type === 'loading'" depth="3">
+                <n-spin size="small" /> 思考中...
+              </n-text>
+              <markdown-renderer v-else :content="msg.content" />
             </div>
-          </transition-group>
+            <div class="message-time">{{ msg.time }}</div>
+          </div>
         </div>
+      </transition-group>
+    </div>
 
-        <!-- 输入区域 -->
-        <div class="input-area">
-          <n-input
-            v-model:value="inputValue"
-            type="textarea"
-            placeholder="请输入问题，例如：'xxx建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
-            :rows="3"
-            :disabled="loading"
-            @keydown.enter.exact.prevent="handleSend"
+    <!-- 输入区域 -->
+    <div class="input-area">
+      <n-input
+        v-model:value="inputValue"
+        type="textarea"
+        placeholder="请输入问题，例如：'xxx建筑昨天的用电量是多少？' 或 '冷水机组高压报警怎么处理？'"
+        :rows="3"
+        :disabled="loading"
+        @keydown.enter.exact.prevent="handleSend"
+      >
+        <template #suffix>
+          <n-button
+            type="primary"
+            :disabled="!inputValue.trim() || loading"
+            @click="handleSend"
           >
-            <template #suffix>
-              <n-button
-                type="primary"
-                :disabled="!inputValue.trim() || loading"
-                @click="handleSend"
-              >
-                <template #icon>
-                  <n-icon :component="Send" />
-                </template>
-                发送
-              </n-button>
+            <template #icon>
+              <n-icon :component="Send" />
             </template>
-          </n-input>
+            发送
+          </n-button>
+        </template>
+      </n-input>
 
-          <n-space class="quick-questions" :wrap="true">
-            <n-tag
-              v-for="(q, idx) in quickQuestions"
-              :key="idx"
-              checkable
-              :checked="false"
-              @update:checked="() => handleQuickQuestion(q)"
-            >
-              {{ q }}
-            </n-tag>
-          </n-space>
-        </div>
-      </div>
-    </n-card>
+      <n-space class="quick-questions" :wrap="true">
+        <n-tag
+          v-for="(q, idx) in quickQuestions"
+          :key="idx"
+          checkable
+          :checked="false"
+          @update:checked="() => handleQuickQuestion(q)"
+        >
+          {{ q }}
+        </n-tag>
+      </n-space>
+    </div>
   </div>
 </template>
 
@@ -82,6 +77,7 @@ const message = useMessage()
 const messagesContainerRef = ref<HTMLElement | null>(null)
 const inputValue = ref('')
 const loading = ref(false)
+let streamController: AbortController | null = null
 const messages = ref<Message[]>([
   {
     type: 'assistant',
@@ -103,15 +99,11 @@ function getCurrentTime(): string {
 }
 
 function scrollToBottom() {
-  nextTick(() => {
-    if (messagesContainerRef.value) {
-      messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
-    }
-  })
+  if (messagesContainerRef.value) {
+    // 立即滚动到底部，不使用异步
+    messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
+  }
 }
-
-// 用于取消流式请求的控制器
-let streamController: AbortController | null = null
 
 async function handleSend() {
   const query = inputValue.value.trim()
@@ -156,6 +148,7 @@ async function handleSend() {
       // 更新助手消息内容
       if (messages.value[assistantMessageIndex]) {
         messages.value[assistantMessageIndex].content = fullContent
+        // 立即滚动到底部
         scrollToBottom()
       }
     })
@@ -191,34 +184,20 @@ function handleQuickQuestion(question: string) {
 </script>
 
 <style scoped>
-.ai-assistant {
+.chat-wrapper {
   height: 100%;
-}
-
-.chat-card {
-  height: calc(100vh - 180px);
-  min-height: 500px;
-}
-
-.chat-card :deep(.n-card__content) {
-  padding: 0;
-  height: 100%;
-}
-
-.chat-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  background: var(--n-color-modal);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 16px;
 }
 
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
   padding: 16px;
-  background: var(--n-color-modal);
-  border-radius: 8px;
-  margin-bottom: 16px;
   min-height: 0;
 }
 
@@ -259,13 +238,14 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-bubble {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border-radius: 12px;
-  background: var(--n-color);
+  background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.4;
+  line-height: 1.6;
+  font-size: 15px;
 }
 
 .message-item.user .message-bubble {
@@ -274,12 +254,16 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-time {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--n-text-color-placeholder);
   padding: 0 8px;
 }
 
 .input-area {
+  flex-shrink: 0;
+  padding: 16px;
+  background: var(--n-color);
+  border-top: 1px solid var(--n-border-color);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -306,15 +290,15 @@ function handleQuickQuestion(question: string) {
 
 /* Markdown 样式 */
 :deep(.markdown-body) {
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 :deep(.markdown-body h1),
 :deep(.markdown-body h2),
 :deep(.markdown-body h3) {
-  margin-top: 10px;
-  margin-bottom: 6px;
+  margin-top: 12px;
+  margin-bottom: 8px;
   font-weight: 600;
   color: var(--n-text-color);
 }
@@ -322,23 +306,24 @@ function handleQuickQuestion(question: string) {
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
   padding-left: 20px;
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 :deep(.markdown-body code) {
   background: var(--n-color-modal);
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: 3px;
   font-family: 'Courier New', monospace;
   color: var(--n-text-color);
+  font-size: 14px;
 }
 
 :deep(.markdown-body pre) {
   background: var(--n-color-modal);
-  padding: 10px;
+  padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 :deep(.markdown-body pre code) {
@@ -349,7 +334,7 @@ function handleQuickQuestion(question: string) {
 :deep(.markdown-body blockquote) {
   border-left: 3px solid var(--n-border-color);
   padding-left: 12px;
-  margin: 6px 0;
+  margin: 8px 0;
   color: var(--n-text-color-placeholder);
 }
 
@@ -360,6 +345,7 @@ function handleQuickQuestion(question: string) {
 /* 深色模式优化 */
 @media (prefers-color-scheme: dark) {
   .message-bubble {
+    background: #2a2a2a;
     box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
   }
   

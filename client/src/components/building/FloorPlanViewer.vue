@@ -214,9 +214,12 @@ const stageConfig = computed(() => ({
   draggable: true
 }))
 
+// 底图图片对象
+const floorImage = ref<HTMLImageElement | null>(null)
+
 // 底图配置
 const imageConfig = computed(() => ({
-  image: props.floor?.image_url ? new Image() : null,
+  image: floorImage.value,
   x: 0,
   y: 0,
   width: props.floor?.width || 800,
@@ -227,10 +230,16 @@ const imageConfig = computed(() => ({
 watch(() => props.floor?.image_url, (url) => {
   if (url) {
     const img = new Image()
-    img.src = url
     img.onload = () => {
-      // 图片加载完成
+      floorImage.value = img
+      console.log('✅ 底图加载成功:', url)
     }
+    img.onerror = (error) => {
+      console.error('❌ 底图加载失败:', url, error)
+    }
+    img.src = url
+  } else {
+    floorImage.value = null
   }
 }, { immediate: true })
 

@@ -88,10 +88,23 @@ const userStore = useUserStore()
   justify-content: center;
   align-items: flex-start;
   transition: background 0.3s ease;
+  font-size: 16px;
 }
 
 :deep(.n-card) {
   max-width: 1200px;
   width: 100%;
+  
+  .n-card-header {
+    font-size: 18px;
+  }
+  
+  .n-alert {
+    font-size: 15px;
+  }
+  
+  .n-descriptions {
+    font-size: 15px;
+  }
 }
 </style>

@@ -128,6 +128,7 @@ html, body, #app {
   width: 100%;
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
   background: var(--bg-color);
   color: var(--text-primary);
   transition: background 0.3s ease, color 0.3s ease;

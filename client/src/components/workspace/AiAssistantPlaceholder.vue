@@ -1,5 +1,5 @@
 <template>
-  <n-card :bordered="false" class="chat-card">
+  <div class="chat-wrapper">
     <!-- 消息列表 -->
     <div ref="messagesContainerRef" class="messages-container">
       <transition-group name="message-fade">
@@ -57,7 +57,7 @@
         </n-tag>
       </n-space>
     </div>
-  </n-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -77,6 +77,7 @@ const message = useMessage()
 const messagesContainerRef = ref<HTMLElement | null>(null)
 const inputValue = ref('')
 const loading = ref(false)
+let streamController: AbortController | null = null
 const messages = ref<Message[]>([
   {
     type: 'assistant',
@@ -98,15 +99,11 @@ function getCurrentTime(): string {
 }
 
 function scrollToBottom() {
-  nextTick(() => {
-    if (messagesContainerRef.value) {
-      messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
-    }
-  })
+  if (messagesContainerRef.value) {
+    // 立即滚动到底部，不使用异步
+    messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
+  }
 }
-
-// 用于取消流式请求的控制器
-let streamController: AbortController | null = null
 
 async function handleSend() {
   const query = inputValue.value.trim()
@@ -151,6 +148,7 @@ async function handleSend() {
       // 更新助手消息内容
       if (messages.value[assistantMessageIndex]) {
         messages.value[assistantMessageIndex].content = fullContent
+        // 立即滚动到底部
         scrollToBottom()
       }
     })
@@ -186,30 +184,20 @@ function handleQuickQuestion(question: string) {
 </script>
 
 <style scoped>
-.chat-card {
-  max-height: calc(100vh - 160px);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.chat-card :deep(.n-card__content) {
-  padding: 0;
+.chat-wrapper {
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: var(--n-color-modal);
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
   padding: 16px;
-  background: var(--n-color-modal);
-  border-radius: 8px;
-  margin-bottom: 16px;
-  scroll-behavior: smooth;
+  min-height: 0;
 }
 
 .message-item {
@@ -251,7 +239,7 @@ function handleQuickQuestion(question: string) {
 .message-bubble {
   padding: 6px 12px;
   border-radius: 12px;
-  background: var(--n-color);
+  background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -271,6 +259,9 @@ function handleQuickQuestion(question: string) {
 
 .input-area {
   flex-shrink: 0;
+  padding: 16px;
+  background: var(--n-color);
+  border-top: 1px solid var(--n-border-color);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -351,6 +342,7 @@ function handleQuickQuestion(question: string) {
 /* 深色模式优化 */
 @media (prefers-color-scheme: dark) {
   .message-bubble {
+    background: #2a2a2a;
     box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
   }
   

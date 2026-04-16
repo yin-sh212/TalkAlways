@@ -49,6 +49,9 @@ onMounted(() => {
   padding: 24px;
   background: #f5f7f9;
   height: calc(100vh - 64px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,15 +61,31 @@ onMounted(() => {
 }
 
 :deep(.n-tabs) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  
   .n-tabs-nav {
-   background: var(--n-color);
-   padding: 0 16px;
+    background: var(--n-color);
+    padding: 0 16px;
     border-radius: 8px 8px 0 0;
+    flex-shrink: 0;
   }
   
   .n-tabs-pane-wrapper {
-   background: var(--n-color);
+    background: var(--n-color);
     border-radius: 0 0 8px 8px;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .n-tab-pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 }
 </style>

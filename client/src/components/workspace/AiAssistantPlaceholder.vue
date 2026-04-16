@@ -191,6 +191,7 @@ function handleQuickQuestion(question: string) {
   background: var(--n-color-modal);
   border-radius: 8px;
   overflow: hidden;
+  font-size: 16px;
 }
 
 .messages-container {
@@ -237,13 +238,14 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-bubble {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.4;
+  line-height: 1.6;
+  font-size: 15px;
 }
 
 .message-item.user .message-bubble {
@@ -252,7 +254,7 @@ function handleQuickQuestion(question: string) {
 }
 
 .message-time {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--n-text-color-placeholder);
   padding: 0 8px;
 }
@@ -288,15 +290,15 @@ function handleQuickQuestion(question: string) {
 
 /* Markdown 样式 */
 :deep(.markdown-body) {
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 :deep(.markdown-body h1),
 :deep(.markdown-body h2),
 :deep(.markdown-body h3) {
-  margin-top: 10px;
-  margin-bottom: 6px;
+  margin-top: 12px;
+  margin-bottom: 8px;
   font-weight: 600;
   color: var(--n-text-color);
 }
@@ -304,23 +306,24 @@ function handleQuickQuestion(question: string) {
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
   padding-left: 20px;
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 :deep(.markdown-body code) {
   background: var(--n-color-modal);
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: 3px;
   font-family: 'Courier New', monospace;
   color: var(--n-text-color);
+  font-size: 14px;
 }
 
 :deep(.markdown-body pre) {
   background: var(--n-color-modal);
-  padding: 10px;
+  padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 :deep(.markdown-body pre code) {
@@ -331,7 +334,7 @@ function handleQuickQuestion(question: string) {
 :deep(.markdown-body blockquote) {
   border-left: 3px solid var(--n-border-color);
   padding-left: 12px;
-  margin: 6px 0;
+  margin: 8px 0;
   color: var(--n-text-color-placeholder);
 }
 

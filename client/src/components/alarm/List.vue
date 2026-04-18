@@ -197,7 +197,7 @@ const getLevelName = (level: number) => {
   const levelMap: Record<number, string> = {
     1: '严重',
     2: '警告',
-    3: '提示'
+    3: '一般'
   }
   return levelMap[level] || `级别${level}`
 }

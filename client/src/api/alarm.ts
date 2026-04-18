@@ -61,6 +61,8 @@ export const getAlarmTrend = (params: {
   building_id?: string
   start_date?: string
   end_date?: string
+  alarm_level?: string  // 支持逗号分隔的多值，如 "1,2,3"
+  alarm_type?: string   // 支持逗号分隔的多值，如 "energy,temperature"
 }) => {
   return http.get('/charts/alarm-trend', { params })
 }
@@ -70,6 +72,8 @@ export const getAlarmDistribution = (params: {
   building_id?: string
   start_date?: string
   end_date?: string
+  alarm_level?: string  // 支持逗号分隔的多值
+  alarm_type?: string   // 支持逗号分隔的多值
 }) => {
   return http.get('/charts/distribution', { params })
 }
@@ -296,6 +300,8 @@ export const getAlarmStats = (params?: {
   building_id?: string
   start_date?: string
   end_date?: string
+  alarm_level?: string  // 支持逗号分隔的多值，如 "1,2,3"
+  alarm_type?: string   // 支持逗号分隔的多值
 }) => {
   return http.get<AlarmStatsResponse>('/alarm/stats', { params })
 }

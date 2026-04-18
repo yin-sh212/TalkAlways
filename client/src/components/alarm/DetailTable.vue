@@ -267,6 +267,11 @@ defineExpose({
 :deep(.n-statistic__value) {
   font-size: 20px;
   font-weight: 600;
-  color: var(--n-text-color-1);
+  color: var(--text-primary);
 }
+
+.alarm-count {
+  font-size: 24px;
+}
+
 </style>

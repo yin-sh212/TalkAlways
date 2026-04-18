@@ -447,17 +447,6 @@ defineExpose({
   animation: row-spin 0.8s linear infinite;
 }
 
-.related-data {
-  background-color: var(--n-code-background-color);
-  padding: 16px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 13px;
-  overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
 @keyframes row-spin {
   from {
     transform: rotate(0deg);

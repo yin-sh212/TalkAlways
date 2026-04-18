@@ -63,6 +63,7 @@ const themeOverrides = ref<GlobalThemeOverrides>({
     primaryColor: '#18a058',
     primaryColorHover: '#36ad74',
     primaryColorPressed: '#0c7a43',
+    fontSize: '17px',
   },
 })
 
@@ -128,10 +129,13 @@ html, body, #app {
   width: 100%;
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 16px;
+  font-size: 18px;
+  line-height: 1.6;
   background: var(--bg-color);
   color: var(--text-primary);
   transition: background 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .app-layout {

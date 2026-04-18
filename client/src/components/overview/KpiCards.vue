@@ -147,13 +147,13 @@ const props = defineProps<Props>();
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 
     .card-title {
-      font-size: 16px;
+      font-size: 18px;
       color: #666;
       font-weight: 500;
     }
 
     .kpi-value {
-      font-size: 26px;
+      font-size: 28px;
       font-weight: bold;
       color: #333;
 

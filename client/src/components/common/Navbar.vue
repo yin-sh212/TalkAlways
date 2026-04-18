@@ -150,7 +150,7 @@ router.afterEach((to) => {
 
   .logo-text {
     width: 80px;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: bold;
     color: var(--text-primary);
     transition: color 0.3s ease;
@@ -176,7 +176,7 @@ router.afterEach((to) => {
   }
 
   .username {
-    font-size: 14px;
+    font-size: 16px;
     color: var(--text-primary);
     transition: color 0.3s ease;
   }

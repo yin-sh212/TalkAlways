@@ -76,7 +76,7 @@
               </n-grid>
 
               <!-- 操作按钮 -->
-              <n-space justify="end" style="margin-top: 16px">
+              <n-space justify="end">
                 <n-button @click="handleReset">重置</n-button>
                 <n-button
                   type="primary"
@@ -1113,6 +1113,21 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
+/* 增大查询表单的标签和输入框字体 */
+.query-section :deep(.n-form-item-label) {
+  font-size: 16px;
+}
+
+.query-section :deep(.n-input .n-input__input-el),
+.query-section :deep(.n-select .n-select__selection),
+.query-section :deep(.n-date-picker .n-input .n-input__input-el) {
+  font-size: 15px;
+}
+
+.query-section :deep(.n-collapse .n-collapse-item__header-main) {
+  font-size: 16px;
+}
+
 .metrics-section {
   margin-bottom: 16px;
 }
@@ -1132,6 +1147,7 @@ onMounted(async () => {
 .resolve-modal-hint {
   color: var(--n-text-color-2);
   line-height: 1.7;
+  font-size: 15px;
 }
 
 .bottom-bar {

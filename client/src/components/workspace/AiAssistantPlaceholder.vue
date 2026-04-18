@@ -242,7 +242,6 @@ function handleQuickQuestion(question: string) {
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  white-space: pre-wrap;
   word-wrap: break-word;
   line-height: 1.6;
   font-size: 15px;

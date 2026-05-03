@@ -44,6 +44,24 @@ import KpiCards from '@/components/overview/KpiCards.vue'
 import { getBuildingsSummary, getDailyComparison, calculateCOP } from '@/api/statistics'
 import { getBuildings } from '@/api/query'
 
+const buildSameOriginApiUrl = (path: string) => {
+  const rawBase =
+    (import.meta as any).env?.VITE_API_BASE_URL ||
+    (import.meta as any).env?.VITE_API_URL ||
+    ''
+  const base = String(rawBase).trim().replace(/\/$/, '')
+
+  if (!base) {
+    return path
+  }
+
+  if (base.endsWith('/api') && path.startsWith('/api/')) {
+    return `${base}${path.slice(4)}`
+  }
+
+  return `${base}${path}`
+}
+
 // 声明全局 Window 类型
 declare global {
   interface Window {
@@ -391,7 +409,7 @@ const connectToRealtimeStream = () => {
       batch_hours: '1' // 每次推送 1 小时的数据，每隔 1 小时推送一次
     })
     
-    const url = `http://localhost:3000/api/realtime/stream?${params}`
+    const url = buildSameOriginApiUrl(`/api/realtime/stream?${params}`)
     
     eventSource.value = new EventSource(url)
     isRealtimeConnected.value = true

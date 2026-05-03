@@ -127,6 +127,24 @@
 import { ref, reactive, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 
+const buildSameOriginApiUrl = (path) => {
+  const rawBase =
+    (import.meta as any).env?.VITE_API_BASE_URL ||
+    (import.meta as any).env?.VITE_API_URL ||
+    ''
+  const base = String(rawBase).trim().replace(/\/$/, '')
+
+  if (!base) {
+    return path
+  }
+
+  if (base.endsWith('/api') && path.startsWith('/api/')) {
+    return `${base}${path.slice(4)}`
+  }
+
+  return `${base}${path}`
+}
+
 const isPlaying = ref(false)
 const currentTime = ref(null)
 const progressPercent = ref(0)
@@ -162,7 +180,7 @@ const startPlayback = async () => {
     
     // 连接到 SSE 流
     eventSource = new EventSource(
-      `http://localhost:3000/api/realtime/stream?${params}`
+      buildSameOriginApiUrl(`/api/realtime/stream?${params}`)
     )
     
     eventSource.onmessage = (event) => {

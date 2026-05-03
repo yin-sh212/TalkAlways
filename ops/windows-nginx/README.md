@@ -34,7 +34,37 @@ git checkout <部署分支名>
 git pull
 ```
 
-## 二、构建前端
+## 二、直接使用脚本
+
+### 1. 启动后端
+
+如果服务器上有固定 Python 路径，直接传进去。  
+不上传任何 CA 证书文件时，后端会自动回退到 `certifi` 的系统 CA 包连接 TiDB Cloud。
+
+```powershell
+cd C:\deploy\TalkAlways\ops\windows-nginx
+.\start-backend.ps1 -RepoRoot C:\deploy\TalkAlways -PythonExe E:\Miniconda3\envs\chang\python.exe
+```
+
+### 2. 生成并安装 Nginx 配置
+
+```powershell
+cd C:\deploy\TalkAlways\ops\windows-nginx
+.\deploy.ps1 -RepoRoot C:\deploy\TalkAlways -NginxRoot C:\nginx -InstallFrontendDeps -StartNginxIfStopped
+```
+
+### 3. 停止后端
+
+```powershell
+cd C:\deploy\TalkAlways\ops\windows-nginx
+.\stop-backend.ps1 -RepoRoot C:\deploy\TalkAlways
+```
+
+## 三、手工步骤
+
+如果不想直接用脚本，也可以按下面的手工方式执行。
+
+## 四、构建前端
 
 ```powershell
 cd C:\deploy\TalkAlways\client
@@ -48,7 +78,7 @@ npm run build
 C:\deploy\TalkAlways\client\dist
 ```
 
-## 三、启动后端
+## 五、启动后端
 
 如果你们后端依赖 `conda` 环境，例如 `chang`：
 
@@ -65,7 +95,12 @@ python start_server.py
 http://127.0.0.1:3000
 ```
 
-## 四、配置 Nginx
+补充说明：
+
+- `server/.env` 中如果配置了 `SSL_CA=./certs/ca-cert.pem` 但服务器上没有这个文件，当前代码会自动回退到 `certifi` 的 CA 包
+- 因此这次部署不需要额外上传 CA 证书
+
+## 六、配置 Nginx
 
 把仓库中的配置文件复制到 Nginx：
 
@@ -75,7 +110,7 @@ copy C:\deploy\TalkAlways\ops\windows-nginx\nginx.conf C:\nginx\conf\nginx.conf
 
 如果你的部署目录不是 `C:/deploy/TalkAlways/client/dist`，先修改 `nginx.conf` 里的 `root`。
 
-## 五、启动 Nginx
+## 七、启动 Nginx
 
 ```powershell
 cd C:\nginx
@@ -95,7 +130,7 @@ cd C:\nginx
 .\nginx.exe -s stop
 ```
 
-## 六、Nginx 路由说明
+## 八、Nginx 路由说明
 
 当前配置的路由职责如下：
 
@@ -110,7 +145,7 @@ cd C:\nginx
 - `/openapi.json`
   - 反向代理到后端 OpenAPI
 
-## 七、为什么这样配
+## 九、为什么这样配
 
 ### 1. `try_files $uri $uri/ /index.html`
 
@@ -140,7 +175,7 @@ cd C:\nginx
 
 不开这一组配置，Nginx 会缓存响应，前端表现会像“卡住不出结果”。
 
-## 八、部署后验证清单
+## 十、部署后验证清单
 
 至少验证以下功能：
 
@@ -153,7 +188,39 @@ cd C:\nginx
 7. `/mcp/...` 功能正常
 8. `/docs` 能打开后端文档
 
-## 九、当前这次最小改动
+## 十一、脚本参数说明
+
+### `deploy.ps1`
+
+| 参数 | 说明 |
+|---|---|
+| `-RepoRoot` | 代码仓库根目录 |
+| `-NginxRoot` | Nginx 安装目录 |
+| `-BackendHost` | 反代后端主机，默认 `127.0.0.1` |
+| `-BackendPort` | 反代后端端口，默认 `3000` |
+| `-InstallFrontendDeps` | 执行 `npm install` |
+| `-SkipFrontendBuild` | 跳过前端构建 |
+| `-SkipNginxControl` | 只生成配置，不执行 `nginx -t/reload` |
+| `-StartNginxIfStopped` | 如果 Nginx 没启动则直接启动 |
+
+### `start-backend.ps1`
+
+| 参数 | 说明 |
+|---|---|
+| `-RepoRoot` | 代码仓库根目录 |
+| `-PythonExe` | Python 可执行文件路径 |
+| `-BindHost` | 后端监听地址，默认 `0.0.0.0` |
+| `-Port` | 后端监听端口，默认 `3000` |
+| `-StartupTimeoutSec` | 启动等待秒数 |
+
+### `stop-backend.ps1`
+
+| 参数 | 说明 |
+|---|---|
+| `-RepoRoot` | 代码仓库根目录 |
+| `-Port` | 停止指定监听端口的后端进程，默认 `3000` |
+
+## 十二、当前这次最小改动
 
 为了兼容 Nginx 同域部署，这次只修了这些前端文件里的硬编码后端地址：
 

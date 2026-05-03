@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 import pymysql
+import certifi
 from dotenv import load_dotenv
 from app.config import config
 from pathlib import Path
@@ -28,13 +29,18 @@ class Database:
         # 准备 SSL 配置
         ssl_config = {}
         is_tidb_cloud = "tidbcloud.com" in config.DB_HOST.lower()
-        
+
         if is_tidb_cloud or ssl_ca:
             if ssl_ca and os.path.exists(ssl_ca):
                 ssl_config['ca'] = ssl_ca
                 ssl_config['check_hostname'] = False
                 ssl_config['verify_mode'] = True
-            
+            elif is_tidb_cloud:
+                # TiDB Cloud requires TLS. Fall back to certifi's CA bundle when the
+                # repository-local CA file is missing so local preview and deployment
+                # can still connect without a checked-in certificate file.
+                ssl_config['ca'] = certifi.where()
+
             if ssl_cert and ssl_key:
                 if not os.path.isabs(ssl_cert):
                     ssl_cert = str(Path(__file__).parent.parent.parent / ssl_cert)

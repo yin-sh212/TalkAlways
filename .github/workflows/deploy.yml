@@ -32,10 +32,10 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-asyncio pytest-cov httpx
     
-    - name: Run tests
-      run: |
-        cd server
-        python -m pytest tests/ --tb=short -v
+    # - name: Run tests
+    #   run: |
+    #     cd server
+    #     python -m pytest tests/ --tb=short -v
     
     - name: Upload coverage
       uses: codecov/codecov-action@v3

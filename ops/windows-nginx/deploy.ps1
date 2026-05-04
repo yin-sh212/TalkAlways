@@ -125,6 +125,27 @@ function Resolve-NpmCommand {
     return $npmExecutable
 }
 
+function Invoke-NpmCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$NpmExecutable,
+        [string[]]$Arguments = @(),
+        [string]$FailureMessage = "npm command failed"
+    )
+
+    $nodeBinDir = Split-Path $NpmExecutable -Parent
+    $originalPath = $env:PATH
+
+    try {
+        if ($nodeBinDir) {
+            $env:PATH = "$nodeBinDir;$originalPath"
+        }
+        Invoke-Checked -FilePath $NpmExecutable -Arguments $Arguments -FailureMessage $FailureMessage
+    }
+    finally {
+        $env:PATH = $originalPath
+    }
+}
+
 function Invoke-Nginx {
     param(
         [Parameter(Mandatory = $true)][string]$ExecutablePath,
@@ -214,11 +235,11 @@ if (-not $SkipFrontendBuild) {
     try {
         if ($InstallFrontendDeps) {
             Write-Step "Installing frontend dependencies"
-            Invoke-Checked -FilePath $npmExecutable -Arguments @("install") -FailureMessage "npm install failed"
+            Invoke-NpmCommand -NpmExecutable $npmExecutable -Arguments @("install") -FailureMessage "npm install failed"
         }
 
         Write-Step "Building frontend"
-        Invoke-Checked -FilePath $npmExecutable -Arguments @("run", "build") -FailureMessage "npm run build failed"
+        Invoke-NpmCommand -NpmExecutable $npmExecutable -Arguments @("run", "build") -FailureMessage "npm run build failed"
     }
     finally {
         Pop-Location

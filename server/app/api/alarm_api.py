@@ -848,7 +848,7 @@ async def get_alarm_list(
 # ========== 获取单个告警详情 ==========
 
 @router.get(
-    "/{alarm_id}",
+    "/{alarm_id:int}",
     responses={
         200: {
             "description": "成功获取告警详情",
@@ -1026,7 +1026,7 @@ class AlarmAnalysisResponse(BaseModel):
 
 
 @router.get(
-    "/{alarm_id}/analysis",
+    "/{alarm_id:int}/analysis",
     responses={
         200: {
             "description": "成功获取告警分析",

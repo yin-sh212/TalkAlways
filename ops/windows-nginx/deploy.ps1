@@ -4,6 +4,9 @@ param(
     [string]$NginxRoot = "",
     [string]$BackendHost = "127.0.0.1",
     [int]$BackendPort = 3000,
+    [string]$NodeRoot = "",
+    [string]$NodeVersion = "20.19.5",
+    [string]$NodeDownloadUrl = "",
     [string]$NginxVersion = "1.28.0",
     [string]$NginxDownloadUrl = "",
     [switch]$InstallFrontendDeps,
@@ -37,6 +40,91 @@ function Convert-ToNginxPath {
     return ($PathValue -replace "\\", "/")
 }
 
+function Install-ArchiveIfMissing {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$ExecutableRelativePath,
+        [Parameter(Mandatory = $true)][string]$DefaultDownloadUrl,
+        [string]$DownloadUrl,
+        [Parameter(Mandatory = $true)][string]$ComponentName
+    )
+
+    $targetExecutable = Join-Path $InstallRoot $ExecutableRelativePath
+    if (Test-Path $targetExecutable) {
+        Write-Step "Using existing $ComponentName at $InstallRoot"
+        return $targetExecutable
+    }
+
+    if (-not $DownloadUrl) {
+        $DownloadUrl = $DefaultDownloadUrl
+    }
+
+    Write-Step "Downloading $ComponentName from $DownloadUrl"
+
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("talkalways-" + $ComponentName + "-" + [guid]::NewGuid().ToString("N"))
+    $zipPath = Join-Path $tempRoot "$ComponentName.zip"
+    $extractRoot = Join-Path $tempRoot "extract"
+
+    New-Item -ItemType Directory -Force $tempRoot | Out-Null
+    try {
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $zipPath
+        Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
+
+        $expandedDir = Get-ChildItem $extractRoot -Directory | Select-Object -First 1
+        if (-not $expandedDir) {
+            throw "Downloaded $ComponentName archive does not contain an extracted directory"
+        }
+
+        New-Item -ItemType Directory -Force $InstallRoot | Out-Null
+        Copy-Item (Join-Path $expandedDir.FullName "*") $InstallRoot -Recurse -Force
+    }
+    finally {
+        if (Test-Path $tempRoot) {
+            Remove-Item -Recurse -Force $tempRoot
+        }
+    }
+
+    if (-not (Test-Path $targetExecutable)) {
+        throw "$ComponentName installation failed: $targetExecutable not found"
+    }
+
+    Write-Step "Installed $ComponentName to $InstallRoot"
+    return $targetExecutable
+}
+
+function Resolve-NpmCommand {
+    param(
+        [string]$RepoRootPath,
+        [string]$NodeInstallRoot,
+        [string]$NodeVersionValue,
+        [string]$NodeDownloadUrlValue,
+        [bool]$NeedFrontendTooling
+    )
+
+    if (-not $NeedFrontendTooling) {
+        return $null
+    }
+
+    $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+    if ($npmCommand) {
+        return $npmCommand.Source
+    }
+
+    if (-not $NodeInstallRoot) {
+        $NodeInstallRoot = Join-Path $RepoRootPath "tools\nodejs"
+    }
+
+    $defaultNodeUrl = "https://nodejs.org/dist/v${NodeVersionValue}/node-v${NodeVersionValue}-win-x64.zip"
+    $npmExecutable = Install-ArchiveIfMissing `
+        -InstallRoot $NodeInstallRoot `
+        -ExecutableRelativePath "npm.cmd" `
+        -DefaultDownloadUrl $defaultNodeUrl `
+        -DownloadUrl $NodeDownloadUrlValue `
+        -ComponentName "nodejs"
+
+    return $npmExecutable
+}
+
 function Invoke-Nginx {
     param(
         [Parameter(Mandatory = $true)][string]$ExecutablePath,
@@ -60,46 +148,16 @@ function Install-NginxIfMissing {
         [string]$DownloadUrl
     )
 
-    $nginxExePath = Join-Path $InstallRoot "nginx.exe"
-    if (Test-Path $nginxExePath) {
-        Write-Step "Using existing nginx at $InstallRoot"
-        return
-    }
-
     if (-not $DownloadUrl) {
         $DownloadUrl = "https://nginx.org/download/nginx-$Version.zip"
     }
 
-    Write-Step "Downloading nginx from $DownloadUrl"
-
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("talkalways-nginx-" + [guid]::NewGuid().ToString("N"))
-    $zipPath = Join-Path $tempRoot "nginx.zip"
-    $extractRoot = Join-Path $tempRoot "extract"
-
-    New-Item -ItemType Directory -Force $tempRoot | Out-Null
-    try {
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $zipPath
-        Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
-
-        $expandedDir = Get-ChildItem $extractRoot -Directory | Select-Object -First 1
-        if (-not $expandedDir) {
-            throw "Downloaded nginx archive does not contain an extracted directory"
-        }
-
-        New-Item -ItemType Directory -Force $InstallRoot | Out-Null
-        Copy-Item (Join-Path $expandedDir.FullName "*") $InstallRoot -Recurse -Force
-    }
-    finally {
-        if (Test-Path $tempRoot) {
-            Remove-Item -Recurse -Force $tempRoot
-        }
-    }
-
-    if (-not (Test-Path $nginxExePath)) {
-        throw "nginx installation failed: $nginxExePath not found"
-    }
-
-    Write-Step "Installed nginx to $InstallRoot"
+    [void](Install-ArchiveIfMissing `
+        -InstallRoot $InstallRoot `
+        -ExecutableRelativePath "nginx.exe" `
+        -DefaultDownloadUrl $DownloadUrl `
+        -DownloadUrl $DownloadUrl `
+        -ComponentName "nginx")
 }
 
 function Get-LocalNginxMasterProcess {
@@ -143,21 +201,24 @@ if (-not (Test-Path $templatePath)) {
     throw "Nginx template not found: $templatePath"
 }
 
-$npmCommand = Get-Command npm -ErrorAction SilentlyContinue
-if ((-not $SkipFrontendBuild -or $InstallFrontendDeps) -and -not $npmCommand) {
-    throw "npm command not found in PATH"
-}
+$needFrontendTooling = (-not $SkipFrontendBuild) -or $InstallFrontendDeps
+$npmExecutable = Resolve-NpmCommand `
+    -RepoRootPath $RepoRoot `
+    -NodeInstallRoot $NodeRoot `
+    -NodeVersionValue $NodeVersion `
+    -NodeDownloadUrlValue $NodeDownloadUrl `
+    -NeedFrontendTooling $needFrontendTooling
 
 if (-not $SkipFrontendBuild) {
     Push-Location $clientRoot
     try {
         if ($InstallFrontendDeps) {
             Write-Step "Installing frontend dependencies"
-            Invoke-Checked -FilePath $npmCommand.Source -Arguments @("install") -FailureMessage "npm install failed"
+            Invoke-Checked -FilePath $npmExecutable -Arguments @("install") -FailureMessage "npm install failed"
         }
 
         Write-Step "Building frontend"
-        Invoke-Checked -FilePath $npmCommand.Source -Arguments @("run", "build") -FailureMessage "npm run build failed"
+        Invoke-Checked -FilePath $npmExecutable -Arguments @("run", "build") -FailureMessage "npm run build failed"
     }
     finally {
         Pop-Location

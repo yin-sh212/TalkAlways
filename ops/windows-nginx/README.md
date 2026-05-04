@@ -14,7 +14,7 @@
 默认服务器目录结构：
 
 ```text
-C:\Users\Administrator\TalkAlways-main\TalkAlways-main\
+C:\Users\Administrator\TalkAlways\
   client\
     dist\
   server\
@@ -22,12 +22,17 @@ C:\Users\Administrator\TalkAlways-main\TalkAlways-main\
       nginx.exe
       conf\
         nginx.conf
+  tools\
+    nodejs\
+      npm.cmd
 ```
 
 说明：
 
 - 不要求预先安装系统级 Nginx
 - 脚本会默认把 Nginx 下载到项目内 `server\nginx`
+- 不要求预先安装 Node.js / npm
+- 如果系统里没有 `npm`，脚本会默认把 Node.js 下载到项目内 `tools\nodejs`
 - 不要求预先创建虚拟环境
 - 后端脚本会默认使用全局 `python` 和 `python -m pip install -r requirements.txt`
 
@@ -50,37 +55,40 @@ git pull
 不上传任何 CA 证书文件时，后端会自动回退到 `certifi` 的系统 CA 包连接 TiDB Cloud。
 
 ```powershell
-cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
-.\start-backend.ps1 -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main
+cd C:\Users\Administrator\TalkAlways\ops\windows-nginx
+.\start-backend.ps1 -RepoRoot C:\Users\Administrator\TalkAlways
 ```
 
 如果服务器上不是 `python` 这个命令名，再显式指定：
 
 ```powershell
 .\start-backend.ps1 `
-  -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main `
+  -RepoRoot C:\Users\Administrator\TalkAlways `
   -PythonExe C:\Python311\python.exe
 ```
 
 ### 2. 生成并安装 Nginx 配置
 
 ```powershell
-cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
-.\deploy.ps1 -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main -StartNginxIfStopped
+cd C:\Users\Administrator\TalkAlways\ops\windows-nginx
+.\deploy.ps1 -RepoRoot C:\Users\Administrator\TalkAlways -StartNginxIfStopped
 ```
 
 说明：
 
 - 如果 `client\node_modules` 不存在，建议加上 `-InstallFrontendDeps`
+- 如果系统里没有 `npm`，脚本会自动下载一套项目内 Node.js 并继续构建
 - 如果项目内 `server\nginx` 不存在，脚本会自动下载并解压官方 Windows Nginx
 - 默认把 Nginx 安装到：
-  `C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx`
+  `C:\Users\Administrator\TalkAlways\server\nginx`
+- 默认把 Node.js 安装到：
+  `C:\Users\Administrator\TalkAlways\tools\nodejs`
 
 首次部署更稳的命令：
 
 ```powershell
 .\deploy.ps1 `
-  -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main `
+  -RepoRoot C:\Users\Administrator\TalkAlways `
   -InstallFrontendDeps `
   -StartNginxIfStopped
 ```
@@ -88,8 +96,8 @@ cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
 ### 3. 停止后端
 
 ```powershell
-cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
-.\stop-backend.ps1 -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main
+cd C:\Users\Administrator\TalkAlways\ops\windows-nginx
+.\stop-backend.ps1 -RepoRoot C:\Users\Administrator\TalkAlways
 ```
 
 ## 三、手工步骤
@@ -99,7 +107,7 @@ cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
 ## 四、构建前端
 
 ```powershell
-cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\client
+cd C:\Users\Administrator\TalkAlways\client
 npm install
 npm run build
 ```
@@ -107,7 +115,7 @@ npm run build
 构建完成后确认目录存在：
 
 ```text
-C:\Users\Administrator\TalkAlways-main\TalkAlways-main\client\dist
+C:\Users\Administrator\TalkAlways\client\dist
 ```
 
 ## 五、启动后端
@@ -115,7 +123,7 @@ C:\Users\Administrator\TalkAlways-main\TalkAlways-main\client\dist
 如果你们不想用脚本，也可以手工执行：
 
 ```powershell
-cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server
+cd C:\Users\Administrator\TalkAlways\server
 pip install -r requirements.txt
 python start_server.py
 ```
@@ -137,7 +145,7 @@ http://127.0.0.1:3000
 如果手工方式部署，把仓库中的配置文件复制到项目内 Nginx：
 
 ```powershell
-copy C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx\nginx.conf C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx\conf\nginx.conf
+copy C:\Users\Administrator\TalkAlways\ops\windows-nginx\nginx.conf C:\Users\Administrator\TalkAlways\server\nginx\conf\nginx.conf
 ```
 
 如果你的部署目录不是实际项目路径，先修改 `nginx.conf` 里的 `root`。  
@@ -146,7 +154,7 @@ copy C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx\ng
 ## 七、启动 Nginx
 
 ```powershell
-cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx
+cd C:\Users\Administrator\TalkAlways\server\nginx
 .\nginx.exe -t
 .\nginx.exe
 ```
@@ -231,6 +239,9 @@ cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx
 | `-NginxRoot` | Nginx 安装目录，默认 `server\nginx` |
 | `-BackendHost` | 反代后端主机，默认 `127.0.0.1` |
 | `-BackendPort` | 反代后端端口，默认 `3000` |
+| `-NodeRoot` | Node.js 安装目录，默认 `tools\nodejs` |
+| `-NodeVersion` | 自动下载的 Node.js 版本，默认 `20.19.5` |
+| `-NodeDownloadUrl` | 自定义 Node.js 下载地址 |
 | `-NginxVersion` | 自动下载的 Nginx 版本，默认 `1.28.0` |
 | `-NginxDownloadUrl` | 自定义 Nginx 下载地址 |
 | `-InstallFrontendDeps` | 执行 `npm install` |

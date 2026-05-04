@@ -189,7 +189,12 @@ function Get-LocalNginxMasterProcess {
         return $null
     }
 
-    $pidValue = (Get-Content $pidFile | Select-Object -First 1).Trim()
+    $pidValue = Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $pidValue) {
+        return $null
+    }
+
+    $pidValue = "$pidValue".Trim()
     if (-not $pidValue) {
         return $null
     }

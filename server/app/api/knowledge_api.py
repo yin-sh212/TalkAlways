@@ -30,8 +30,7 @@ class KnowledgeUpdate(BaseModel):
     notes: Optional[List[str]] = None
 
 
-@router.post("/create")
-async def create_knowledge(knowledge: KnowledgeCreate):
+async def _save_knowledge_entry(knowledge: KnowledgeCreate):
     """新增知识库条目"""
     result = await save_knowledge_document({
         "title": knowledge.title,
@@ -46,8 +45,23 @@ async def create_knowledge(knowledge: KnowledgeCreate):
     return {
         "code": 200,
         "message": "知识条目创建成功",
-        "data": result
+        "data": {
+            **result,
+            "success": result.get("is_success", False),
+            "documentId": result.get("id"),
+        }
     }
+
+
+@router.post("/create")
+async def create_knowledge(knowledge: KnowledgeCreate):
+    return await _save_knowledge_entry(knowledge)
+
+
+@router.post("/save")
+async def save_knowledge(knowledge: KnowledgeCreate):
+    """兼容前端旧调用路径"""
+    return await _save_knowledge_entry(knowledge)
 
 
 @router.get("/list")

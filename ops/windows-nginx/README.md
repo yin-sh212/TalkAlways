@@ -11,18 +11,25 @@
 
 ## 目录建议
 
-建议服务器目录结构：
+默认服务器目录结构：
 
 ```text
-C:\deploy\TalkAlways\
+C:\Users\Administrator\TalkAlways-main\TalkAlways-main\
   client\
     dist\
   server\
-
-C:\nginx\
-  conf\
-    nginx.conf
+    nginx\
+      nginx.exe
+      conf\
+        nginx.conf
 ```
+
+说明：
+
+- 不要求预先安装系统级 Nginx
+- 脚本会默认把 Nginx 下载到项目内 `server\nginx`
+- 不要求预先创建虚拟环境
+- 后端脚本会默认使用全局 `python` 和 `python -m pip install -r requirements.txt`
 
 ## 一、准备代码
 
@@ -38,26 +45,51 @@ git pull
 
 ### 1. 启动后端
 
-如果服务器上有固定 Python 路径，直接传进去。  
+如果 `python` 已经在 PATH 中，可以直接运行。  
+脚本会默认先在全局 Python 环境执行 `python -m pip install -r requirements.txt`，然后再启动后端。  
 不上传任何 CA 证书文件时，后端会自动回退到 `certifi` 的系统 CA 包连接 TiDB Cloud。
 
 ```powershell
-cd C:\deploy\TalkAlways\ops\windows-nginx
-.\start-backend.ps1 -RepoRoot C:\deploy\TalkAlways -PythonExe E:\Miniconda3\envs\chang\python.exe
+cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
+.\start-backend.ps1 -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main
+```
+
+如果服务器上不是 `python` 这个命令名，再显式指定：
+
+```powershell
+.\start-backend.ps1 `
+  -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main `
+  -PythonExe C:\Python311\python.exe
 ```
 
 ### 2. 生成并安装 Nginx 配置
 
 ```powershell
-cd C:\deploy\TalkAlways\ops\windows-nginx
-.\deploy.ps1 -RepoRoot C:\deploy\TalkAlways -NginxRoot C:\nginx -InstallFrontendDeps -StartNginxIfStopped
+cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
+.\deploy.ps1 -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main -StartNginxIfStopped
+```
+
+说明：
+
+- 如果 `client\node_modules` 不存在，建议加上 `-InstallFrontendDeps`
+- 如果项目内 `server\nginx` 不存在，脚本会自动下载并解压官方 Windows Nginx
+- 默认把 Nginx 安装到：
+  `C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx`
+
+首次部署更稳的命令：
+
+```powershell
+.\deploy.ps1 `
+  -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main `
+  -InstallFrontendDeps `
+  -StartNginxIfStopped
 ```
 
 ### 3. 停止后端
 
 ```powershell
-cd C:\deploy\TalkAlways\ops\windows-nginx
-.\stop-backend.ps1 -RepoRoot C:\deploy\TalkAlways
+cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx
+.\stop-backend.ps1 -RepoRoot C:\Users\Administrator\TalkAlways-main\TalkAlways-main
 ```
 
 ## 三、手工步骤
@@ -67,7 +99,7 @@ cd C:\deploy\TalkAlways\ops\windows-nginx
 ## 四、构建前端
 
 ```powershell
-cd C:\deploy\TalkAlways\client
+cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\client
 npm install
 npm run build
 ```
@@ -75,16 +107,15 @@ npm run build
 构建完成后确认目录存在：
 
 ```text
-C:\deploy\TalkAlways\client\dist
+C:\Users\Administrator\TalkAlways-main\TalkAlways-main\client\dist
 ```
 
 ## 五、启动后端
 
-如果你们后端依赖 `conda` 环境，例如 `chang`：
+如果你们不想用脚本，也可以手工执行：
 
 ```powershell
-conda activate chang
-cd C:\deploy\TalkAlways\server
+cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server
 pip install -r requirements.txt
 python start_server.py
 ```
@@ -102,18 +133,20 @@ http://127.0.0.1:3000
 
 ## 六、配置 Nginx
 
-把仓库中的配置文件复制到 Nginx：
+如果使用脚本，这一步已经自动完成。  
+如果手工方式部署，把仓库中的配置文件复制到项目内 Nginx：
 
 ```powershell
-copy C:\deploy\TalkAlways\ops\windows-nginx\nginx.conf C:\nginx\conf\nginx.conf
+copy C:\Users\Administrator\TalkAlways-main\TalkAlways-main\ops\windows-nginx\nginx.conf C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx\conf\nginx.conf
 ```
 
-如果你的部署目录不是 `C:/deploy/TalkAlways/client/dist`，先修改 `nginx.conf` 里的 `root`。
+如果你的部署目录不是实际项目路径，先修改 `nginx.conf` 里的 `root`。  
+如果走 `deploy.ps1`，脚本会自动把 `root` 改成当前仓库中的 `client\dist` 绝对路径。
 
 ## 七、启动 Nginx
 
 ```powershell
-cd C:\nginx
+cd C:\Users\Administrator\TalkAlways-main\TalkAlways-main\server\nginx
 .\nginx.exe -t
 .\nginx.exe
 ```
@@ -195,9 +228,11 @@ cd C:\nginx
 | 参数 | 说明 |
 |---|---|
 | `-RepoRoot` | 代码仓库根目录 |
-| `-NginxRoot` | Nginx 安装目录 |
+| `-NginxRoot` | Nginx 安装目录，默认 `server\nginx` |
 | `-BackendHost` | 反代后端主机，默认 `127.0.0.1` |
 | `-BackendPort` | 反代后端端口，默认 `3000` |
+| `-NginxVersion` | 自动下载的 Nginx 版本，默认 `1.28.0` |
+| `-NginxDownloadUrl` | 自定义 Nginx 下载地址 |
 | `-InstallFrontendDeps` | 执行 `npm install` |
 | `-SkipFrontendBuild` | 跳过前端构建 |
 | `-SkipNginxControl` | 只生成配置，不执行 `nginx -t/reload` |
@@ -212,6 +247,8 @@ cd C:\nginx
 | `-BindHost` | 后端监听地址，默认 `0.0.0.0` |
 | `-Port` | 后端监听端口，默认 `3000` |
 | `-StartupTimeoutSec` | 启动等待秒数 |
+| `-SkipBackendDepsInstall` | 跳过 `pip install -r requirements.txt` |
+| `-UpgradePip` | 启动前先执行 `python -m pip install --upgrade pip` |
 
 ### `stop-backend.ps1`
 

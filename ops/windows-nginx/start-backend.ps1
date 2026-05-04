@@ -4,7 +4,9 @@ param(
     [string]$PythonExe = "python",
     [string]$BindHost = "0.0.0.0",
     [int]$Port = 3000,
-    [int]$StartupTimeoutSec = 30
+    [int]$StartupTimeoutSec = 30,
+    [switch]$SkipBackendDepsInstall,
+    [switch]$UpgradePip
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,11 +31,25 @@ function Resolve-PythonPath {
     throw "Python executable not found: $CommandValue"
 }
 
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @(),
+        [string]$FailureMessage = "Command failed"
+    )
+
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "${FailureMessage}. Exit code: $LASTEXITCODE"
+    }
+}
+
 $serverRoot = Join-Path $RepoRoot "server"
 $runlogsRoot = Join-Path $RepoRoot "runlogs"
 $stdoutPath = Join-Path $runlogsRoot "backend.out.log"
 $stderrPath = Join-Path $runlogsRoot "backend.err.log"
 $pidPath = Join-Path $runlogsRoot "backend.pid"
+$requirementsPath = Join-Path $serverRoot "requirements.txt"
 
 if (-not (Test-Path $serverRoot)) {
     throw "Server directory not found: $serverRoot"
@@ -51,6 +67,27 @@ if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force }
 if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force }
 
 $resolvedPython = Resolve-PythonPath $PythonExe
+
+if (-not $SkipBackendDepsInstall) {
+    if (-not (Test-Path $requirementsPath)) {
+        throw "requirements.txt not found: $requirementsPath"
+    }
+
+    Push-Location $serverRoot
+    try {
+        if ($UpgradePip) {
+            Write-Step "Upgrading pip"
+            Invoke-Checked -FilePath $resolvedPython -Arguments @("-m", "pip", "install", "--upgrade", "pip") -FailureMessage "pip upgrade failed"
+        }
+
+        Write-Step "Installing backend dependencies"
+        Invoke-Checked -FilePath $resolvedPython -Arguments @("-m", "pip", "install", "-r", "requirements.txt") -FailureMessage "Backend dependency install failed"
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $env:HOST = $BindHost
 $env:PORT = "$Port"
 $env:PYTHONIOENCODING = "utf-8"

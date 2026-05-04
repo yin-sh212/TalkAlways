@@ -4,7 +4,7 @@ param(
     [string]$PythonExe = "python",
     [string]$BindHost = "0.0.0.0",
     [int]$Port = 3000,
-    [int]$StartupTimeoutSec = 30,
+    [int]$StartupTimeoutSec = 120,
     [switch]$SkipBackendDepsInstall,
     [switch]$UpgradePip
 )
@@ -96,7 +96,7 @@ $env:PYTHONUTF8 = "1"
 Write-Step "Starting backend with $resolvedPython"
 $process = Start-Process `
     -FilePath $resolvedPython `
-    -ArgumentList "start_server.py" `
+    -ArgumentList @("-u", "start_server.py") `
     -WorkingDirectory $serverRoot `
     -RedirectStandardOutput $stdoutPath `
     -RedirectStandardError $stderrPath `
@@ -120,6 +120,9 @@ while ((Get-Date) -lt $deadline) {
 }
 
 Write-Step "Backend failed to start within ${StartupTimeoutSec}s"
+if (-not $process.HasExited) {
+    Write-Step "Backend process is still running but has not started listening yet (PID: $($process.Id))"
+}
 if (Test-Path $stdoutPath) {
     Write-Host "----- backend.out.log -----"
     Get-Content $stdoutPath

@@ -145,7 +145,7 @@ async def archive_alarms_to_knowledge(alarm_ids: List[int], action: str) -> int:
                     analysis_context = await prepare_alarm_analysis_context(alarm)
                     analysis_result = await analyze_with_ai(analysis_context)
                 except Exception as exc:
-                    print(f"⚠️ 告警 {alarm['id']} AI 整理失败，使用基础整理：{exc}")
+                    print(f"告警 {alarm['id']} AI 整理失败，使用基础整理：{exc}")
 
             solution = (
                 alarm.get("solution")
@@ -201,7 +201,7 @@ async def archive_alarms_to_knowledge(alarm_ids: List[int], action: str) -> int:
             })
             synced_count += 1
         except Exception as exc:
-            print(f"⚠️ 告警 {alarm.get('id')} 落知识库失败：{exc}")
+            print(f"告警 {alarm.get('id')} 落知识库失败：{exc}")
 
     return synced_count
 
@@ -497,7 +497,7 @@ async def generate_real_alarms(
     try:
         # 1. 清空旧告警
         await Database.execute("DELETE FROM alarms")
-        print("✅ 已清空旧告警")
+        print("已清空旧告警")
 
         # 2. 构建建筑 ID 列表
         if building_ids:
@@ -508,7 +508,7 @@ async def generate_real_alarms(
             buildings_result = await Database.fetch_all(buildings_sql)
             target_buildings = [b['building_id'] for b in buildings_result]
         
-        print(f"🏢 待检测建筑数量：{len(target_buildings)}")
+        print(f"待检测建筑数量：{len(target_buildings)}")
 
         total_alarms = 0
         alarm_stats = {
@@ -538,7 +538,7 @@ async def generate_real_alarms(
             data = await Database.fetch_all(sql, (building_id, start_date, end_date))
             
             if len(data) < 10:
-                print(f"⚠️  {building_id}: 数据量不足 ({len(data)} 条)，跳过")
+                print(f"{building_id}: 数据量不足 ({len(data)} 条)，跳过")
                 continue
             
             # 提取指定指标的数据 - 使用字段名而非索引
@@ -548,7 +548,7 @@ async def generate_real_alarms(
             timestamps = [str(row['timestamp']) for row in data if (row['electricity'] if metric == 'electricity' else row['cooling_load'] if metric == 'cooling_load' else row['heating_load']) is not None]
             
             if len(values) < 10:
-                print(f"⚠️  {building_id}: 有效数据不足 ({len(values)} 条)，跳过")
+                print(f"{building_id}: 有效数据不足 ({len(values)} 条)，跳过")
                 continue
             
             # 执行综合检测
@@ -599,7 +599,7 @@ async def generate_real_alarms(
                     alarm_stats[anomaly['severity']] += 1
                     alarm_stats['dynamic_baseline'] += 1
                 except Exception as e:
-                    print(f"❌ 插入动态基线告警失败：{e}")
+                    print(f"插入动态基线告警失败：{e}")
             
             # 插入趋势下降告警
             for anomaly in detection_result['trend_anomalies']:
@@ -629,7 +629,7 @@ async def generate_real_alarms(
                     alarm_stats[anomaly['severity']] += 1
                     alarm_stats['trend_decline'] += 1
                 except Exception as e:
-                    print(f"❌ 插入趋势下降告警失败：{e}")
+                    print(f"插入趋势下降告警失败：{e}")
             
             if total_alarms % 50 == 0 and total_alarms > 0:
                 print(f"  已插入 {total_alarms} 条告警...")
@@ -662,7 +662,7 @@ async def generate_real_alarms(
         }
 
     except Exception as e:
-        print(f"❌ 生成真实告警失败：{e}")
+        print(f"生成真实告警失败：{e}")
         import traceback
         traceback.print_exc()
         return {
@@ -740,7 +740,7 @@ async def get_alarm_stats(
         }
         
     except Exception as e:
-        print(f"❌ 查询告警统计失败: {e}")
+        print(f"查询告警统计失败: {e}")
         return {
             "code": 500,
             "message": f"查询失败: {str(e)}",
@@ -1277,7 +1277,7 @@ async def analyze_with_ai(data_context: Dict[str, Any]) -> Dict[str, Any]:
             
             # 验证结果质量
             if not analysis_result.get('top_factors') or len(analysis_result['top_factors']) == 0:
-                print(f"⚠️ AI 分析结果为空，使用默认分析")
+                print("AI 分析结果为空，使用默认分析")
                 analysis_result = {
                     "main_cause": f"基于运行数据分析，{data_context['alarm_info']['description']}。可能原因：设备性能衰退、控制系统故障或传感器失准",
                     "top_factors": [
@@ -1292,7 +1292,7 @@ async def analyze_with_ai(data_context: Dict[str, Any]) -> Dict[str, Any]:
                     "quick_solution": "1. 检查设备运行状态和参数\\n2. 校准传感器\\n3. 查看历史数据趋势\\n4. 联系专业人员诊断"
                 }
         except Exception as e:
-            print(f"⚠️ AI 响应解析失败：{e}")
+            print(f"AI 响应解析失败：{e}")
             # 如果解析失败，返回默认结果
             analysis_result = {
                 "main_cause": f"基于数据分析，{data_context['alarm_info']['description']} 可能由多种因素导致，建议结合现场情况进一步排查",

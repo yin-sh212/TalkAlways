@@ -42,12 +42,6 @@ const routes: RouteRecordRaw[] = [
    name: 'Workspace',
    component: () => import('@/views/Workspace.vue'),
    meta: { requiresAuth: true }
-  },
-  {
-    path: '/building-map',
-    name: 'BuildingMap',
-    component: () => import('@/views/BuildingMap.vue'),
-    meta: { requiresAuth: true }
   }
 ]
 

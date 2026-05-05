@@ -393,36 +393,57 @@ const loadAnalysisData = async () => {
     // 获取时间范围参数
     const timeParams = getTimeRangeParams()
     
-    // 串行加载多个数据源，避免一个失败导致全部失败
-    // 1. 加载趋势数据
-    let trendRes: any = null
-    try {
-      trendRes = await getTrendData({ 
+    // 获取所有建筑ID用于对比接口
+    const allBuildingIds = buildingOptions.value.map(b => b.value)
+    
+    // 并行加载所有数据源，提高加载速度
+    const [trendRes, anomalyRes, insightsRes, comparisonRes] = await Promise.allSettled([
+      // 1. 加载趋势数据
+      getTrendData({ 
         building_id: filters.buildingId, 
         days: timeParams.days
-      })
-      updateTrendChart(trendRes.data.data, timeParams.isSingleDay)
-    } catch (error) {
-      console.error('加载趋势数据失败:', error)
-    }
-    
-    // 2. 加载异常检测数据
-    let anomalyRes: any = null
-    try {
-      anomalyRes = await detectAnomaly({
+      }),
+      
+      // 2. 加载异常检测数据
+      detectAnomaly({
         building_id: filters.buildingId,
         start_date: timeParams.start_date,
         end_date: timeParams.end_date,
         threshold: 2.0
-      })
-      // 更新异常数据
-      if (anomalyRes?.data?.data?.anomaly_type && anomalyRes.data.data.anomaly_type !== '无异常') {
+      }),
+      
+      // 3. 加载分析洞察数据
+      getAnalysisInsights({
+        building_id: filters.buildingId,
+        days: timeParams.days,
+        end_date: timeParams.end_date
+      }),
+      
+      // 4. 加载对比数据（所有建筑）
+      allBuildingIds.length > 0 ? getComparisonData({
+        building_ids: allBuildingIds.join(','),
+        start_date: timeParams.start_date,
+        end_date: timeParams.end_date
+      }) : Promise.reject('没有可用的建筑')
+    ])
+    
+    // 处理趋势数据
+    if (trendRes.status === 'fulfilled') {
+      updateTrendChart(trendRes.value.data.data, timeParams.isSingleDay)
+    } else {
+      console.error('加载趋势数据失败:', trendRes.reason)
+    }
+    
+    // 处理异常检测数据
+    if (anomalyRes.status === 'fulfilled') {
+      const data = anomalyRes.value?.data?.data
+      if (data?.anomaly_type && data.anomaly_type !== '无异常') {
         currentAnomaly.value = {
-          type: anomalyRes.data.data.anomaly_type || '未知异常',
-          description: anomalyRes.data.data.description || '未描述',
-          factors: anomalyRes.data.data.factors || '未分析',
-          impact: anomalyRes.data.data.impact || '未评估',
-          suggestion: anomalyRes.data.data.suggestion || '无建议'
+          type: data.anomaly_type || '未知异常',
+          description: data.description || '未描述',
+          factors: data.factors || '未分析',
+          impact: data.impact || '未评估',
+          suggestion: data.suggestion || '无建议'
         }
       } else {
         currentAnomaly.value = {
@@ -433,31 +454,31 @@ const loadAnalysisData = async () => {
           suggestion: '继续保持当前运行策略，定期巡检设备'
         }
       }
-    } catch (error) {
-      console.error('加载异常检测数据失败:', error)
+    } else {
+      console.error('加载异常检测数据失败:', anomalyRes.reason)
     }
     
-    // 3. 加载分析洞察数据
-    let insightsRes: any = null
-    try {
-      insightsRes = await getAnalysisInsights({
-        building_id: filters.buildingId,
-        days: timeParams.days,
-        end_date: timeParams.end_date
-      })
-      if (insightsRes?.data?.data?.insights) {
-        insights.value = insightsRes.data.data.insights
+    // 处理分析洞察数据
+    if (insightsRes.status === 'fulfilled') {
+      if (insightsRes.value?.data?.data?.insights) {
+        insights.value = insightsRes.value.data.data.insights
       } else {
         insights.value = []
         console.warn('[Analysis] 警告：没有有效的洞察数据')
       }
-    } catch (error) {
-      console.error('加载洞察数据失败:', error)
+    } else {
+      console.error('加载洞察数据失败:', insightsRes.reason)
       insights.value = []
     }
-
-    // 4. 加载对比数据（所有建筑）
-    await loadAllBuildingsComparison()
+    
+    // 处理对比数据
+    if (comparisonRes.status === 'fulfilled') {
+      if (comparisonRes.value?.data?.data) {
+        updateCompareChartWithDimension(comparisonRes.value.data.data)
+      }
+    } else {
+      console.error('加载对比数据失败:', comparisonRes.reason)
+    }
     
     message.success('数据加载成功')
     
@@ -737,40 +758,6 @@ const handleExport = async () => {
 const navigateToKnowledgeBase = () => {
   router.push('/workspace?tab=knowledge')
   message.info('正在跳转到运维知识库...')
-}
-
-// 加载所有建筑的对比数据
-const loadAllBuildingsComparison = async () => {
-  try {
-    const timeParams = getTimeRangeParams()
-    
-    // 获取所有建筑 ID
-    const allBuildingIds = buildingOptions.value.map(b => b.value)
-    
-    if (allBuildingIds.length === 0) {
-      console.warn('[Analysis] 没有可用的建筑')
-      message.warning('暂无建筑数据')
-      return
-    }
-    
-    // 将数组转换为逗号分隔的字符串，符合后端接口要求
-    const response = await getComparisonData({
-      building_ids: allBuildingIds.join(','),
-      start_date: timeParams.start_date,
-      end_date: timeParams.end_date
-    })
-    
-    if (!response.data?.data) {
-      console.error('[Analysis] 错误：后端返回的数据为空')
-      message.error('加载对比数据失败')
-      return
-    }
-    
-    updateCompareChartWithDimension(response.data.data)
-  } catch (error) {
-    console.error('[Analysis] ❌ 加载多建筑对比数据失败:', error)
-    message.error('加载对比数据失败')
-  }
 }
 
 // 初始化图表

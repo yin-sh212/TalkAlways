@@ -75,20 +75,12 @@ def generate_answer_with_rag(query: str) -> Dict[str, Any]:
 
 
 async def stream_generator(full_prompt: str):
-    """SSE 流式生成器 - 异步版本"""
+    """SSE 流式生成器 - 真正的异步流式版本"""
     try:
         from app.services.llm_client import llm_client
         
-        # 将同步生成器包装为异步迭代
-        loop = asyncio.get_event_loop()
-        
-        # 在线程池中执行同步生成器，避免阻塞事件循环
-        def generate_chunks():
-            for chunk in llm_client.generate_stream(full_prompt):
-                yield chunk
-        
-        # 逐块发送数据
-        for chunk in generate_chunks():
+        # 直接迭代LLM的流式输出，每获取一个chunk就立即yield
+        for chunk in llm_client.generate_stream(full_prompt):
             sse_data = json.dumps({
                 "code": 200,
                 "data": {
@@ -96,6 +88,8 @@ async def stream_generator(full_prompt: str):
                 }
             }, ensure_ascii=False)
             yield f"data: {sse_data}\n\n"
+            # 让出事件循环控制权，确保数据立即发送
+            await asyncio.sleep(0)
         
         # 发送结束标记
         yield "data: [DONE]\n\n"

@@ -42,7 +42,6 @@ const getColorByName = (name: string): string => {
     '紧急': '#f5222d',
     '重要': '#fa8c16',
     '一般': '#1890ff',
-    '提示': '#52c41a',
     '平均用电量': '#1890ff',
     '最大用电量': '#fa8c16',
     '用电量 (kWh)': '#1890ff',

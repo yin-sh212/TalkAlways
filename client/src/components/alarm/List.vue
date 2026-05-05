@@ -197,7 +197,7 @@ const getLevelName = (level: number) => {
   const levelMap: Record<number, string> = {
     1: '严重',
     2: '警告',
-    3: '提示'
+    3: '一般'
   }
   return levelMap[level] || `级别${level}`
 }
@@ -445,17 +445,6 @@ defineExpose({
   border-top-color: #18a058;
   border-radius: 50%;
   animation: row-spin 0.8s linear infinite;
-}
-
-.related-data {
-  background-color: var(--n-code-background-color);
-  padding: 16px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 13px;
-  overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 @keyframes row-spin {

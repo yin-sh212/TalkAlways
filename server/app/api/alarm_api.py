@@ -678,7 +678,9 @@ async def generate_real_alarms(
 async def get_alarm_stats(
         building_id: Optional[str] = Query(None, description="建筑编号，支持逗号分隔多个ID"),
         start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
-        end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）")
+        end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）"),
+        alarm_level: Optional[str] = Query(None, description="告警级别，支持逗号分隔多个级别"),
+        alarm_type: Optional[str] = Query(None, description="告警类型，支持逗号分隔多个类型")
 ):
     """获取告警统计指标（总数、未解决、紧急、已确认）"""
     try:
@@ -704,6 +706,28 @@ async def get_alarm_stats(
         if end_date:
             conditions.append("DATE(start_time) <= %s")
             params.append(end_date)
+        
+        # 告警级别过滤（支持多值）
+        if alarm_level:
+            levels = [int(lv.strip()) for lv in alarm_level.split(',') if lv.strip()]
+            if len(levels) == 1:
+                conditions.append("alarm_level = %s")
+                params.append(levels[0])
+            elif len(levels) > 1:
+                placeholders = ','.join(['%s'] * len(levels))
+                conditions.append(f"alarm_level IN ({placeholders})")
+                params.extend(levels)
+        
+        # 告警类型过滤（支持多值）
+        if alarm_type:
+            types = [t.strip() for t in alarm_type.split(',') if t.strip()]
+            if len(types) == 1:
+                conditions.append("alarm_type = %s")
+                params.append(types[0])
+            elif len(types) > 1:
+                placeholders = ','.join(['%s'] * len(types))
+                conditions.append(f"alarm_type IN ({placeholders})")
+                params.extend(types)
         
         where_clause = " AND ".join(conditions)
         query_params = tuple(params) if params else None
@@ -754,7 +778,8 @@ async def get_alarm_stats(
 async def get_alarm_list(
         status: Optional[str] = Query(None, description="过滤状态：pending/confirmed/resolved"),
         building_id: Optional[str] = Query(None, description="建筑编号，支持逗号分隔多个ID"),
-        alarm_level: Optional[int] = Query(None, description="告警级别"),
+        alarm_level: Optional[str] = Query(None, description="告警级别，支持逗号分隔多个级别（如：1,2,3）"),
+        alarm_type: Optional[str] = Query(None, description="告警类型，支持逗号分隔多个类型"),
         start_date: Optional[str] = Query(None, description="开始日期（YYYY-MM-DD）"),
         end_date: Optional[str] = Query(None, description="结束日期（YYYY-MM-DD）"),
         page: int = Query(1, ge=1, description="页码"),
@@ -781,9 +806,27 @@ async def get_alarm_list(
                 conditions.append(f"building_id IN ({placeholders})")
                 params.extend(building_ids)
         
+        # 支持多告警级别过滤（逗号分隔）
         if alarm_level:
-            conditions.append("alarm_level = %s")
-            params.append(alarm_level)
+            levels = [int(lv.strip()) for lv in alarm_level.split(',') if lv.strip()]
+            if len(levels) == 1:
+                conditions.append("alarm_level = %s")
+                params.append(levels[0])
+            elif len(levels) > 1:
+                placeholders = ','.join(['%s'] * len(levels))
+                conditions.append(f"alarm_level IN ({placeholders})")
+                params.extend(levels)
+        
+        # 支持多告警类型过滤（逗号分隔）
+        if alarm_type:
+            types = [t.strip() for t in alarm_type.split(',') if t.strip()]
+            if len(types) == 1:
+                conditions.append("alarm_type = %s")
+                params.append(types[0])
+            elif len(types) > 1:
+                placeholders = ','.join(['%s'] * len(types))
+                conditions.append(f"alarm_type IN ({placeholders})")
+                params.extend(types)
         
         # 添加时间范围过滤
         if start_date:

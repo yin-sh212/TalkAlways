@@ -76,7 +76,7 @@
               </n-grid>
 
               <!-- 操作按钮 -->
-              <n-space justify="end" style="margin-top: 16px">
+              <n-space justify="end">
                 <n-button @click="handleReset">重置</n-button>
                 <n-button
                   type="primary"
@@ -437,32 +437,53 @@ const handleQuery = async (skipValidation: boolean = false) => {
     // 支持多建筑查询 - 将建筑 ID 列表用逗号拼接传给后端(后端使用 IN 子句)
     const buildingIds = queryForm.buildings.join(',');
     
+    // 构建告警级别参数（多选时转为逗号分隔字符串）
+    const alarmLevelParam = (queryForm.severity && queryForm.severity.length > 0) 
+      ? queryForm.severity.join(',') 
+      : undefined;
+    
+    // 构建告警类型参数（多选时转为逗号分隔字符串）
+    const alarmTypeParam = (queryForm.alarmType && queryForm.alarmType.length > 0) 
+      ? queryForm.alarmType.join(',') 
+      : undefined;
+    
+    // 构建查询参数对象
+    const listParams: any = {
+      building_id: buildingIds,
+      start_date: startDate,
+      end_date: endDate,
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      // 显式设置告警级别和类型过滤（未选择时为 undefined，后端会忽略）
+      alarm_level: alarmLevelParam,
+      alarm_type: alarmTypeParam,
+    }
+    
     const [alarmRes, trendRes, distributionRes, statsRes] = await Promise.all([
-      alarmApi.getAlarmList({
-        // 使用告警列表接口 - 添加时间参数
-        building_id: buildingIds,
-        start_date: startDate,
-        end_date: endDate,
-        page: pagination.page,
-        page_size: pagination.pageSize,
-      }),
+      alarmApi.getAlarmList(listParams),
       alarmApi.getAlarmTrend({
         // 趋势图数据 - 支持多建筑聚合
         building_id: buildingIds,
         start_date: startDate,
         end_date: endDate,
+        alarm_level: alarmLevelParam,
+        alarm_type: alarmTypeParam,
       }),
       alarmApi.getAlarmDistribution({
         // 分布图数据 - 支持多建筑聚合
         building_id: buildingIds,
         start_date: startDate,
         end_date: endDate,
+        alarm_level: alarmLevelParam,
+        alarm_type: alarmTypeParam,
       }),
       alarmApi.getAlarmStats({
         // 统计指标数据 - 使用后端统计接口
         building_id: buildingIds,
         start_date: startDate,
         end_date: endDate,
+        alarm_level: alarmLevelParam,
+        alarm_type: alarmTypeParam,
       }),
     ]);
 
@@ -686,10 +707,9 @@ const getSeverityName = (severity: string) => {
     critical: "紧急",
     major: "重要",
     minor: "一般",
-    warning: "提示",
     "1": "严重",
     "2": "警告",
-    "3": "提示",
+    "3": "一般",
   };
   return severityMap[severity] || severity;
 };
@@ -1059,18 +1079,41 @@ onMounted(async () => {
     await nextTick()
     
     if (expandDetail && alarmListRef.value) {
+      console.log('🔍 尝试定位告警:', { highlightId, buildingId, alarmTime })
+      console.log('📋 当前表格数据:', tableData.value.map((item: any) => ({
+        id: item.id,
+        building_id: item.building_id,
+        time: item.time
+      })))
+      
       // 找到对应的告警行 - 优先匹配 highlight_id，同时兼容时间和建筑匹配
       const alarmRow = tableData.value.find(
         (item: any) => {
           // 优先匹配 ID（支持数字和字符串比较）
-          if (String(item.id) === String(highlightId)) return true
+          const itemIdStr = String(item.id)
+          const highlightIdStr = String(highlightId)
+          
+          if (itemIdStr === highlightIdStr) {
+            console.log('✅ 通过 ID 匹配成功:', itemIdStr)
+            return true
+          }
+          
           // 如果 ID 不匹配，尝试匹配时间和建筑（防止 ID 格式不一致）
           if (alarmTime && item.building_id === buildingId) {
-            const itemTime = new Date(item.time).getTime()
-            const targetTime = new Date(alarmTime).getTime()
-            // 时间相差不超过 1 小时
-            return Math.abs(itemTime - targetTime) < 3600000
+            try {
+              const itemTime = new Date(item.time).getTime()
+              const targetTime = new Date(alarmTime).getTime()
+              // 时间相差不超过 1 小时
+              const timeDiff = Math.abs(itemTime - targetTime)
+              if (timeDiff < 3600000) {
+                console.log('✅ 通过时间+建筑匹配成功, 时间差:', timeDiff / 1000, '秒')
+                return true
+              }
+            } catch (e) {
+              console.warn('⚠️ 时间解析失败:', e)
+            }
           }
+          
           return false
         }
       )
@@ -1088,6 +1131,7 @@ onMounted(async () => {
           await nextTick()
         }, 300) // 延迟 300ms 执行
       } else {
+        console.error('❌ 未找到匹配的告警')
         message.warning('未找到指定的告警，请检查筛选条件')
       }
     }
@@ -1113,6 +1157,21 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
+/* 增大查询表单的标签和输入框字体 */
+.query-section :deep(.n-form-item-label) {
+  font-size: 16px;
+}
+
+.query-section :deep(.n-input .n-input__input-el),
+.query-section :deep(.n-select .n-select__selection),
+.query-section :deep(.n-date-picker .n-input .n-input__input-el) {
+  font-size: 15px;
+}
+
+.query-section :deep(.n-collapse .n-collapse-item__header-main) {
+  font-size: 16px;
+}
+
 .metrics-section {
   margin-bottom: 16px;
 }
@@ -1132,6 +1191,7 @@ onMounted(async () => {
 .resolve-modal-hint {
   color: var(--n-text-color-2);
   line-height: 1.7;
+  font-size: 15px;
 }
 
 .bottom-bar {

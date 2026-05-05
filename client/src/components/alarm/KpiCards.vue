@@ -100,18 +100,17 @@ defineProps<{
 
 <style scoped>
 .metric-title {
-  font-size: 14px;
+  font-size: 17px;
   color: #666;
 }
 
 .metric-value {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: bold;
-  margin: 12px 0;
 }
 
 .metric-footer {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 14px;
 }
 </style>

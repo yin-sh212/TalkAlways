@@ -754,9 +754,10 @@ onMounted(async () => {
 
 <style scoped>
 .knowledge-base {
-  min-height: 100%;
+  height: calc(100vh - 200px);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .loading-container,

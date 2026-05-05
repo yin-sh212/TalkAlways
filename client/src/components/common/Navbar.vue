@@ -49,8 +49,7 @@ import {
   Analytics,
   AlertCircle,
   LogOutOutline,
-  Settings,
-  Map
+  Settings
 } from "@vicons/ionicons5";
 
 const router = useRouter();
@@ -78,11 +77,6 @@ const menuOptions: MenuOption[] = [
     icon: () => h(NIcon, null, { default: () => h(AlertCircle) }),
   },
   {
-    label: "建筑地图",
-    key: "BuildingMap",
-    icon: () => h(NIcon, null, { default: () => h(Map) }),
-  },
-  {
     label: "工作区",
     key: "Workspace",
     icon: () => h(NIcon, null, { default: () => h(Settings) }),
@@ -95,7 +89,6 @@ const handleMenuSelect = (key: string) => {
     Overview: "/overview",
     Analysis: "/analysis",
     Alarm: "/alarm",
-    BuildingMap: "/building-map",
     Workspace: "/workspace",
   };
 
@@ -150,7 +143,7 @@ router.afterEach((to) => {
 
   .logo-text {
     width: 80px;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: bold;
     color: var(--text-primary);
     transition: color 0.3s ease;
@@ -176,7 +169,7 @@ router.afterEach((to) => {
   }
 
   .username {
-    font-size: 14px;
+    font-size: 16px;
     color: var(--text-primary);
     transition: color 0.3s ease;
   }

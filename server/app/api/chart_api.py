@@ -118,7 +118,9 @@ async def get_alarm_trend_data(
         building_id: str = Query(..., description="建筑编号，支持逗号分隔多个建筑"),
         start_date: Optional[str] = Query(default=None, description="开始日期，格式：YYYY-MM-DD，例如：2016-07-01"),
         end_date: str = Query(default="2016-08-15", description="截止日期，格式：YYYY-MM-DD，例如：2016-08-15"),
-        days: Optional[int] = Query(default=None, ge=1, le=365, description="天数，可选，若未提供则根据 start_date 和 end_date 计算")
+        days: Optional[int] = Query(default=None, ge=1, le=365, description="天数，可选，若未提供则根据 start_date 和 end_date 计算"),
+        alarm_level: Optional[str] = Query(None, description="告警级别，支持逗号分隔多个级别"),
+        alarm_type: Optional[str] = Query(None, description="告警类型，支持逗号分隔多个类型")
 ):
     """获取告警趋势图数据（ECharts 格式）- 按时间统计各告警级别的数量（支持多建筑）"""
     try:
@@ -145,6 +147,36 @@ async def get_alarm_trend_data(
             end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             start_dt = end_dt - timedelta(days=days-1)
             start_date = start_dt.strftime("%Y-%m-%d")
+        
+        # 构建额外过滤条件
+        extra_conditions = []
+        extra_params = []
+        
+        # 告警级别过滤（支持多值）
+        if alarm_level:
+            levels = [int(lv.strip()) for lv in alarm_level.split(',') if lv.strip()]
+            if len(levels) == 1:
+                extra_conditions.append("alarm_level = %s")
+                extra_params.append(levels[0])
+            elif len(levels) > 1:
+                placeholders = ','.join(['%s'] * len(levels))
+                extra_conditions.append(f"alarm_level IN ({placeholders})")
+                extra_params.extend(levels)
+        
+        # 告警类型过滤（支持多值）
+        if alarm_type:
+            types = [t.strip() for t in alarm_type.split(',') if t.strip()]
+            if len(types) == 1:
+                extra_conditions.append("alarm_type = %s")
+                extra_params.append(types[0])
+            elif len(types) > 1:
+                placeholders = ','.join(['%s'] * len(types))
+                extra_conditions.append(f"alarm_type IN ({placeholders})")
+                extra_params.extend(types)
+        
+        extra_where = ""
+        if extra_conditions:
+            extra_where = " AND " + " AND ".join(extra_conditions)
         
         # 根据天数决定时间粒度
         if days == 1:
@@ -176,19 +208,18 @@ async def get_alarm_trend_data(
                 COUNT(*) as alarm_count
             FROM alarms
             WHERE {building_condition}
-                AND DATE(start_time) BETWEEN %s AND %s
+                AND DATE(start_time) BETWEEN %s AND %s{extra_where}
             GROUP BY {group_by}, alarm_level
             ORDER BY date ASC, alarm_level ASC
         """
 
-        data = await Database.fetch_all(sql, (*building_params, start_date, end_date))
+        data = await Database.fetch_all(sql, (*building_params, start_date, end_date, *extra_params))
 
         # 初始化系列数据，所有时间点都初始化为 0
         series_data = {
             1: [0] * len(categories),  # 紧急
             2: [0] * len(categories),  # 重要
-            3: [0] * len(categories),  # 一般
-            4: [0] * len(categories)   # 提示
+            3: [0] * len(categories)   # 一般
         }
         
         # 填充实际告警数量
@@ -206,8 +237,7 @@ async def get_alarm_trend_data(
         level_names = {
             1: "紧急",
             2: "重要",
-            3: "一般",
-            4: "提示"
+            3: "一般"
         }
         
         series = []
@@ -379,7 +409,9 @@ async def get_comparison_data(
 async def get_alarm_distribution(
         building_id: str = Query(..., description="建筑编号，支持逗号分隔多个建筑"),
         start_date: str = Query(default="2016-08-14", description="开始日期，格式：YYYY-MM-DD"),
-        end_date: str = Query(default="2016-08-15", description="结束日期，格式：YYYY-MM-DD")
+        end_date: str = Query(default="2016-08-15", description="结束日期，格式：YYYY-MM-DD"),
+        alarm_level: Optional[str] = Query(None, description="告警级别，支持逗号分隔多个级别"),
+        alarm_type: Optional[str] = Query(None, description="告警类型，支持逗号分隔多个类型")
 ):
     """获取告警类型分布数据（饼图）- 按告警类型统计数量（支持多建筑）"""
     try:
@@ -395,6 +427,36 @@ async def get_alarm_distribution(
             building_condition = f"building_id IN ({placeholders})"
             building_params = building_ids
         
+        # 构建额外过滤条件
+        extra_conditions = []
+        extra_params = []
+        
+        # 告警级别过滤（支持多值）
+        if alarm_level:
+            levels = [int(lv.strip()) for lv in alarm_level.split(',') if lv.strip()]
+            if len(levels) == 1:
+                extra_conditions.append("alarm_level = %s")
+                extra_params.append(levels[0])
+            elif len(levels) > 1:
+                placeholders = ','.join(['%s'] * len(levels))
+                extra_conditions.append(f"alarm_level IN ({placeholders})")
+                extra_params.extend(levels)
+        
+        # 告警类型过滤（支持多值）
+        if alarm_type:
+            types = [t.strip() for t in alarm_type.split(',') if t.strip()]
+            if len(types) == 1:
+                extra_conditions.append("alarm_type = %s")
+                extra_params.append(types[0])
+            elif len(types) > 1:
+                placeholders = ','.join(['%s'] * len(types))
+                extra_conditions.append(f"alarm_type IN ({placeholders})")
+                extra_params.extend(types)
+        
+        extra_where = ""
+        if extra_conditions:
+            extra_where = " AND " + " AND ".join(extra_conditions)
+        
         # 按告警类型统计数量
         sql = f"""
             SELECT 
@@ -402,13 +464,13 @@ async def get_alarm_distribution(
                 COUNT(*) as count
             FROM alarms
             WHERE {building_condition}
-                AND DATE(start_time) BETWEEN %s AND %s
+                AND DATE(start_time) BETWEEN %s AND %s{extra_where}
             GROUP BY alarm_type
             ORDER BY count DESC
         """
         
-        data = await Database.fetch_all(sql, (*building_params, start_date, end_date))
-        
+        data = await Database.fetch_all(sql, (*building_params, start_date, end_date, *extra_params))
+
         # 转换为 ECharts 饼图格式
         series_data = []
         

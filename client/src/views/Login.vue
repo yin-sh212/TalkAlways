@@ -18,10 +18,10 @@
             label-placement="left"
             label-width="auto"
           >
-            <n-form-item path="account" label="用户名">
+            <n-form-item path="account" label="账号">
               <n-input
                 v-model:value="loginForm.account"
-                placeholder="请输入用户名/手机号/邮箱"
+                placeholder="请输入手机号或邮箱"
                 size="large"
                 @keyup.enter="handleLogin"
               />
@@ -144,8 +144,8 @@ const loginForm = ref({
 // 登录表单验证规则
 const loginRules: FormRules = {
   account: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' }
+    { required: true, message: '请输入手机号或邮箱', trigger: 'blur' },
+    { min: 3, max: 50, message: '账号长度为 3-50 个字符', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -229,7 +229,7 @@ const handleLogin = async () => {
 
     if (result.success) {
       message.success('登录成功')
-      router.push('/overview')  // 修改为跳转到 Overview 页面
+      router.push('/Overview')
     } else {
       message.error(result.message || '登录失败')
     }
@@ -251,7 +251,7 @@ const handleRegister = async () => {
     if (result.success) {
       message.success('注册并登录成功')
       setTimeout(() => {
-        router.push('/overview')
+        router.push('/Overview')
       }, 500)
     } else {
       message.error(result.message || '注册失败')

@@ -2,12 +2,26 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database.db import Database
 from app.services.anomaly_detector import detect_anomalies_3sigma
 import numpy as np
 
 router = APIRouter(prefix="/api/statistics", tags=["统计分析"])
+
+
+def _normalize_multi_values(values: Optional[List[str]]) -> Optional[List[str]]:
+    if not values:
+        return None
+
+    normalized: List[str] = []
+    for value in values:
+        if value is None:
+            continue
+        parts = [part.strip() for part in str(value).split(",") if part.strip()]
+        normalized.extend(parts)
+
+    return normalized or None
 
 
 @router.get("/summary")
@@ -395,6 +409,7 @@ async def get_buildings_summary(
         building_ids: Optional[List[str]] = Query(None, description="建筑 ID 列表，不传则查询所有建筑")
 ):
     """批量获取多个建筑的能耗汇总 - 用于建筑能耗对比"""
+    building_ids = _normalize_multi_values(building_ids)
     group_by = time_unit
 
     # 根据 group_by 确定 SQL
@@ -445,11 +460,24 @@ async def get_buildings_summary(
 @router.get("/summary/daily-comparison")
 async def get_daily_comparison(
         building_id: str,
-        dates: List[str] = Query(..., description="日期列表，例如：['2016-07-15', '2016-07-14', '2016-07-08']")
+        dates: Optional[List[str]] = Query(None, description="日期列表，例如：['2016-07-15', '2016-07-14', '2016-07-08']"),
+        start_date: Optional[str] = Query(None, description="开始日期（兼容参数）"),
+        end_date: Optional[str] = Query(None, description="结束日期（兼容参数）")
 ):
     """批量获取多日的能耗数据 - 用于日环比、周同比计算（并行优化版）"""
-    if not dates:
-        raise HTTPException(status_code=400, detail="dates 参数不能为空")
+    normalized_dates = _normalize_multi_values(dates)
+    if not normalized_dates and start_date and end_date:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+        if start_dt > end_dt:
+            raise HTTPException(status_code=400, detail="start_date 不能晚于 end_date")
+        normalized_dates = [
+            (start_dt + timedelta(days=offset)).strftime("%Y-%m-%d")
+            for offset in range((end_dt - start_dt).days + 1)
+        ]
+
+    if not normalized_dates:
+        raise HTTPException(status_code=400, detail="dates 或 start_date/end_date 参数不能为空")
 
     # 并行查询每个日期的数据
     async def query_single_date(date: str):
@@ -478,7 +506,7 @@ async def get_daily_comparison(
         return dict(data)
     
     # 并发查询所有日期
-    tasks = [query_single_date(date) for date in dates]
+    tasks = [query_single_date(single_date) for single_date in normalized_dates]
     results = await asyncio.gather(*tasks)
     
     # 按日期排序

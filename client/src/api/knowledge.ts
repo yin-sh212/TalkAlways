@@ -1,4 +1,5 @@
 import http from './http'
+import type { AxiosResponse } from 'axios'
 
 export interface KnowledgeDocument {
   id: number | string
@@ -24,11 +25,25 @@ export interface SaveToKnowledgeRequest {
   notes: string[]
 }
 
+export interface SaveToKnowledgeResult {
+  success: boolean
+  documentId: number | string | null
+  isNew?: boolean
+  syncedToRag?: boolean
+}
+
 /**
  * 保存文档到知识库
  */
 export const saveToKnowledge = async (data: SaveToKnowledgeRequest) => {
-  return http.post('/knowledge/save', data)
+  const response = await http.post('/knowledge/save', data) as AxiosResponse<any>
+  const payload = response.data?.data || {}
+  return {
+    success: Boolean(payload.success ?? payload.is_success),
+    documentId: payload.documentId ?? payload.id ?? null,
+    isNew: payload.is_new,
+    syncedToRag: payload.synced_to_rag
+  } as SaveToKnowledgeResult
 }
 
 /**

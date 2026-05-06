@@ -101,7 +101,13 @@ const handleViewAll = () => {
 
 // 分析具体异常
 const handleAnalyze = (item: AnomalyItem) => {
+  // 使用 item.id 作为告警 ID（应该是数字类型的字符串）
   const alarmId = item.id
+  
+  // 如果 id 不是纯数字，尝试从 description 或其他字段提取
+  // 但根据 Overview.vue 的实现，id 应该是 `${record.building_id}_${record.timestamp}` 格式
+  // 这种情况下我们需要通过时间和建筑来定位告警
+  
   const buildingId = item.buildingId || ''
   const alarmTime = item.time
   

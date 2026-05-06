@@ -18,7 +18,7 @@ class VectorDBService:
         os.makedirs(persist_directory, exist_ok=True)
 
         # 1. 加载embedding模型（先用模拟，解决网络问题）
-        print("🔄 准备embedding模型...")
+        print("准备 embedding 模型...")
         self.use_real_embedding = True
         self.embedding_dim = 768
 
@@ -33,10 +33,10 @@ class VectorDBService:
             self.embedder = SentenceTransformer('shibing624/text2vec-base-chinese')
             self.embedding_dim = 768
             self.use_real_embedding = True
-            print("✅ 成功加载百度embedding模型")
+            print("成功加载百度 embedding 模型")
         except Exception as e:
-            print(f"⚠️ 无法加载真实模型: {e}")
-            print("🔄 使用模拟embedding（不影响功能演示）")
+            print(f"无法加载真实模型: {e}")
+            print("使用模拟 embedding（不影响功能演示）")
             self.use_real_embedding = False
 
         # 2. 初始化FAISS索引
@@ -44,11 +44,11 @@ class VectorDBService:
             self.index = faiss.read_index(self.index_path)
             with open(self.documents_path, 'rb') as f:
                 self.documents = pickle.load(f)
-            print(f"✅ 加载已有FAISS索引，包含 {len(self.documents)} 个文档")
+            print(f"加载已有 FAISS 索引，包含 {len(self.documents)} 个文档")
         else:
             self.index = None
             self.documents = []
-            print("✅ 创建新FAISS索引")
+            print("创建新 FAISS 索引")
 
     def _encode(self, texts: List[str]) -> np.ndarray:
         """生成向量"""
@@ -57,7 +57,7 @@ class VectorDBService:
                 embeddings = self.embedder.encode(texts)
                 return embeddings.astype('float32')
             except Exception as e:
-                print(f"⚠️ 调用embedding服务失败: {e}")
+                print(f"调用 embedding 服务失败: {e}")
 
         # 模拟向量（开发测试用）
         return np.random.randn(len(texts), self.embedding_dim).astype('float32')
@@ -67,7 +67,7 @@ class VectorDBService:
         texts = [doc['content'] for doc in documents]
 
         # 生成向量
-        print(f"🔄 生成 {len(texts)} 个文本的向量...")
+        print(f"生成 {len(texts)} 个文本的向量...")
         embeddings = self._encode(texts)
 
         # 初始化或更新FAISS索引
@@ -87,7 +87,7 @@ class VectorDBService:
         with open(self.documents_path, 'wb') as f:
             pickle.dump(self.documents, f)
 
-        print(f"✅ 已添加 {len(texts)} 个文档到FAISS")
+        print(f"已添加 {len(texts)} 个文档到 FAISS")
         return len(texts)
 
     def search(self, query: str, k: int = 5) -> List[Dict]:

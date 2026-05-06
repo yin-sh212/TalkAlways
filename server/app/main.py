@@ -38,11 +38,11 @@ HOST = os.getenv("HOST", "0.0.0.0")
 async def lifespan(app: FastAPI):
     try:
         await Database.fetch_one("SELECT 1 as test")
-        print("✅ 数据库连接成功")
+        print("数据库连接成功")
     except Exception as e:
-        print(f"❌ 数据库连接失败：{e}")
+        print(f"数据库连接失败：{e}")
     
-    print(f"✅ {config.APP_NAME} v{config.APP_VERSION} 启动成功")
+    print(f"{config.APP_NAME} v{config.APP_VERSION} 启动成功")
     yield
 
 app = FastAPI(

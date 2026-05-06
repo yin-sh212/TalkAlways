@@ -17,10 +17,10 @@ class RAGPipeline:
 
     def initialize_knowledge_base(self):
         """初始化知识库（加载所有文档到向量库）"""
-        print("📚 开始初始化知识库...")
+        print("开始初始化知识库...")
 
         documents = self.knowledge_base.load_all_documents()
-        print(f"📄 加载了 {len(documents)} 个文档块")
+        print(f"加载了 {len(documents)} 个文档块")
 
         if documents:
             # 这步会调用向量化！

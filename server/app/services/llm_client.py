@@ -30,14 +30,14 @@ class LLMClient:
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
         
         if self.deepseek_api_key:
-            print("✅ 已配置 DeepSeek API")
-        
+            print("已配置 DeepSeek API")
+
         if self.available:
-            print(f"✅ 已配置 RAGFlow 对话 API (主): {self.api_url_main}")
+            print(f"已配置 RAGFlow 对话 API (主): {self.api_url_main}")
             if self.chat_id_alt:
-                print(f"✅ 已配置 RAGFlow 对话 API (备用): {self.api_url_alt}")
+                print(f"已配置 RAGFlow 对话 API (备用): {self.api_url_alt}")
         elif not self.deepseek_api_key:
-            print("⚠️ RAGFlow 与 DeepSeek 均未配置完整，将使用模拟回答")
+            print("RAGFlow 与 DeepSeek 均未配置完整，将使用模拟回答")
 
     def generate(self, prompt: str, max_tokens: int = 512, use_alt: bool = False) -> str:
         """
@@ -56,7 +56,7 @@ class LLMClient:
             try:
                 return self._call_deepseek(prompt)
             except Exception as e:
-                print(f"⚠️ DeepSeek 失败：{e}，降级到 RAGFlow...")
+                print(f"DeepSeek 失败：{e}，降级到 RAGFlow...")
         
         # 降级到 RAGFlow
         if not self.available:
@@ -81,7 +81,7 @@ class LLMClient:
                 yield from self._call_deepseek_stream(prompt)
                 return
             except Exception as e:
-                print(f"⚠️ DeepSeek 流式失败：{e}，降级到 RAGFlow...")
+                print(f"DeepSeek 流式失败：{e}，降级到 RAGFlow...")
         
         # 降级到 RAGFlow 或模拟
         if not self.available:
@@ -121,7 +121,7 @@ class LLMClient:
         result = response.json()
         if result.get("choices") and len(result["choices"]) > 0:
             answer = result["choices"][0]["message"]["content"]
-            print(f"✅ DeepSeek 回答成功，长度：{len(answer)} 字符")
+            print(f"DeepSeek 回答成功，长度：{len(answer)} 字符")
             return answer
         else:
             raise Exception(f"DeepSeek 错误：{result}")
@@ -200,13 +200,13 @@ class LLMClient:
         answer = result.get("data", {}).get("answer", "")
         
         if len(answer) > 300 and "中建八局二建" in answer:
-            print(f"⚠️ {assistant_name}返回标准欢迎语，长度：{len(answer)} 字符")
+            print(f"{assistant_name}返回标准欢迎语，长度：{len(answer)} 字符")
             if not use_alt and self.chat_id_alt:
-                print("🔄 尝试使用备用助手...")
+                print("尝试使用备用助手...")
                 return self._call_ragflow(prompt, use_alt=True)
             return None
         else:
-            print(f"✅ {assistant_name}回答成功，长度：{len(answer)} 字符")
+            print(f"{assistant_name}回答成功，长度：{len(answer)} 字符")
             return answer
 
     def _call_ragflow_stream(self, prompt: str, use_alt: bool = False):
@@ -243,7 +243,7 @@ class LLMClient:
                         except json.JSONDecodeError:
                             continue
         except Exception as e:
-            print(f"⚠️ RAGFlow 流式失败：{e}，降级到模拟...")
+            print(f"RAGFlow 流式失败：{e}，降级到模拟...")
             yield from self.mock_generate_stream(prompt)
 
     def mock_generate(self, prompt: str) -> str:

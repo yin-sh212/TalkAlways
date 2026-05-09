@@ -400,18 +400,28 @@ async def register(request: RegisterRequest):
             "data": None
         }
 
-    # 检查手机号或邮箱是否已存在
-    existing_user = await Database.fetch_one("""
-        SELECT * FROM users 
-        WHERE phone = %s OR email = %s
-    """, (request.phone, request.email))
+    # 检查手机号或邮箱是否已存在 - 动态构建查询条件
+    query_conditions = []
+    params = []
     
-    if existing_user:
-        return {
-            "code": 400,
-            "message": "该手机号或邮箱已被注册",
-            "data": None
-        }
+    if request.phone:
+        query_conditions.append("phone = %s")
+        params.append(request.phone)
+    
+    if request.email:
+        query_conditions.append("email = %s")
+        params.append(request.email)
+    
+    if query_conditions:
+        query = f"SELECT * FROM users WHERE {' OR '.join(query_conditions)}"
+        existing_user = await Database.fetch_one(query, tuple(params))
+        
+        if existing_user:
+            return {
+                "code": 400,
+                "message": "该手机号或邮箱已被注册",
+                "data": None
+            }
 
     # 创建新用户并保存到数据库
     user = await create_user(

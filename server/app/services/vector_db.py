@@ -22,21 +22,19 @@ class VectorDBService:
         self.use_real_embedding = True
         self.embedding_dim = 768
 
-        # 先尝试加载百度模型，如果失败就用模拟
+        # 加载中文 embedding 模型。只用国内镜像，不再全局关闭 SSL 校验：
+        # `ssl._create_default_https_context = ssl._create_unverified_context` 是进程级
+        # 全局副作用（本模块在 import 期就构造实例），会让**整个应用**所有 HTTPS 请求
+        # 都不校验证书 —— 为下载一个模型牺牲全局传输安全，得不偿失。
         try:
-            # 关键：设置环境变量使用国内镜像
             os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-            # 或者完全禁用SSL验证（临时解决）
-            import ssl
-            ssl._create_default_https_context = ssl._create_unverified_context
-
             self.embedder = SentenceTransformer('shibing624/text2vec-base-chinese')
             self.embedding_dim = 768
             self.use_real_embedding = True
             print("成功加载百度 embedding 模型")
         except Exception as e:
             print(f"无法加载真实模型: {e}")
-            print("使用模拟 embedding（不影响功能演示）")
+            print("embedding 模型不可用：检索时会在 _encode 明确报错，不再静默用随机向量")
             self.use_real_embedding = False
 
         # 2. 初始化FAISS索引
@@ -51,16 +49,27 @@ class VectorDBService:
             print("创建新 FAISS 索引")
 
     def _encode(self, texts: List[str]) -> np.ndarray:
-        """生成向量"""
-        if self.use_real_embedding:
-            try:
-                embeddings = self.embedder.encode(texts)
-                return embeddings.astype('float32')
-            except Exception as e:
-                print(f"调用 embedding 服务失败: {e}")
+        """生成向量（L2 归一化，配合 IndexFlatIP 才等价于余弦相似度）
 
-        # 模拟向量（开发测试用）
-        return np.random.randn(len(texts), self.embedding_dim).astype('float32')
+        旧实现在编码失败时**静默返回随机向量** —— 检索仍会"成功"返回 top-k，
+        但结果毫无意义，故障被伪装成正常。现在改为显式抛错（仅在调用期抛，
+        构造期不抛，否则 import 期构造的全局实例会让应用起不来）。
+        """
+        if not self.use_real_embedding:
+            raise RuntimeError(
+                "embedding 模型未加载成功，无法编码文本（拒绝降级为随机向量）。"
+                "请检查模型路径/环境后重启。"
+            )
+        try:
+            embeddings = self.embedder.encode(texts)
+        except Exception as e:
+            raise RuntimeError(f"embedding 编码失败：{e}") from e
+
+        embeddings = np.ascontiguousarray(embeddings, dtype='float32')
+        # 语料与查询走同一函数 ⇒ 两侧都被归一化；否则内积随模长膨胀，
+        # 当作相似度会在长短文本间系统性偏移。
+        faiss.normalize_L2(embeddings)
+        return embeddings
 
     def add_documents(self, documents: List[Dict[str, Any]]):
         """添加文档到向量库"""
@@ -111,7 +120,7 @@ class VectorDBService:
                     'content': doc['content'],
                     'metadata': doc.get('metadata', {}),
                     'distance': float(distances[0][i]),
-                    'score': float(distances[0][i])  # FAISS内积就是相似度
+                    'score': float(distances[0][i])  # 已 L2 归一化，内积即余弦相似度
                 })
 
         return results

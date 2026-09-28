@@ -9,6 +9,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AiAssistantPlaceholder: typeof import('./components/workspace/AiAssistantPlaceholder.vue')['default']
     AIFloatingBall: typeof import('./components/common/AIFloatingBall.vue')['default']
+    AlarmKpiCards: typeof import('./components/alarm/AlarmKpiCards.vue')['default']
     AnomalyList: typeof import('./components/overview/AnomalyList.vue')['default']
     ChartAIAnalysis: typeof import('./components/common/ChartAIAnalysis.vue')['default']
     DetailTable: typeof import('./components/alarm/DetailTable.vue')['default']
@@ -19,7 +20,7 @@ declare module 'vue' {
     EnergyRanking: typeof import('./components/overview/EnergyRanking.vue')['default']
     FloorPlanViewer: typeof import('./components/building/FloorPlanViewer.vue')['default']
     KnowledgeBase: typeof import('./components/workspace/KnowledgeBase.vue')['default']
-    KpiCards: typeof import('./components/alarm/KpiCards.vue')['default']
+    KpiCards: typeof import('./components/overview/KpiCards.vue')['default']
     List: typeof import('./components/alarm/List.vue')['default']
     MarkdownRenderer: typeof import('./components/common/MarkdownRenderer.vue')['default']
     MeterBindingTool: typeof import('./components/building/MeterBindingTool.vue')['default']

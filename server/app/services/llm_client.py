@@ -4,6 +4,8 @@ import requests
 from dotenv import load_dotenv
 from urllib3.exceptions import InsecureRequestWarning
 
+from app.services.answer_quality import is_invalid_answer
+
 # 禁用 SSL 警告（仅开发环境）
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
@@ -199,7 +201,8 @@ class LLMClient:
         result = response.json()
         answer = result.get("data", {}).get("answer", "")
         
-        if len(answer) > 300 and "中建八局二建" in answer:
+        # 与 chat_api 共用同一判据（原先此处只查一个标记，与 chat_api 的两标记不一致）
+        if is_invalid_answer(answer):
             print(f"{assistant_name}返回标准欢迎语，长度：{len(answer)} 字符")
             if not use_alt and self.chat_id_alt:
                 print("尝试使用备用助手...")

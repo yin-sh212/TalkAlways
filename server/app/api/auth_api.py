@@ -61,6 +61,15 @@ class RegisterRequest(BaseModel):
     password: str
 
 
+def normalize_optional_field(value: Optional[str]) -> Optional[str]:
+    """将空字符串规整为 None，避免参与 SQL 条件判断"""
+    if value is None or not isinstance(value, str):
+        return value
+
+    value = value.strip()
+    return value or None
+
+
 def validate_phone(phone: str) -> bool:
     """验证手机号格式"""
     if not phone or not isinstance(phone, str):
@@ -379,60 +388,75 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 })
 async def register(request: RegisterRequest):
     """用户注册（支持手机号/邮箱）"""
-    if not request.phone and not request.email:
+    phone = normalize_optional_field(request.phone)
+    email = normalize_optional_field(request.email)
+
+    if not phone and not email:
         return {
             "code": 400,
             "message": "手机号或邮箱至少填一个",
             "data": None
         }
 
-    if request.phone and not validate_phone(request.phone):
+    if phone and not validate_phone(phone):
         return {
             "code": 400,
             "message": "手机号格式不正确",
             "data": None
         }
 
-    if request.email and not validate_email(request.email):
+    if email and not validate_email(email):
         return {
             "code": 400,
             "message": "邮箱格式不正确",
             "data": None
         }
 
-    # 检查手机号或邮箱是否已存在 - 动态构建查询条件
-    query_conditions = []
-    params = []
-    
-    if request.phone:
-        query_conditions.append("phone = %s")
-        params.append(request.phone)
-    
-    if request.email:
-        query_conditions.append("email = %s")
-        params.append(request.email)
-    
-    if query_conditions:
-        query = f"SELECT * FROM users WHERE {' OR '.join(query_conditions)}"
-        existing_user = await Database.fetch_one(query, tuple(params))
-        
-        if existing_user:
+    # 分开校验手机号和邮箱，避免空值条件误命中
+    if phone:
+        existing_phone_user = await Database.fetch_one(
+            """
+            SELECT user_id
+            FROM users
+            WHERE phone = %s
+            LIMIT 1
+            """,
+            (phone,),
+        )
+        if existing_phone_user:
             return {
                 "code": 400,
-                "message": "该手机号或邮箱已被注册",
+                "message": "当前手机号已经被注册",
+                "data": None
+            }
+
+    if email:
+        existing_email_user = await Database.fetch_one(
+            """
+            SELECT user_id
+            FROM users
+            WHERE email = %s
+            LIMIT 1
+            """,
+            (email,),
+        )
+        if existing_email_user:
+            return {
+                "code": 400,
+                "message": "当前邮箱已经被注册",
                 "data": None
             }
 
     # 创建新用户并保存到数据库
     user = await create_user(
         name=request.name,
-        phone=request.phone,
-        email=request.email,
+        phone=phone,
+        email=email,
         password=request.password
     )
-    
+
     access_token = create_access_token(
-        data={"sub": user['user_id'], "account": request.phone or request.email}
+        data={"sub": user['user_id'], "account": phone or email}
     )
     
     # 返回扁平化的响应数据
@@ -463,7 +487,7 @@ async def create_user(name: str, phone: str = None, email: str = None, password:
         VALUES (%s, %s, %s, %s, %s)
     """, (user_id, name, phone, email, password))
     
-    print(f"✅ 创建新用户：{name} ({phone or email}), ID: {user_id}")
+    print(f"创建新用户：{name} ({phone or email}), ID: {user_id}")
     
     return {
         'user_id': user_id,

@@ -44,13 +44,27 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url))
       }
     },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: 'modern'
+        }
+      }
+    },
     server: {
       host: '0.0.0.0',
       port: 8080,
       proxy: {
         '/api': {
           target: env.VITE_API_URL || 'http://localhost:3000',
-          changeOrigin: true
+          changeOrigin: true,
+          onProxyRes: (proxyRes) => {
+            // SSE 响应:关掉压缩缓冲,保证逐字流式输出
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              proxyRes.headers['content-encoding'] = 'identity'
+              proxyRes.headers['cache-control'] = 'no-cache'
+            }
+          }
         }
       }
     }

@@ -27,15 +27,20 @@ export interface AskRequest {
   }
 }
 
+// 引用来源（后端 rag_answer.to_sources 产出：{id, title, snippet}）
+export interface SourceRef {
+  id: string
+  title: string
+  snippet: string
+}
+
 // 问答响应
 export interface AskResponse {
   answer: string
   confidence: number
-  sources: Array<{
-    id: string
-    title: string
-    snippet: string
-  }>
+  // 后端返回 mode: 'rag'（命中语料）| 'llm'（未命中，走降级）
+  mode?: string
+  sources: SourceRef[]
   session_id: string
 }
 

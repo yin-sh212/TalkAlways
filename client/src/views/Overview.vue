@@ -357,7 +357,7 @@ const loadData = async () => {
       anomalyList.value = alarms.map((item: any) => ({
         id: item.id,
         time: item.start_time,
-        buildingName: item.building_id,
+        buildingName: getBuildingDisplayName(item.building_id),
         type: mapAlarmTypeToChinese(item.alarm_type),
         status: mapAlarmStatus(item.status),
         buildingId: item.building_id,
@@ -436,7 +436,7 @@ const connectToRealtimeStream = () => {
                 const anomalyItem = {
                   id: `${record.building_id}_${record.timestamp}`,
                   time: record.timestamp,
-                  buildingName: record.building_id,
+                  buildingName: getBuildingDisplayName(record.building_id),
                   type: '能耗异常',
                   status: 'pending' as const,
                   buildingId: record.building_id,
@@ -540,6 +540,12 @@ const mapAlarmTypeToChinese = (type: string): string => {
     'device': '设备告警'
   }
   return typeMap[type] || type
+}
+
+// 根据 building_id 获取显示名称
+const getBuildingDisplayName = (buildingId: string): string => {
+  const building = buildingStore.buildings.find(b => b.id === buildingId)
+  return building?.name || buildingId
 }
 
 // 告警状态映射

@@ -189,7 +189,7 @@ import { ref, reactive, onMounted, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import { Download } from "@vicons/ionicons5";
-import AlarmKpiCards from "@/components/alarm/KpiCards.vue";
+import AlarmKpiCards from "@/components/alarm/AlarmKpiCards.vue";
 import AlarmTrend from "@/components/alarm/Trend.vue";
 import AlarmDistribution from "@/components/alarm/Distribution.vue";
 import AlarmList from "@/components/alarm/List.vue";
@@ -275,12 +275,12 @@ const pagination = reactive({
   itemCount: 0, // 总记录数
   onChange: (page: number) => {
     pagination.page = page;
-    handleQuery(); // 触发重新查询
+    handleQuery(true); // 翻页时跳过表单验证
   },
   onUpdatePageSize: (pageSize: number) => {
     pagination.pageSize = pageSize;
     pagination.page = 1;
-    handleQuery(); // 触发重新查询
+    handleQuery(true); // 切换每页数量时跳过表单验证
   },
 });
 
@@ -418,21 +418,11 @@ const handleQuery = async (skipValidation: boolean = false) => {
       ? new Date(queryForm.timeRange[1]).toISOString().split("T")[0]
       : appStore.getMockToday();
 
-    // 验证时间范围（2016-07-01 至 2016-09-30）
+    // 自动裁剪时间范围到数据有效区间（2016-07-01 至 2016-09-30）
     const validStartDate = "2016-07-01";
     const validEndDate = "2016-09-30";
-
-    if (
-      startDate < validStartDate ||
-      endDate > validEndDate
-    ) {
-      message.error(`查询时间必须在 ${validStartDate} 至 ${validEndDate} 之间`);
-      queryLoading.value = false;
-      tableLoading.value = false;
-      metricsLoading.value = false;
-      chartLoading.value = false;
-      return;
-    }
+    const clampedStart = startDate < validStartDate ? validStartDate : startDate;
+    const clampedEnd = endDate > validEndDate ? validEndDate : endDate;
 
     // 支持多建筑查询 - 将建筑 ID 列表用逗号拼接传给后端(后端使用 IN 子句)
     const buildingIds = queryForm.buildings.join(',');
@@ -450,38 +440,34 @@ const handleQuery = async (skipValidation: boolean = false) => {
     // 构建查询参数对象
     const listParams: any = {
       building_id: buildingIds,
-      start_date: startDate,
-      end_date: endDate,
+      start_date: clampedStart,
+      end_date: clampedEnd,
       page: pagination.page,
       page_size: pagination.pageSize,
-      // 显式设置告警级别和类型过滤（未选择时为 undefined，后端会忽略）
       alarm_level: alarmLevelParam,
       alarm_type: alarmTypeParam,
     }
-    
+
     const [alarmRes, trendRes, distributionRes, statsRes] = await Promise.all([
       alarmApi.getAlarmList(listParams),
       alarmApi.getAlarmTrend({
-        // 趋势图数据 - 支持多建筑聚合
         building_id: buildingIds,
-        start_date: startDate,
-        end_date: endDate,
+        start_date: clampedStart,
+        end_date: clampedEnd,
         alarm_level: alarmLevelParam,
         alarm_type: alarmTypeParam,
       }),
       alarmApi.getAlarmDistribution({
-        // 分布图数据 - 支持多建筑聚合
         building_id: buildingIds,
-        start_date: startDate,
-        end_date: endDate,
+        start_date: clampedStart,
+        end_date: clampedEnd,
         alarm_level: alarmLevelParam,
         alarm_type: alarmTypeParam,
       }),
       alarmApi.getAlarmStats({
-        // 统计指标数据 - 使用后端统计接口
         building_id: buildingIds,
-        start_date: startDate,
-        end_date: endDate,
+        start_date: clampedStart,
+        end_date: clampedEnd,
         alarm_level: alarmLevelParam,
         alarm_type: alarmTypeParam,
       }),
@@ -1047,100 +1033,121 @@ onMounted(async () => {
     loadAlarmLevels(),
     loadAlarmTypes()
   ])
-  
+
   // 2. 检测路由参数，判断是否需要高亮特定告警
   const highlightId = route.query.highlight_id as string
   const expandDetail = route.query.expand_detail === 'true'
   const buildingId = route.query.building_id as string
   const alarmTime = route.query.alarm_time as string
-  
-  if (highlightId && buildingId) {
-    // 设置查询条件为告警所在建筑
+
+  // highlight_id 是纯数字时才是有效的数据库告警 ID
+  const isValidHighlightId = highlightId && /^\d+$/.test(highlightId)
+
+  if (isValidHighlightId) {
+    // 先通过 ID 直接获取目标告警，确保一定找到
+    let targetAlarm: any = null
+    try {
+      const alarmRes = await alarmApi.getAlarmById(parseInt(highlightId))
+      if (alarmRes.data?.code === 200 && alarmRes.data?.data) {
+        targetAlarm = alarmRes.data.data
+      }
+    } catch (e) {
+      console.warn('直接获取告警失败，将通过列表查询匹配:', e)
+    }
+
+    // 用目标告警的信息设置查询条件
+    const targetBuildingId = targetAlarm?.building_id || buildingId
+    if (!targetBuildingId) {
+      // 没有任何建筑信息，走默认流程
+      if (buildingOptions.value.length > 0) {
+        queryForm.buildings = [buildingOptions.value[0].value]
+        setQuickTime('week')
+        await handleQuery()
+      }
+      return
+    }
+
+    queryForm.buildings = [targetBuildingId]
+
+    // 根据告警时间设置时间范围
+    const targetTime = targetAlarm?.start_time || alarmTime
+    if (targetTime) {
+      const alarmDate = new Date(targetTime)
+      const startDate = new Date(alarmDate)
+      startDate.setDate(alarmDate.getDate() - 7)
+      const endDate = new Date(alarmDate)
+      endDate.setDate(alarmDate.getDate() + 7)
+
+      queryForm.timeRange = [startDate.getTime(), endDate.getTime()]
+    } else {
+      setQuickTime('week')
+    }
+
+    // 查询告警列表
+    await handleQuery()
+    await nextTick()
+
+    if (expandDetail && alarmListRef.value) {
+      // 先尝试在当前页找到目标告警
+      let alarmRow = tableData.value.find(
+        (item: any) => String(item.id) === String(highlightId)
+      )
+
+      // 如果列表中没有（可能在不同页），直接用 getAlarmById 的结果构造一行
+      if (!alarmRow && targetAlarm) {
+        alarmRow = {
+          id: targetAlarm.id,
+          time: targetAlarm.start_time,
+          building_id: targetAlarm.building_id,
+          building_name: targetAlarm.building_id,
+          buildingName: targetAlarm.building_id,
+          alarm_type: targetAlarm.alarm_type,
+          alarmTypeName: getAlarmTypeName(targetAlarm.alarm_type),
+          severity: String(targetAlarm.alarm_level),
+          severityName: getSeverityName(String(targetAlarm.alarm_level)),
+          status: mapStatus(targetAlarm.status),
+          description: targetAlarm.description || '',
+          value: targetAlarm.value,
+          threshold: targetAlarm.threshold,
+          meter_id: targetAlarm.meter_id,
+          solution: targetAlarm.solution,
+          alarm_level: targetAlarm.alarm_level
+        }
+        // 插入到表格数据第一条
+        tableData.value.unshift(alarmRow)
+      }
+
+      if (alarmRow) {
+        message.success('已定位到指定告警')
+        setTimeout(() => {
+          ;(alarmListRef.value as any).handleViewDetail(alarmRow)
+        }, 300)
+      } else {
+        message.warning('未找到指定的告警，请检查筛选条件')
+      }
+    }
+  } else if (buildingId) {
+    // 实时 SSE 异常：无有效 highlight_id，仅按建筑+时间过滤
     queryForm.buildings = [buildingId]
-    
-    // 根据告警时间设置时间范围（告警时间前后 7 天）
+
     if (alarmTime) {
       const alarmDate = new Date(alarmTime)
       const startDate = new Date(alarmDate)
       startDate.setDate(alarmDate.getDate() - 7)
       const endDate = new Date(alarmDate)
       endDate.setDate(alarmDate.getDate() + 7)
-      
       queryForm.timeRange = [startDate.getTime(), endDate.getTime()]
     } else {
-      // 如果没有告警时间，默认使用近 7 天
       setQuickTime('week')
     }
-    
-    // 查询告警列表
+
     await handleQuery()
-    
-    // 等待列表加载完成后，高亮并展开指定告警
-    await nextTick()
-    
-    if (expandDetail && alarmListRef.value) {
-      console.log('🔍 尝试定位告警:', { highlightId, buildingId, alarmTime })
-      console.log('📋 当前表格数据:', tableData.value.map((item: any) => ({
-        id: item.id,
-        building_id: item.building_id,
-        time: item.time
-      })))
-      
-      // 找到对应的告警行 - 优先匹配 highlight_id，同时兼容时间和建筑匹配
-      const alarmRow = tableData.value.find(
-        (item: any) => {
-          // 优先匹配 ID（支持数字和字符串比较）
-          const itemIdStr = String(item.id)
-          const highlightIdStr = String(highlightId)
-          
-          if (itemIdStr === highlightIdStr) {
-            console.log('✅ 通过 ID 匹配成功:', itemIdStr)
-            return true
-          }
-          
-          // 如果 ID 不匹配，尝试匹配时间和建筑（防止 ID 格式不一致）
-          if (alarmTime && item.building_id === buildingId) {
-            try {
-              const itemTime = new Date(item.time).getTime()
-              const targetTime = new Date(alarmTime).getTime()
-              // 时间相差不超过 1 小时
-              const timeDiff = Math.abs(itemTime - targetTime)
-              if (timeDiff < 3600000) {
-                console.log('✅ 通过时间+建筑匹配成功, 时间差:', timeDiff / 1000, '秒')
-                return true
-              }
-            } catch (e) {
-              console.warn('⚠️ 时间解析失败:', e)
-            }
-          }
-          
-          return false
-        }
-      )
-      
-      if (alarmRow) {
-        message.success('已定位到指定告警')
-        
-        // 使用 setTimeout 延迟执行，确保 DOM 完全渲染
-        setTimeout(async () => {
-          // 调用子组件的查看详情方法
-          ;(alarmListRef.value as any).handleViewDetail(alarmRow)
-          
-          // 等待弹窗完全打开
-          await nextTick()
-          await nextTick()
-        }, 300) // 延迟 300ms 执行
-      } else {
-        console.error('❌ 未找到匹配的告警')
-        message.warning('未找到指定的告警，请检查筛选条件')
-      }
-    }
   } else {
     // 没有高亮参数，执行正常初始化
     if (buildingOptions.value.length > 0) {
       queryForm.buildings = [buildingOptions.value[0].value]
-      setQuickTime('week') // 默认查询近一周
-      handleQuery()
+      setQuickTime('week')
+      await handleQuery()
     }
   }
 })

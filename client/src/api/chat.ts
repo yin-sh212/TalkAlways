@@ -1,11 +1,12 @@
 import http from './http'
-import type { 
-  MLModelConfig, 
-  ModelStatus, 
-  AskRequest, 
+import type {
+  MLModelConfig,
+  ModelStatus,
+  AskRequest,
   AskResponse,
   ChatMessage,
-  ChatHistory
+  ChatHistory,
+  SourceRef
 } from '@/types/chat'
 import type { ApiResponse } from '@/types/user'
 
@@ -26,9 +27,15 @@ export const askQuestion = (query: string) => {
 }
 
 // 智能问答 - 流式模式(逐字输出)
-export const askQuestionStream = async (query: string, onChunk: (chunk: string) => void): Promise<void> => {
+// onSources：回答结束后后端会补发一帧 {data:{sources:[...]}}（无 content 字段）。
+// 该帧是**向后兼容**的追加 —— 老调用方不传 onSources 时被安全忽略。
+export const askQuestionStream = async (
+  query: string,
+  onChunk: (chunk: string) => void,
+  onSources?: (sources: SourceRef[]) => void
+): Promise<void> => {
   const controller = new AbortController()
-  
+
   // 开发环境使用相对路径,通过 Vite 代理转发
   const streamUrl = '/api/chat/ask/stream'
   
@@ -52,18 +59,23 @@ export const askQuestionStream = async (query: string, onChunk: (chunk: string) 
     }
     
     const decoder = new TextDecoder()
-    
+    // TCP 会从任意字节处切分，一个 `data: {...}` 帧可能跨两次 read()。
+    // buf 保存上一轮末尾的半行，与本轮字节拼接后再按行切分；否则半行
+    // （前半不以 'data: ' 开头、后半不是合法 JSON）会在两端被静默丢弃。
+    let buf = ''
+
     try {
       while (true) {
         const { done, value } = await reader.read()
-        
+
         if (done) {
           break
         }
-        
-        const chunk = decoder.decode(value, { stream: true })
+
+        buf += decoder.decode(value, { stream: true })
         // 解析 SSE 格式的数据
-        const lines = chunk.split('\n')
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? '' // 末段可能是半行，留到下一轮拼接
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6)
@@ -73,6 +85,9 @@ export const askQuestionStream = async (query: string, onChunk: (chunk: string) 
                 const parsed = JSON.parse(data)
                 if (parsed.data?.content) {
                   onChunk(parsed.data.content)
+                } else if (parsed.data?.sources && onSources) {
+                  // 引用帧：无 content 字段，只在传了回调时透传
+                  onSources(parsed.data.sources)
                 }
               } catch (e) {
                 console.error('解析 SSE 数据失败:', e)

@@ -69,3 +69,9 @@ docker-compose.override.yml
 # Backup directories
 /opt/energy-system-backup/
 C:\energy-system-backup\
+
+# Claude Code 本地设置（机器相关，不入库）
+.claude/settings.local.json
+
+# RAG 检索索引（由 server/scripts/rag_ingest/ingest_kb.py 生成，可重建）
+server/data/hybrid_index/

@@ -1,5 +1,20 @@
 name: Deploy to Alibaba Cloud ECS (Windows)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 注意：build-and-deploy 作业目前**不可用**，在补齐下列条件前不要启用。
+# 仓库没有 ECS secrets，所以现在它会被 check-config 自动跳过（灰色，不报红）；
+# 一旦配上 secrets 它就会真的跑起来并在下面这些点上失败：
+#   1. 仓库未配置任何 secrets（ECS_HOST / ECS_USERNAME / ECS_PASSWORD / ECS_PORT）。
+#   2. `appleboy/winrm-action` 已从 GitHub 删除（404），引用它的步骤必然失败。
+#   3. 本作业要打包的 `deploy_windows.ps1` / `rollback_windows.ps1` 在仓库里
+#      从不存在；实际在用的部署脚本是 `ops/windows-nginx/deploy.ps1`，而它
+#      的参数是 -RepoRoot / -NginxRoot / -BackendPort …，与这里传的
+#      -TargetDir / -BackupDir 不兼容（并且它自己会构建前端）。
+#   4. scp-action 走 SSH，而这里的默认端口 5986 是 WinRM 端口，二者不匹配。
+# 结论：这个作业是早期的 WinRM 自动部署尝试，已被 `ops/windows-nginx/` 下
+# 的脚本流程取代。要恢复自动部署，请按 `ops/windows-nginx/deploy.ps1` 重写。
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
   push:
     branches: [ main, master ]
@@ -16,59 +31,74 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-    
+
+    # 只做依赖可解析性检查，**不跑 pytest**：测试依赖 TiDB / LLM 凭据，
+    # CI 里没有这些 secrets。原先挂在后面的 codecov 上传步骤指向一个从未
+    # 生成的 ./server/coverage.xml，已删除（它会刷错误日志且毫无意义）。
     - name: Install dependencies
       run: |
         cd server
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-asyncio pytest-cov httpx
-    
-    # - name: Run tests
-    #   run: |
-    #     cd server
-    #     python -m pytest tests/ --tb=short -v
-    
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./server/coverage.xml
-        flags: unittests
+
+  check-config:
+    name: Check deploy config
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+    # secrets 不能直接用在 job / step 的 if 表达式里（只能用 env），
+    # 所以先探测 ECS_HOST 是否存在，把结果做成 output 供下游作业判断。
+    - name: Detect whether ECS secrets exist
+      id: check
+      env:
+        ECS_HOST: ${{ secrets.ECS_HOST }}
+      run: |
+        if [ -n "$ECS_HOST" ]; then
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Deploy skipped::ECS_HOST 未配置，跳过部署作业。"
+        fi
 
   build-and-deploy:
     name: Build and Deploy to Windows ECS
-    needs: test
+    needs: [ test, check-config ]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    
+    # 仅在「配好 ECS secrets」且「在 main/master 上」时运行；否则整个作业跳过。
+    if: ${{ needs.check-config.outputs.configured == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
+
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-    
+
     - name: Install dependencies
       run: |
         cd server
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-    
+
     - name: Build frontend
       working-directory: client
       run: |
         npm ci
         npm run build
-    
+
+    # ⚠ 以下步骤按原样保留但**未修**（见文件顶部说明 2~4）。启用本作业前
+    #    必须整体重写，否则包装步骤会因找不到 deploy_windows.ps1 直接失败。
     - name: Package application
       run: |
         mkdir -p deploy-package
@@ -77,9 +107,9 @@ jobs:
         cp deploy_windows.ps1 deploy-package/
         cp rollback_windows.ps1 deploy-package/
         tar -czf deploy-package.tar.gz deploy-package/
-    
-    - name: Deploy to Windows ECS via WinRM
-      uses: appleboy/scp-action@master
+
+    - name: Deploy to Windows ECS via SCP
+      uses: appleboy/scp-action@v1.0.0
       with:
         host: ${{ secrets.ECS_HOST }}
         username: ${{ secrets.ECS_USERNAME }}
@@ -88,7 +118,7 @@ jobs:
         source: "deploy-package.tar.gz"
         target: "C:/Temp/"
         timeout: 120s
-    
+
     - name: Execute deployment on Windows
       uses: appleboy/winrm-action@master
       with:

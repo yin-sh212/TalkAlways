@@ -454,7 +454,7 @@ async def register(request: RegisterRequest):
         email=email,
         password=request.password
     )
-    
+
     access_token = create_access_token(
         data={"sub": user['user_id'], "account": phone or email}
     )

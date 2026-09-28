@@ -2,7 +2,7 @@ name: Deploy to Alibaba Cloud ECS (Windows)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 注意：build-and-deploy 作业目前**不可用**，在补齐下列条件前不要启用。
-# 仓库没有 ECS secrets，所以现在它会被 check-config 自动跳过（灰色，不报红）；
+# 仓库没有 ECS secrets，所以现在它会被 check_config 自动跳过（灰色，不报红）；
 # 一旦配上 secrets 它就会真的跑起来并在下面这些点上失败：
 #   1. 仓库未配置任何 secrets（ECS_HOST / ECS_USERNAME / ECS_PASSWORD / ECS_PORT）。
 #   2. `appleboy/winrm-action` 已从 GitHub 删除（404），引用它的步骤必然失败。
@@ -50,7 +50,7 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-asyncio pytest-cov httpx
 
-  check-config:
+  check_config:
     name: Check deploy config
     runs-on: ubuntu-latest
     outputs:
@@ -72,10 +72,10 @@ jobs:
 
   build-and-deploy:
     name: Build and Deploy to Windows ECS
-    needs: [ test, check-config ]
+    needs: [ test, check_config ]
     runs-on: ubuntu-latest
     # 仅在「配好 ECS secrets」且「在 main/master 上」时运行；否则整个作业跳过。
-    if: ${{ needs.check-config.outputs.configured == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
+    if: ${{ needs.check_config.outputs.configured == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
 
     steps:
     - uses: actions/checkout@v4

@@ -343,6 +343,11 @@ export interface AlarmAnalysisResponse {
   }
 }
 
+// 获取单个告警详情
+export const getAlarmById = (alarmId: number) => {
+  return http.get<{ code: number; message: string; data: AlarmListItem }>(`/alarm/${alarmId}`)
+}
+
 export const getAlarmAnalysis = (alarmId: number) => {
   return http.get<AlarmAnalysisResponse>(`/alarm/${alarmId}/analysis`)
 }

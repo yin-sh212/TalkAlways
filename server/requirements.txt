@@ -33,6 +33,8 @@ huggingface-hub==0.24.5
 langchain==0.2.10
 langchain-community==0.2.9
 langchain-core==0.2.23
+jieba==0.42.1
+rank-bm25==0.2.2
 
 # PDF Word
 PyPDF2==3.0.1

@@ -83,6 +83,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'AlarmKpiCards' })
+
 import { Alert, Warning, Flash, CheckmarkCircle } from '@vicons/ionicons5'
 
 interface AlarmMetrics {

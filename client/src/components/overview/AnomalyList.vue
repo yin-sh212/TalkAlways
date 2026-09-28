@@ -34,7 +34,7 @@
               class="analyze-btn"
               @click="handleAnalyze(item)"
             >
-              分析
+              详情分析
             </n-button>
           </div>
           <div v-if="item.description" class="timeline-description">{{ item.description }}</div>
@@ -101,27 +101,28 @@ const handleViewAll = () => {
 
 // 分析具体异常
 const handleAnalyze = (item: AnomalyItem) => {
-  // 使用 item.id 作为告警 ID（应该是数字类型的字符串）
-  const alarmId = item.id
-  
-  // 如果 id 不是纯数字，尝试从 description 或其他字段提取
-  // 但根据 Overview.vue 的实现，id 应该是 `${record.building_id}_${record.timestamp}` 格式
-  // 这种情况下我们需要通过时间和建筑来定位告警
-  
   const buildingId = item.buildingId || ''
   const alarmTime = item.time
-  
-  // 跳转到告警页面，传递查询参数高亮指定告警
+
+  // 数据库告警 ID 是纯数字，实时 SSE 异常是复合字符串
+  const isDbAlarm = /^\d+$/.test(String(item.id))
+
+  const query: Record<string, string> = {
+    expand_detail: 'true',
+    building_id: buildingId,
+    alarm_time: alarmTime
+  }
+
+  // 只有数据库告警才传 highlight_id，实时异常依赖建筑+时间定位
+  if (isDbAlarm) {
+    query.highlight_id = String(item.id)
+  }
+
   router.push({
     path: '/alarm',
-    query: {
-      highlight_id: alarmId,
-      expand_detail: 'true',
-      building_id: buildingId,
-      alarm_time: alarmTime
-    }
+    query
   })
-  
+
   message.success(`正在查看告警详情`)
 }
 

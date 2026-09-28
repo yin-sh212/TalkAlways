@@ -15,6 +15,18 @@
               </n-text>
               <markdown-renderer v-else :content="msg.content" />
             </div>
+            <!-- 引用来源：仅助手消息且命中语料（sources 非空）时展示。
+                 无引用（mode=llm 降级）时整块不渲染。 -->
+            <div v-if="msg.sources && msg.sources.length" class="message-sources">
+              <n-collapse>
+                <n-collapse-item :title="`引用来源（${msg.sources.length}）`" name="sources">
+                  <div v-for="(src, si) in msg.sources" :key="si" class="source-item">
+                    <n-tag size="small" :bordered="false" type="info">{{ src.title }}</n-tag>
+                    <n-text depth="3" class="source-snippet">{{ src.snippet }}</n-text>
+                  </div>
+                </n-collapse-item>
+              </n-collapse>
+            </div>
             <div class="message-time">{{ msg.time }}</div>
           </div>
         </div>
@@ -66,11 +78,13 @@ import { Person, Sparkles, Send } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { askQuestionStream } from '@/api/chat'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue'
+import type { SourceRef } from '@/types/chat'
 
 interface Message {
   type: 'user' | 'assistant' | 'loading'
   content: string
   time: string
+  sources?: SourceRef[]
 }
 
 const message = useMessage()
@@ -143,15 +157,24 @@ async function handleSend() {
       time: getCurrentTime()
     })
 
-    await askQuestionStream(query, (chunk) => {
-      fullContent += chunk
-      // 更新助手消息内容
-      if (messages.value[assistantMessageIndex]) {
-        messages.value[assistantMessageIndex].content = fullContent
-        // 立即滚动到底部
-        scrollToBottom()
+    await askQuestionStream(
+      query,
+      (chunk) => {
+        fullContent += chunk
+        // 更新助手消息内容
+        if (messages.value[assistantMessageIndex]) {
+          messages.value[assistantMessageIndex].content = fullContent
+          // 立即滚动到底部
+          scrollToBottom()
+        }
+      },
+      // 引用帧在 [DONE] 之前到达：写入该助手消息的 sources
+      (sources) => {
+        if (messages.value[assistantMessageIndex]) {
+          messages.value[assistantMessageIndex].sources = sources
+        }
       }
-    })
+    )
 
     // 流式输出完成
     streamController = null
@@ -256,6 +279,37 @@ function handleQuickQuestion(question: string) {
   font-size: 13px;
   color: var(--n-text-color-placeholder);
   padding: 0 8px;
+}
+
+/* 引用来源块：位于气泡与时间之间，宽度与气泡对齐 */
+.message-sources {
+  background: var(--n-color);
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.message-sources :deep(.n-collapse-item__header) {
+  font-size: 13px;
+  color: var(--n-text-color-placeholder);
+}
+
+.source-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.source-item:last-child {
+  margin-bottom: 0;
+}
+
+.source-snippet {
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
 }
 
 .input-area {

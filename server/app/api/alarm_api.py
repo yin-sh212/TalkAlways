@@ -731,26 +731,23 @@ async def get_alarm_stats(
         
         where_clause = " AND ".join(conditions)
         query_params = tuple(params) if params else None
-        
-        # 查询总告警数
-        total_sql = f"SELECT COUNT(*) as total FROM alarms WHERE {where_clause}"
-        total_result = await Database.fetch_one(total_sql, query_params)
-        totalAlarms = total_result['total'] if total_result else 0
-        
-        # 查询未解决告警（pending + confirmed）
-        unresolved_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND status IN ('pending', 'confirmed')"
-        unresolved_result = await Database.fetch_one(unresolved_sql, query_params)
-        unresolvedCount = unresolved_result['count'] if unresolved_result else 0
-        
-        # 查询紧急告警（alarm_level <= 2）
-        critical_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND alarm_level <= 2"
-        critical_result = await Database.fetch_one(critical_sql, query_params)
-        criticalCount = critical_result['count'] if critical_result else 0
-        
-        # 查询已确认告警（confirmed + resolved）
-        acknowledged_sql = f"SELECT COUNT(*) as count FROM alarms WHERE {where_clause} AND status IN ('confirmed', 'resolved')"
-        acknowledged_result = await Database.fetch_one(acknowledged_sql, query_params)
-        acknowledgedCount = acknowledged_result['count'] if acknowledged_result else 0
+
+        # 合并 4 次查询为 1 次：使用条件聚合
+        stats_sql = f"""
+            SELECT
+                COUNT(*) as totalAlarms,
+                SUM(CASE WHEN status IN ('pending', 'confirmed') THEN 1 ELSE 0 END) as unresolvedCount,
+                SUM(CASE WHEN alarm_level <= 2 THEN 1 ELSE 0 END) as criticalCount,
+                SUM(CASE WHEN status IN ('confirmed', 'resolved') THEN 1 ELSE 0 END) as acknowledgedCount
+            FROM alarms
+            WHERE {where_clause}
+        """
+        stats_result = await Database.fetch_one(stats_sql, query_params)
+
+        totalAlarms = stats_result['totalAlarms'] if stats_result else 0
+        unresolvedCount = stats_result['unresolvedCount'] if stats_result else 0
+        criticalCount = stats_result['criticalCount'] if stats_result else 0
+        acknowledgedCount = stats_result['acknowledgedCount'] if stats_result else 0
         
         return {
             "code": 200,

@@ -3,8 +3,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
+from starlette.concurrency import run_in_threadpool
 from app.config import config
 from app.database.db import Database
+from app.services import rag_answer
 
 # 导入所有路由模块
 from app.api import query_api
@@ -41,7 +43,18 @@ async def lifespan(app: FastAPI):
         print("数据库连接成功")
     except Exception as e:
         print(f"数据库连接失败：{e}")
-    
+
+    # 预热 hybrid RAG 索引 + 两个模型（embedding / reranker）。
+    # 首次启动 data/hybrid_index 不存在，要现场构建（几分钟）；之后只加载。
+    # 整段 try/except：预热失败绝不能拖垮整个应用 —— 请求进来时
+    # get_retriever() 还会懒加载兜底一次。
+    if config.RAG_ENABLED:
+        try:
+            await run_in_threadpool(rag_answer.warmup)
+            print("RAG 索引与模型预热完成")
+        except Exception as e:
+            print(f"⚠️ RAG 预热失败（问答将走懒加载或降级普通 LLM）：{e}")
+
     print(f"{config.APP_NAME} v{config.APP_VERSION} 启动成功")
     yield
 

@@ -73,5 +73,16 @@ class Config:
     # 必须是本地目录：离线环境下传 HF 仓库名（BAAI/bge-reranker-base）会直接失败
     RAG_RERANK_MODEL = os.getenv("RAG_RERANK_MODEL", "D:/models/bge-reranker-base")
 
+    # #12 query 改写 / 指代消解（默认关闭；详见 task12_13_改写与路由/02_决策日志.md）
+    RAG_REWRITE_ENABLED = os.getenv("RAG_REWRITE_ENABLED", "false").lower() in ("1", "true", "yes")
+    RAG_REWRITE_TEMP = float(os.getenv("RAG_REWRITE_TEMP", "0.0"))
+    RAG_REWRITE_MAX_TOKENS = int(os.getenv("RAG_REWRITE_MAX_TOKENS", "128"))
+    RAG_REWRITE_TIMEOUT = int(os.getenv("RAG_REWRITE_TIMEOUT", "20"))
+    RAG_REWRITE_HISTORY_TURNS = int(os.getenv("RAG_REWRITE_HISTORY_TURNS", "4"))
+    RAG_REWRITE_LOG = os.getenv("RAG_REWRITE_LOG", "true").lower() in ("1", "true", "yes")
+
+    # #13 最小路由（当前仅影子日志，不改端点行为；详见 task12_13_改写与路由/02_决策日志.md）
+    ROUTE_ENABLED = os.getenv("ROUTE_ENABLED", "true").lower() in ("1", "true", "yes")
+
 
 config = Config()

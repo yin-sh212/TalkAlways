@@ -92,6 +92,48 @@ class LLMClient:
             
         yield from self._call_ragflow_stream(prompt, use_alt)
 
+    def chat(
+        self,
+        messages: list,
+        temperature: float = 0.0,
+        max_tokens: int = 128,
+        json_mode: bool = False,
+        timeout: int = 20,
+    ):
+        """低温、可控的小调用：DeepSeek-only，不注入 system prompt。
+
+        区别于 generate()：后者硬编码 temperature=0.7 + 能源专家 system，且忽略 max_tokens。
+        失败/未配置一律返回 None（不降级 RAGFlow/mock），调用方把 None 当成「不改写」。
+        """
+        if not self.deepseek_api_key:
+            return None
+        payload = {
+            "model": "deepseek-chat",
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            resp = requests.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.deepseek_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            if result.get("choices"):
+                return result["choices"][0]["message"]["content"]
+            return None
+        except Exception as exc:
+            print(f"chat 调用失败：{exc}")
+            return None
+
     def _call_deepseek(self, prompt: str) -> str:
         """调用 DeepSeek API"""
         url = "https://api.deepseek.com/chat/completions"

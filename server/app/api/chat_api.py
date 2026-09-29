@@ -9,6 +9,8 @@ from starlette.concurrency import run_in_threadpool, iterate_in_threadpool
 from app.config import config
 from app.services.llm_client import llm_client
 from app.services import rag_answer
+from app.services import query_rewrite
+from app.services import query_router
 from app.services.answer_quality import is_invalid_answer
 import datetime
 import json
@@ -17,12 +19,38 @@ import asyncio
 router = APIRouter(prefix="/api/chat", tags=["智能问答"])
 
 
+class Turn(BaseModel):
+    role: str = Field(..., description="user | assistant")
+    # 限长：改写会把内容拼进 prompt，无上限等于把成本/超时外包给客户端
+    content: str = Field(..., max_length=2000, description="该轮的文字内容")
+
+
 class QuestionRequest(BaseModel):
     query: str = Field(..., description="用户输入的问题文字")
+    # 可选：老客户端只发 query 也照常通过（默认空列表）。给了历史才可能触发指代消解。
+    history: list[Turn] = Field(default_factory=list, max_length=20, description="最近若干轮对话")
 
 
 class StreamQuestionRequest(BaseModel):
     query: str = Field(..., description="用户输入的问题文字")
+    history: list[Turn] = Field(default_factory=list, max_length=20, description="最近若干轮对话")
+
+
+def _log_route(query: str) -> None:
+    """影子路由（#13）：只打分打日志，不改变端点行为。"""
+    if not config.ROUTE_ENABLED:
+        return
+    try:
+        print(f"[route] {query_router.route(query)}")
+    except Exception as exc:
+        print(f"[route] 失败：{exc}")
+
+
+def _effective_query(query: str, history) -> str:
+    """检索前做指代消解；不触发时逐字返回原 query。"""
+    if config.RAG_REWRITE_ENABLED and history:
+        return query_rewrite.rewrite_if_needed(query, history)
+    return query
 
 
 def _require_query(query: str) -> str:
@@ -81,13 +109,14 @@ def _generate_plain(query: str) -> Dict[str, Any]:
     }
 
 
-async def generate_answer_with_rag(query: str) -> Dict[str, Any]:
+async def generate_answer_with_rag(query: str, history=None) -> Dict[str, Any]:
     """优先用 hybrid RAG 回答（检索国标语料），未命中或出错时降级普通 LLM。"""
     if config.RAG_ENABLED:
+        effective = await run_in_threadpool(_effective_query, query, history)
         try:
-            hits = await run_in_threadpool(rag_answer.retrieve, query)
+            hits = await run_in_threadpool(rag_answer.retrieve, effective)
             if hits:
-                prompt = rag_answer.build_prompt(query, hits)
+                prompt = rag_answer.build_prompt(effective, hits)
                 answer = await run_in_threadpool(
                     functools.partial(llm_client.generate, prompt, use_alt=False)
                 )
@@ -108,7 +137,7 @@ async def generate_answer_with_rag(query: str) -> Dict[str, Any]:
     return await run_in_threadpool(_generate_plain, query)
 
 
-async def stream_generator(query: str):
+async def stream_generator(query: str, history=None):
     """SSE 流式生成器：先发心跳帧冲掉响应头，再检索，再流式回答。"""
     try:
         # 先发一帧空 content：让响应头立即下发，避免检索的十几秒里客户端
@@ -119,10 +148,12 @@ async def stream_generator(query: str):
         prompt = _plain_prompt(query)
         sources = []
         if config.RAG_ENABLED:
+            # 改写放在心跳帧之后、检索之前：首字节延迟不受影响。
+            effective = await run_in_threadpool(_effective_query, query, history)
             try:
-                hits = await run_in_threadpool(rag_answer.retrieve, query)
+                hits = await run_in_threadpool(rag_answer.retrieve, effective)
                 if hits:
-                    prompt = rag_answer.build_prompt(query, hits)
+                    prompt = rag_answer.build_prompt(effective, hits)
                     sources = rag_answer.to_sources(hits)
             except Exception as exc:
                 print(f"流式 RAG 检索失败，降级普通 LLM：{exc}")
@@ -176,9 +207,11 @@ async def ask_question(question: QuestionRequest):
     """智能问答接口 - 调用真实 AI API"""
     query = _require_query(question.query)  # 空/空白直接 400，先于最贵的检索
     print(f"收到问题：{query}")
+    _log_route(query)
 
+    history = [t.model_dump() for t in question.history]
     try:
-        result = await generate_answer_with_rag(query)
+        result = await generate_answer_with_rag(query, history)
         # generate() 可能返回 None（网络/API 异常时），len(None) 会 TypeError
         answer = result["answer"] or ""
 
@@ -217,12 +250,14 @@ async def ask_question_stream(question: StreamQuestionRequest):
     # 校验必须在 try 之外：否则 HTTPException 会被下面 except Exception 吞成 200。
     query = _require_query(question.query)
     print(f"收到流式问题：{query}")
+    _log_route(query)
 
+    history = [t.model_dump() for t in question.history]
     try:
         # 检索与 prompt 拼装都放进生成器内部：否则响应头要等检索完（十几秒）
         # 才下发，客户端首字节超时。生成器会先发心跳帧冲掉响应头。
         return StreamingResponse(
-            stream_generator(query),
+            stream_generator(query, history),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

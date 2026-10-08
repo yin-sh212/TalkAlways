@@ -1,4 +1,5 @@
 # app/services/llm_client.py
+import json
 import os
 import requests
 from dotenv import load_dotenv
@@ -10,6 +11,25 @@ from app.services.answer_quality import is_invalid_answer
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 load_dotenv()
+
+
+def extract_json(text: str):
+    """从 LLM 回复里抽出第一段合法 JSON（对象优先，其次数组）；抽不到/不合法返回 None。
+
+    替代各调用点的 `text.find('{')`/`rfind('}')` 手写切片：多了 JSONDecodeError 兜底与数组支持，
+    且不会把「解析失败」误当成「解析出一段垃圾」。
+    """
+    if not text:
+        return None
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = text.find(opener)
+        end = text.rfind(closer)
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                continue
+    return None
 
 
 class LLMClient:
@@ -41,22 +61,25 @@ class LLMClient:
         elif not self.deepseek_api_key:
             print("RAGFlow 与 DeepSeek 均未配置完整，将使用模拟回答")
 
-    def generate(self, prompt: str, max_tokens: int = 512, use_alt: bool = False) -> str:
+    def generate(self, prompt: str, max_tokens: int = 512, use_alt: bool = False,
+                 json_mode: bool = False) -> str:
         """
         生成回答 - 优先使用 DeepSeek，失败时降级到 RAGFlow
-        
+
         Args:
             prompt: 提示词
             max_tokens: 最大 token 数 (部分模型暂不使用此参数，保留兼容性)
             use_alt: 是否使用备用助手 (仅对 RAGFlow 生效)
-            
+            json_mode: 是否要求模型只输出 JSON（DeepSeek 的 response_format=json_object）。
+                仅对「输出要被下游代码解析」的调用点置 True；聊天/报告类自然语言输出必须保持 False。
+
         Returns:
             生成的回答
         """
         # 优先使用 DeepSeek（真实 AI）
         if self.deepseek_api_key:
             try:
-                return self._call_deepseek(prompt)
+                return self._call_deepseek(prompt, json_mode=json_mode)
             except Exception as e:
                 print(f"DeepSeek 失败：{e}，降级到 RAGFlow...")
         
@@ -92,15 +115,15 @@ class LLMClient:
             
         yield from self._call_ragflow_stream(prompt, use_alt)
 
-    def _call_deepseek(self, prompt: str) -> str:
+    def _call_deepseek(self, prompt: str, json_mode: bool = False) -> str:
         """调用 DeepSeek API"""
         url = "https://api.deepseek.com/chat/completions"
-        
+
         headers = {
             "Authorization": f"Bearer {self.deepseek_api_key}",
             "Content-Type": "application/json"
         }
-        
+
         payload = {
             "model": "deepseek-chat",
             "messages": [
@@ -109,14 +132,17 @@ class LLMClient:
                     "content": "你是一位专业的建筑能源管理和设备运维专家。请针对用户的具体问题给出专业、简洁的回答。直接回答问题本身，不要重复自我介绍，不要输出欢迎语模板。"
                 },
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": prompt
                 }
             ],
             "temperature": 0.7,
             "max_tokens": 1000
         }
-        
+        # DeepSeek Chat Completions 支持 json_object（保证语法合法），不支持 json_schema（会 400）。
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         

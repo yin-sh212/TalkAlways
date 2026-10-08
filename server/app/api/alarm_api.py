@@ -1303,7 +1303,7 @@ async def analyze_with_ai(data_context: Dict[str, Any]) -> Dict[str, Any]:
 现在请分析上述告警数据，提供专业的根因分析。"""
 
         # 调用 LLM 进行分析
-        response = ai_agent.llm.generate(prompt, max_tokens=1024)
+        response = ai_agent.llm.generate(prompt, max_tokens=1024, json_mode=True)
         
         # 解析 AI 响应
         try:

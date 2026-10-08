@@ -137,7 +137,7 @@ async def generate_quick_suggestions(
 问题要简短、直接、有针对性。
 """
         
-        response = ai_agent.llm.generate(prompt, max_tokens=300)
+        response = ai_agent.llm.generate(prompt, max_tokens=300, json_mode=True)
         
         # 解析 JSON 数组
         import json

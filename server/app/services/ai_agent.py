@@ -4,8 +4,57 @@ AI Agent 服务 - 智能数据分析引擎
 """
 import json
 from typing import Dict, Any, List, Optional
-from app.services.llm_client import LLMClient
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from app.services.llm_client import LLMClient, extract_json
 from app.tools.database_query import DatabaseQueryTool
+
+
+class QuerySpec(BaseModel):
+    """查询计划里的一条：表名 + SELECT 语句。"""
+    model_config = ConfigDict(extra="ignore")
+    table: str = ""
+    sql: str = ""
+    purpose: str = ""
+
+
+class QueryPlan(BaseModel):
+    """generate_query_plan 的输出契约。默认值与下游 `query_plan.get(...)` 的默认值一致。"""
+    model_config = ConfigDict(extra="ignore")
+    queries: List[QuerySpec] = Field(default_factory=list)
+    reasoning: str = ""
+
+
+class Analysis(BaseModel):
+    """analyze_data 的输出契约。默认值 = ai_analyst.py 里 `.get(key, default)` 的默认值。"""
+    model_config = ConfigDict(extra="ignore")
+    answer: str = "未获取到分析结果"
+    follow_ups: List[str] = Field(default_factory=list)
+    chart_type: str = "table"
+    confidence: float = 0.8
+
+
+class Insight(BaseModel):
+    """generate_insight 的输出契约。默认值 = 原来的兜底洞察。"""
+    model_config = ConfigDict(extra="ignore")
+    title: str = "发现异常"
+    description: str = ""
+    category: str = "other"
+    priority: str = "medium"
+    estimated_savings_kwh: float = 0.0
+    estimated_savings_cny: float = 0.0
+    action: str = "请进一步检查"
+
+
+def _coerce(model, data: Dict[str, Any]) -> Dict[str, Any]:
+    """按 model 规范化 data；校验失败就原样返回 data（保证不劣于「不校验」的修前行为）。
+
+    单个字段类型走样不应该把整段回答变成一句报错——所以这里退回原始 dict，交由下游 .get() 兜底。
+    """
+    try:
+        return model.model_validate(data).model_dump()
+    except ValidationError:
+        return data
 
 
 class AIAgent:
@@ -89,22 +138,24 @@ class AIAgent:
 """
         
         try:
-            response = self.llm.generate(prompt, max_tokens=1024)
-            
-            # 尝试解析 JSON 响应
-            start_idx = response.find('{')
-            end_idx = response.rfind('}') + 1
-            
-            if start_idx >= 0 and end_idx > start_idx:
-                query_plan = json.loads(response[start_idx:end_idx])
-                return query_plan
-            else:
+            response = self.llm.generate(prompt, max_tokens=1024, json_mode=True)
+
+            data = extract_json(response)
+            if data is None:
                 print("[AIAgent] JSON 解析失败，使用默认查询计划")
                 return {
                     "queries": [],
                     "reasoning": "无法生成查询计划"
                 }
-                
+
+            result = _coerce(QueryPlan, data)
+            # 丢掉没有 sql 的条目：留着只会换来一次无意义的 DB 调用（或下游 KeyError）
+            result["queries"] = [
+                q for q in result.get("queries", [])
+                if isinstance(q, dict) and str(q.get("sql", "")).strip()
+            ]
+            return result
+
         except Exception as e:
             print(f"[AIAgent] 生成查询计划失败：{e}")
             return {
@@ -164,23 +215,20 @@ class AIAgent:
 """
         
         try:
-            response = self.llm.generate(prompt, max_tokens=2048)
-            
-            # 解析 JSON
-            start_idx = response.find('{')
-            end_idx = response.rfind('}') + 1
-            
-            if start_idx >= 0 and end_idx > start_idx:
-                analysis = json.loads(response[start_idx:end_idx])
-                return analysis
-            else:
+            response = self.llm.generate(prompt, max_tokens=2048, json_mode=True)
+
+            data = extract_json(response)
+            if data is None:
+                # 没解析出 JSON：把原文当回答（与修前一致）
                 return {
                     "answer": response,
                     "follow_ups": [],
                     "chart_type": "table",
                     "confidence": 0.8
                 }
-                
+
+            return _coerce(Analysis, data)
+
         except Exception as e:
             print(f"[AIAgent] 数据分析失败：{e}")
             return {
@@ -219,15 +267,10 @@ class AIAgent:
 """
         
         try:
-            response = self.llm.generate(prompt, max_tokens=512)
-            
-            start_idx = response.find('{')
-            end_idx = response.rfind('}') + 1
-            
-            if start_idx >= 0 and end_idx > start_idx:
-                insight = json.loads(response[start_idx:end_idx])
-                return insight
-            else:
+            response = self.llm.generate(prompt, max_tokens=512, json_mode=True)
+
+            data = extract_json(response)
+            if data is None:
                 return {
                     "title": "发现异常",
                     "description": anomaly_data.get('description', '检测到异常情况'),
@@ -237,7 +280,12 @@ class AIAgent:
                     "estimated_savings_cny": 0,
                     "action": "请进一步检查"
                 }
-                
+
+            insight = _coerce(Insight, data)
+            if not insight.get("description"):
+                insight["description"] = anomaly_data.get('description', '检测到异常情况')
+            return insight
+
         except Exception as e:
             print(f"[AIAgent] 生成洞察失败：{e}")
             return {

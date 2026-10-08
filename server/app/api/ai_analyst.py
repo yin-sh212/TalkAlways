@@ -62,10 +62,11 @@ async def analyze_with_context(
         
         # Step 2: 执行数据库查询
         data_results = {}
+        query_errors = []
         for query_info in query_plan.get('queries', []):
             table_name = query_info['table']
             sql = query_info['sql']
-            
+
             try:
                 result = await db_tool.execute_query(sql)
                 data_results[table_name] = result
@@ -73,24 +74,32 @@ async def analyze_with_context(
             except Exception as e:
                 print(f"[AI Analyst] 查询 {table_name} 失败：{e}")
                 data_results[table_name] = []
-        
+                query_errors.append({"table": table_name, "error": f"{type(e).__name__}: {e}"})
+
         # Step 3: AI 基于查询结果进行分析
         analysis = await ai_agent.analyze_data(
             question=question,
             query_results=data_results,
             context=context
         )
-        
+
+        # 数据全空时，模型仍会硬答一段「分析」——必须让客户端能区分真分析与空分析
+        n_rows = {t: len(rows) for t, rows in data_results.items()}
+        degraded = sum(n_rows.values()) == 0
+
         return {
             "code": 200,
-            "message": "分析成功",
+            "message": "未查询到数据，分析基于空结果" if degraded else "分析成功",
             "data": {
                 "answer": analysis.get('answer', '未获取到分析结果'),
                 "supporting_data": data_results,
                 "suggested_questions": analysis.get('follow_ups', []),
                 "visualization_type": analysis.get('chart_type', 'table'),
                 "confidence": analysis.get('confidence', 0.8),
-                "reasoning": query_plan.get('reasoning', '')
+                "reasoning": query_plan.get('reasoning', ''),
+                "degraded": degraded,
+                "n_rows": n_rows,
+                "query_errors": query_errors
             }
         }
         

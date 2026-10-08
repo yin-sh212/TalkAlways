@@ -40,6 +40,7 @@ rank-bm25==0.2.2
 PyPDF2==3.0.1
 python-docx==1.1.2
 olefile==0.47
+pymupdf==1.28.2  # scripts/rag_ingest/ingest_kb.py 顶层 import；缺了单测收集会失败
 
 # JWT 认证
 python-jose==3.3.0

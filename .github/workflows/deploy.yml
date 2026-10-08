@@ -29,7 +29,7 @@ env:
 
 jobs:
   test:
-    name: Run Tests
+    name: Unit tests
     runs-on: ubuntu-latest
 
     steps:
@@ -39,16 +39,25 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: pip
+        cache-dependency-path: server/requirements.txt
 
-    # 只做依赖可解析性检查，**不跑 pytest**：测试依赖 TiDB / LLM 凭据，
-    # CI 里没有这些 secrets。原先挂在后面的 codecov 上传步骤指向一个从未
-    # 生成的 ./server/coverage.xml，已删除（它会刷错误日志且毫无意义）。
     - name: Install dependencies
       run: |
         cd server
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-asyncio pytest-cov httpx
+
+    # 只跑 tests/unit：这一层是纯的——LLM 全部 monkeypatch、不连库、不加载模型
+    # （见 tests/unit/*.py 顶部注释），所以不需要 TiDB / DeepSeek 凭据。
+    # tests/integration 需要真库、tests/ui 需要 playwright + 浏览器，都不在门内：
+    # 直接指定 tests/unit 目录（而非 -m unit），避开 tests/ui/conftest.py 的
+    # playwright import 在收集阶段报错。
+    # 本 job 是 build-and-deploy 的 needs 之一 ⇒ 单测失败会拦下部署。
+    - name: Run unit tests
+      run: |
+        cd server
+        python -m pytest tests/unit
 
   check_config:
     name: Check deploy config

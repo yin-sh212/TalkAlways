@@ -19,7 +19,6 @@ from app.api import upload_api
 from app.api import auth_api
 from app.api import alarm_api
 from app.api import device_api
-from app.api import energy_api
 from app.api import knowledge_api
 from app.api import analysis_api
 from app.api import realtime_api
@@ -175,7 +174,6 @@ app.include_router(upload_api.router)
 app.include_router(auth_api.router)
 app.include_router(alarm_api.router)
 app.include_router(device_api.router)
-app.include_router(energy_api.router)
 app.include_router(knowledge_api.router)
 app.include_router(analysis_api.router)
 app.include_router(realtime_api.router)
